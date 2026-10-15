@@ -1,0 +1,70 @@
+name: domain-kg-dev
+
+# Laptop-only smoke stack. Ports bind to loopback; data stays in named volumes.
+# Memory limits total 2.25 GiB; no local models, OCR workers, or load generation.
+services:
+  mongo:
+    image: mongo:8.0.34@sha256:6657bf2413fefc5be649390318f5b4cd7328e982722f8ce2ac6dfa6f0a42cb03
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
+    ports: ["127.0.0.1:27027:27017"]
+    mem_limit: 768m
+    cpus: 0.75
+    volumes: ["mongo-data:/data/db"]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval 'try { quit(rs.status().myState === 1 ? 0 : 1) }
+          catch (e) { rs.initiate({_id:"rs0",members:[{_id:0,host:"mongo:27017"}]}); quit(1) }'
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  neo4j:
+    image: neo4j:5.26.32-community@sha256:f1e52d4dc6da122468c4a3c1050a4f5e117f6d3268625237c34d49166f0d6082
+    ports: ["127.0.0.1:27687:7687", "127.0.0.1:27474:7474"]
+    environment:
+      NEO4J_AUTH: neo4j/${DOMAIN_KG_NEO4J_PASSWORD:?Run scripts/dev_env.py first}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 256m
+      NEO4J_server_memory_pagecache_size: 128m
+      NEO4J_server_bolt_thread__pool__max__size: 8
+      NEO4J_server_metrics_enabled: "false"
+    mem_limit: 1g
+    cpus: 1.0
+    volumes: ["neo4j-data:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider --quiet http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.2@sha256:b7b0444c4c351c970b98e90a6f89c2ee4287c65b44e52b4cb503fa5b2aa927ad
+    ports: ["127.0.0.1:26333:6333"]
+    environment:
+      QDRANT__SERVICE__API_KEY: ${DOMAIN_KG_QDRANT_API_KEY:?Run scripts/dev_env.py first}
+      QDRANT__SERVICE__MAX_WORKERS: "1"
+      QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS: "1"
+      QDRANT__TELEMETRY_DISABLED: "true"
+    mem_limit: 256m
+    cpus: 0.5
+    volumes: ["qdrant-data:/qdrant/storage"]
+
+  object-store:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    command: ["mini", "-dir=/data", "-ip=127.0.0.1", "-volume.max=1", "-master.volumeSizeLimitMB=64", "-webdav=false", "-admin.ui=false", "-master.telemetry=false"]
+    ports: ["127.0.0.1:29000:8333"]
+    environment:
+      AWS_ACCESS_KEY_ID: domain-kg-dev
+      AWS_SECRET_ACCESS_KEY: ${DOMAIN_KG_S3_SECRET_KEY:?Run scripts/dev_env.py first}
+      GOMEMLIMIT: 180MiB
+    mem_limit: 256m
+    cpus: 0.25
+    volumes: ["object-data:/data"]
+
+volumes:
+  mongo-data:
+  neo4j-data:
+  qdrant-data:
+  object-data:

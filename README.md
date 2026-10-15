@@ -2,7 +2,20 @@
 
 Domain KG is a proposed shared web service for preserving work materials, constructing traceable knowledge graphs, and retrieving evidence through MCP and HTTP. Users manage multiple KGs, control access, add or replace materials, and remove a material without removing evidence supplied by other materials.
 
-**Status:** planning repository, created on 16 October 2026. Application code, deployments, and data migrations are future work. The design incorporates the requirement for team accounts, permissions, and management of multiple KG databases from the first release.
+**Status:** Task 1 compatibility implementation is in progress. Six lightweight smoke checks pass; real-store verification is blocked because the local Docker disk is full. Team accounts, domain services, and later plan tasks remain pending. See [implementation progress](docs/implementation-progress.md).
+
+## Laptop smoke checks
+
+```bash
+uv sync --locked
+python3 scripts/smoke.py --offline
+```
+
+The offline smoke runs lint, strict type checks, mounted MCP transport, source-preserving LightRAG extraction, identity mapping, and deferred embedding/flush characterization with tiny fixtures. It uses no external model service or model downloads.
+
+After freeing at least 4 GiB in Docker's storage volume, run `python3 scripts/smoke.py --task 1` for real MongoDB, Neo4j, Qdrant, and S3 checks. The four services are capped at 2.25 GiB RAM and 2.5 CPU cores in total. The runner generates private local credentials, uses loopback ports, and stops services it started. See [runtime and integration decisions](docs/decisions/0001-runtime-and-lightrag.md) for the unverified gates.
+
+For manual transport inspection, `uv run python -m domain_kg` starts the local probe on port 8000. `GET /healthz` returns coarse health; `/mcp` rejects access until a real external OIDC verifier is implemented in Task 3. No private material endpoint is exposed by this spike.
 
 ## Recommended design
 

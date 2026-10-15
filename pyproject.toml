@@ -1,0 +1,53 @@
+[project]
+name = "domain-kg"
+version = "0.1.0"
+description = "Permission-aware evidence knowledge graphs with scoped LightRAG adapters"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi==0.143.2",
+  "mcp==2.3.0",
+  "lightrag-hku==1.5.7",
+  "pydantic-settings==2.16.0",
+  "pymongo==4.19.0",
+  "neo4j==6.4.1",
+  "qdrant-client==1.19.1",
+  "boto3==1.43.114",
+  "uvicorn==0.54.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "httpx==0.28.1",
+  "ruff==0.17.1",
+  "mypy==2.4.0",
+]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/domain_kg"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = ["storage: requires the resource-limited local Compose services"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["lightrag.*", "boto3.*"]
+ignore_missing_imports = true
