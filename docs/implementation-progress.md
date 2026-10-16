@@ -12,11 +12,12 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | 6: Original files and material submission | Complete locally | 15 smoke tests pass; full regular suite 100 passed, one physical drill skipped; lint/mypy pass. |
 | 7: Durable MongoDB jobs and recovery | Complete locally | 18 smoke checks pass; full suite 112 passed, one physical skip; lint/mypy pass. |
 | 8: Structured parsing and chunking | Complete for laptop profile | 20 smoke checks pass; full suite 127 passed, one physical skip; native Docling PDF and bounded text/XML decoders. OCR quality remains outside this run. |
-| 9: Schema-driven LightRAG extraction | Local checks pass; live-provider quality gate open | 20 mock-provider smoke checks; approved 0.8B model failed both full grounding cases without publication. A suitable provider and real embeddings remain required. |
+| 9: Schema-driven LightRAG extraction | Local checks pass; extraction quality gate open | 20 mock-provider checks; approved 0.8B model failed both full grounding cases without publication. The separately approved 0.6B embedding model passed its real native smoke; extraction quality remains required. |
 | 10: Staging and publication | Complete locally | 33 smoke checks; full regular suite 170 passed, one physical skip; durable publication/repair verified against real stores. |
 | 11: Scoped graph inspection and traversal | Complete locally | 13 smoke checks; regular regression 176 passed, one physical skip; two additional reproduced integrity failures fixed and verified. |
 | 12: Filtered vector and lexical retrieval | Complete locally | 22 smoke checks; regular regression 184 passed, one physical skip; current metadata/support filters, scoped native adapter and embedding-space fences. |
-| 13–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
+| 13: Federated fast/deep search | Complete locally | 34 smoke checks; regular regression 202 passed, one physical skip; native mix, two-KG fusion, partial failure rules and model-specific source windows verified. |
+| 14–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
@@ -139,5 +140,7 @@ are verified. Manual curation production/read integration follows in Task 14.
 The current resource allocation is Mongo512/Neo512/Qdrant192/S3192 MiB, totaling
 1,408 MiB (1.476 GB), with swap disabled. Bounded S3 reader buffers, small filer
 chunks and a shared writer budget passed the 50 MiB streaming boundary and warm
-regression. Older abandoned fixture buckets remain preserved while explicit
-cleanup approval is pending; this does not block implementation.
+regression. The user explicitly approved the three previously named abandoned
+fixture buckets; only those three were deleted and their absence verified.
+
+Task 13 uses source-bound immutable scopes for all retrieval, explicit branch coverage, and rank fusion across approved embedding spaces. Optional query-model output can select literal terms or reorder at most 50 existing candidates; it cannot rewrite evidence. Full chunks, citations, annotations and graph steps are authenticated against accepted artifacts before reranking. The final smoke passed 34 checks in 226.14 seconds, and the regular regression passed 202 tests with one separately run physical drill skipped. Ruff and strict mypy pass 79 files. The approved native embedding model passed six tiny real requests and four bilingual comparisons at sampled peak RSS 965,410,816 bytes; it stopped after the smoke and the chat background model was restored. The private profile remains disabled for corpus access, and the chat model has not passed extraction quality. See [federation](federated-search.md), [source windows](model-windows.md), and [model configuration](model-proposal.md).

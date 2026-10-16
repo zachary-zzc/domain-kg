@@ -18,7 +18,8 @@ accepted embedding model requires a new generation.
 otherwise embeddings use `connection_ref`. This lets the small local chat model
 and an embedding API use different endpoints and credentials. `embedding_revision`
 (default `"1"`) identifies an operator-pinned weight revision. A vector-space
-fingerprint covers the embedding endpoint, model, dimensions and weight revision.
+fingerprint covers the embedding endpoint, model, dimensions, weight revision,
+input window, query prefix and window-pooling version.
 Credential rotation and chat-only profile changes preserve it; a changed space
 requires a new generation once evidence is published. Both publication and query
 embeddings verify the selected fingerprint. Legacy artifacts without one remain
