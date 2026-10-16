@@ -75,17 +75,13 @@ class IdentityRuntime(TokenVerifier):
     async def verify_token(self, token: str) -> AccessToken | None:
         try:
             principal = await self.verifier.authenticate_bearer(token)
-            member = await self.repository.require_member(principal)
-            scopes = principal.scopes
-            if member.kind == "service":
-                scopes &= member.scopes
-            if "domain_kg:read" not in scopes:
+            if not await self.repository.has_active_read_credential(principal):
                 return None
             claims = await self.verifier.verify_claims(token)
             return AccessToken(
                 token=token,
                 client_id=str(claims.get("client_id", claims.get("azp", principal.subject))),
-                scopes=sorted(scopes),
+                scopes=sorted(principal.scopes),
                 expires_at=int(claims["exp"]),
                 resource=self.verifier.audience,
                 subject=principal.subject,

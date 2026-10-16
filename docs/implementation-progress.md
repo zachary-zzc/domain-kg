@@ -18,7 +18,8 @@ Updated 17 October 2026. Execution is native in this chat, following the current
 | 12: Filtered vector and lexical retrieval | Complete locally | 22 smoke checks; regular regression 184 passed, one physical skip; current metadata/support filters, scoped native adapter and embedding-space fences. |
 | 13: Federated fast/deep search | Complete locally | 34 smoke checks; regular regression 202 passed, one physical skip; native mix, two-KG fusion, partial failure rules and model-specific source windows verified. |
 | 14: Persistent edits and material changes | Local verification passed | Required combined regression: 17 tests in 618.31 seconds. Dedicated reversible identity regression: 11 tests in 521.58 seconds; 128 unit checks. Docker database cap remains 1.476 GB. |
-| 15–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
+| 15: Shared MCP and HTTP surfaces | Verified initial transport milestone; remaining gates open | 24 signed-identity/transport/owner-operation integration checks in 112.15 seconds; 139 unit/protocol checks in 3.99 seconds; Ruff and strict mypy (124 source files). Source-block inspection and later operation routes remain. |
+| 16–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
@@ -175,3 +176,5 @@ Reversible merge/split now passes its dedicated 11-check real-store regression. 
 [retained cleanup](material-purge.md).
 
 The identity milestone preserves original assertions/spans, applies source-qualified effective IDs consistently to all search modes, records typed human history, and appends owner-only compensating controls. Suppression retains original group members through compensation and re-ingestion. Ruff, strict mypy (105 source files), and 128 unit checks pass. See [identity curation](identity-curation.md).
+
+Task 15 now exposes all 22 typed application tools plus the protected probe, current-policy material metadata/schema resources, retrieval/curation/lifecycle/job routes, revisioned owner grants and material ACLs, authorized source/manual citation resolution, and measured projection readiness with durable repair receipts. Signed multi-organization credentials select current memberships per operation. HTTP and MCP preserve the same nullable result fields, reject caller identity arguments, sanitize invalid private input and enforce a 2 MiB JSON envelope cap. No external IdP/Inspector/target remote client acceptance is claimed; import/export and maintenance routes follow their domain services. See [transports](transports.md).

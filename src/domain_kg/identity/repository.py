@@ -77,6 +77,27 @@ class IdentityRepository:
             )
         return self._member(rows[0])
 
+    async def has_active_read_credential(self, principal: Principal) -> bool:
+        """Authenticate a multi-org credential without selecting an organization grant.
+
+        Each service operation still selects one current membership and intersects
+        that membership's service scopes before authorizing any KG or material.
+        """
+        if "domain_kg:read" not in principal.scopes:
+            return False
+        return await self.database.members.find_one(
+            {
+                "issuer": principal.issuer,
+                "subject": principal.subject,
+                "suspended": False,
+                "$or": [
+                    {"kind": "human"},
+                    {"kind": "service", "scopes": "domain_kg:read"},
+                ],
+            },
+            {"_id": 1},
+        ) is not None
+
     async def _admin(self, actor: Member, session: AsyncClientSession) -> Member:
         raw = await self.database.members.find_one(
             {

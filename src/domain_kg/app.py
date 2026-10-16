@@ -1,4 +1,4 @@
-"""Compatibility probe: protected MCP mount, with no material endpoints yet."""
+"""Protected HTTP and MCP surfaces over the same application services."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
@@ -26,8 +27,16 @@ from domain_kg.identity.repository import IdentityRepository
 from domain_kg.identity.routes import IdentityRuntime, identity_router
 from domain_kg.materials.routes import material_router
 from domain_kg.materials.service import MaterialService
+from domain_kg.providers.profiles import ProviderRegistry
+from domain_kg.providers.service import ProviderService
 from domain_kg.settings import Settings
 from domain_kg.storage.router import KGStoreRouter
+from domain_kg.transport.errors import SafeMCPServer
+from domain_kg.transport.http import service_router
+from domain_kg.transport.limits import RequestBodyLimit
+from domain_kg.transport.mcp import register_tools
+from domain_kg.transport.resources import register_resources
+from domain_kg.transport.runtime import ServiceRuntime
 
 
 class DenyAllVerifier(TokenVerifier):
@@ -44,6 +53,7 @@ def create_app(
     identity_repository: IdentityRepository | None = None,
     oidc_http_client: httpx.AsyncClient | None = None,
     catalog_service: CatalogService | None = None,
+    providers: ProviderService | None = None,
 ) -> FastAPI:
     mongo_client: AsyncMongoClient[dict[str, Any]] | None = None
     http_client = None
@@ -51,6 +61,7 @@ def create_app(
     catalog = catalog_service
     materials = None
     owns_catalog = False
+    services = None
     if settings.oidc_client_id:
         repository = identity_repository
         if repository is None:
@@ -73,7 +84,11 @@ def create_app(
             )
             owns_catalog = True
         materials = MaterialService(catalog.policy, catalog.router)
-    server: MCPServer[None] = MCPServer(
+        providers = providers or ProviderService(
+            catalog.policy, catalog.router, ProviderRegistry.from_file(settings.provider_config)
+        )
+        services = ServiceRuntime(identity, catalog, materials, providers)
+    server: MCPServer[None] = SafeMCPServer(
         "domain_kg_mcp",
         version="0.1.0",
         token_verifier=token_verifier or identity or DenyAllVerifier(),
@@ -93,6 +108,10 @@ def create_app(
     async def domain_kg_probe() -> dict[str, str]:
         """Check the authenticated MCP transport without accessing any KG data."""
         return {"status": "ok"}
+
+    if services is not None:
+        register_tools(server, services)
+        register_resources(server, services)
 
     public_url = str(settings.public_url).rstrip("/")
     mcp_app = server.streamable_http_app(
@@ -116,6 +135,8 @@ def create_app(
                 await catalog.initialize()
             if materials is not None:
                 await materials.initialize()
+            if services is not None:
+                await services.initialize()
             async with server.session_manager.run():
                 yield
         finally:
@@ -127,9 +148,11 @@ def create_app(
                 await http_client.aclose()
 
     app = FastAPI(title="Domain KG", lifespan=lifespan)
+    app.add_middleware(RequestBodyLimit)
     app.state.identity = identity
     app.state.catalog = catalog
     app.state.materials = materials
+    app.state.services = services
 
     @app.exception_handler(DomainError)
     async def domain_error_handler(request: Request, error: DomainError) -> JSONResponse:
@@ -138,11 +161,13 @@ def create_app(
             ErrorCode.FORBIDDEN: 403,
             ErrorCode.RESOURCE_NOT_ACCESSIBLE: 404,
             ErrorCode.VALIDATION_ERROR: 422,
+            ErrorCode.UNSUPPORTED_FILTER: 422,
             ErrorCode.VERSION_CONFLICT: 409,
             ErrorCode.IDEMPOTENCY_CONFLICT: 409,
             ErrorCode.CURSOR_EXPIRED: 409,
             ErrorCode.POLICY_CHANGED: 409,
-            ErrorCode.QUOTA_EXCEEDED: 413,
+            ErrorCode.QUOTA_EXCEEDED: 429,
+            ErrorCode.REVISION_NOT_READY: 409,
             ErrorCode.UNSUPPORTED_FORMAT: 415,
             ErrorCode.EVIDENCE_VALIDATION_FAILED: 422,
         }.get(error.code, 503)
@@ -160,6 +185,12 @@ def create_app(
             },
             status_code=status,
             headers=headers,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, error: RequestValidationError) -> JSONResponse:
+        return await domain_error_handler(
+            request, DomainError(ErrorCode.VALIDATION_ERROR, "The request fields are invalid.")
         )
 
     @app.exception_handler(PyMongoError)
@@ -188,6 +219,8 @@ def create_app(
             app.include_router(catalog_router(identity, catalog))
         if materials is not None:
             app.include_router(material_router(identity, materials))
+        if services is not None:
+            app.include_router(service_router(services))
 
     @app.middleware("http")
     async def private_identity_responses(request: Request, call_next: Any) -> Any:

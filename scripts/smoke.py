@@ -12,6 +12,17 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVICES = ["mongo", "neo4j", "qdrant", "object-store"]
 MEMORY_BUDGET_BYTES = 1_500_000_000
 TASK_FILES = {
+    15: [
+        "tests/unit/test_smoke_budget.py",
+        "tests/protocol",
+        "tests/integration/test_grant_management.py",
+        "tests/integration/test_material_acl_management.py",
+        "tests/integration/test_projection_status.py",
+        "tests/integration/test_transport_authorization.py",
+        "tests/integration/test_citation_resolution.py",
+        "tests/integration/test_material_inspection.py",
+        "tests/integration/test_identity.py",
+    ],
     14: [
         "tests/unit/test_smoke_budget.py",
         "tests/unit/test_identity_commands.py",

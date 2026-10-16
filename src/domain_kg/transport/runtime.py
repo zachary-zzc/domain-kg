@@ -1,0 +1,57 @@
+"""A single service composition shared by HTTP, MCP and management screens."""
+
+from uuid import UUID
+
+from domain_kg.catalog.service import CatalogService
+from domain_kg.citations.service import CitationService
+from domain_kg.graph.service import GraphService
+from domain_kg.identity.grants import GrantManagement
+from domain_kg.identity.material_grants import MaterialGrantManagement
+from domain_kg.identity.models import AccessContext, Action, Principal
+from domain_kg.identity.routes import IdentityRuntime
+from domain_kg.jobs.queue import JobQueue
+from domain_kg.materials.inspection import MaterialInspection
+from domain_kg.materials.lifecycle import MaterialLifecycle
+from domain_kg.materials.service import MaterialService
+from domain_kg.operations.projections import ProjectionManagement
+from domain_kg.providers.service import ProviderService
+from domain_kg.retrieval.service import RetrievalService
+from domain_kg.revisions.service import RevisionService
+
+
+class ServiceRuntime:
+    def __init__(
+        self,
+        identity: IdentityRuntime,
+        catalog: CatalogService,
+        materials: MaterialService,
+        providers: ProviderService,
+    ) -> None:
+        self.identity, self.catalog = identity, catalog
+        self.policy, self.materials, self.providers = catalog.policy, materials, providers
+        self.queue = JobQueue(self.policy, catalog.router)
+        self.inspection = MaterialInspection(self.queue)
+        self.citations = CitationService(self.queue)
+        self.lifecycle = MaterialLifecycle(materials, self.queue)
+        self.graph = GraphService(self.queue)
+        self.search = RetrievalService(self.queue, providers)
+        self.revisions = RevisionService(self.queue, providers)
+        self.grants = GrantManagement(self.policy)
+        self.material_grants = MaterialGrantManagement(self.policy)
+        self.projections = ProjectionManagement(self.queue)
+
+    async def initialize(self) -> None:
+        await self.queue.initialize()
+        await self.revisions.initialize()
+
+    async def access(
+        self,
+        principal: Principal,
+        kg_ids: tuple[UUID, ...],
+        action: Action,
+        org_id: UUID | None = None,
+    ) -> AccessContext:
+        member = await self.identity.repository.require_member(principal, org_id)
+        return await self.policy.resolve_access(
+            principal, list(kg_ids), action, org_id=member.org_id
+        )
