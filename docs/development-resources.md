@@ -1,5 +1,16 @@
 # Laptop resource limits
 
+Task 11's first graph traversal check hit Neo4j's 512 MiB cgroup limit after a
+long-lived JVM warmed up. The cap and all volumes were preserved. The smoke
+profile now bounds direct buffers to 32 MiB and the JIT code cache to 48 MiB,
+uses first-tier compilation on its single CPU, and keeps 128 cached queries per
+database. Native-memory summaries were enabled for diagnosis. During the passing
+five-case graph suite Neo4j used about 408–429 MiB; the final complete smoke is
+recorded with the task. These settings trade compilation throughput for laptop
+headroom. The [Neo4j query-cache settings](https://neo4j.com/docs/operations-manual/current/configuration/configuration-settings/#config_server.memory.query_cache.per_db_cache_num_entries)
+and [Java VM options](https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html)
+describe the controls. This is not a deployment sizing recommendation.
+
 The smoke stack has a combined hard container RAM limit of 1,408 MiB (1.476 GB): MongoDB 512 MiB, Neo4j 512 MiB, Qdrant 192 MiB, and S3 192 MiB. Container swap is disabled. CPU limits total 2.5 cores. These limits apply to the services; they do not change the laptop's system RAM or Colima VM configuration.
 
 Task 4's repeated disposable schema tests exposed MongoDB's inherited open-file ceiling: WiredTiger aborted with `Too many open files` during an index build. This was not an OOM event. The Mongo container now uses the [MongoDB-recommended open-file limit](https://www.mongodb.com/docs/v8.0/reference/ulimit/) of 64,000. Raising a descriptor ceiling does not reserve additional RAM; the then-current 448 MiB hard cap was unchanged. The existing volume recovered normally and the complete real-store suite passed after restart.

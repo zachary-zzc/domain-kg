@@ -65,7 +65,14 @@ async def read_artifact(
     )
     if origin is None:
         raise inaccessible_reference()
-    stores = await queue.router.for_kg(access, source.kg_id)
+    stores = await queue.router.for_sources(access, source.kg_id)
+    version = await stores.authority.get_material_version(
+        ScopedRef(org_id=source.org_id, kg_id=source.kg_id, id=source.version_id)
+    )
+    if version is None or version.material.id != source.material_id:
+        raise DomainError(
+            ErrorCode.PROJECTION_INCONSISTENT, "The artifact's canonical source owner differs."
+        )
     data = bytearray()
     async for part in BlobStore(stores.blobs).open(artifact.blob):
         data.extend(part)

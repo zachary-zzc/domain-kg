@@ -113,11 +113,37 @@ async def verify_accepted(
 async def _verify_accepted(
     queue: JobQueue, access: AccessContext, binding: AcceptedProjection
 ) -> None:
+    document, batch, expected = await accepted_document(queue, access, binding)
+    stores = await queue.router.for_kg(access, binding.kg_id)
+    receipts = await verify_document(stores, document, batch)
+    if receipts != expected:
+        raise inconsistent()
+
+
+async def accepted_document(
+    queue: JobQueue, access: AccessContext, binding: AcceptedProjection
+) -> tuple[EmbeddedDocument, RevisionBatch, tuple[ProjectionReceipt, ...]]:
+    """Authenticate the sealed source independently of derived-backend availability."""
+    try:
+        return await _accepted_document(queue, access, binding)
+    except (ValidationError, KeyError, TypeError):
+        raise inconsistent() from None
+    except DomainError as error:
+        if error.code == ErrorCode.EVIDENCE_VALIDATION_FAILED:
+            raise inconsistent() from None
+        raise
+
+
+async def _accepted_document(
+    queue: JobQueue, access: AccessContext, binding: AcceptedProjection
+) -> tuple[EmbeddedDocument, RevisionBatch, tuple[ProjectionReceipt, ...]]:
     journal = PublicationJournal(queue)
     attempt = await journal.attempt(access, binding.manifest_id)
     batch = RevisionBatch.model_validate(attempt["batch"])
     if binding.source is None:
         raise inconsistent()  # Curation projection producers are installed by the curation task.
+    if attempt["state"] != "accepted":
+        raise inconsistent()
     if (
         batch.org_id,
         batch.kg_id,
@@ -144,10 +170,11 @@ async def _verify_accepted(
         or document.chunk_checkpoint.artifact_id != binding.chunk_artifact_id
     ):
         raise inconsistent()
-    stores = await queue.router.for_kg(access, binding.kg_id)
-    receipts = await verify_document(stores, document, batch)
-    if receipts != tuple(ProjectionReceipt.model_validate(item) for item in attempt["receipts"]):
-        raise inconsistent()
+    return (
+        document,
+        batch,
+        tuple(ProjectionReceipt.model_validate(item) for item in attempt["receipts"]),
+    )
 
 
 class ProjectionCoordinator:

@@ -1,0 +1,41 @@
+"""Source-qualified graph inspection responses; anchors never supply display fields."""
+
+from uuid import UUID
+
+from domain_kg.ingestion.models import Span
+from domain_kg.ingestion.resolved import ResolvedEntity
+from domain_kg.models import FrozenModel, SourceVersion
+
+
+class NodeView(FrozenModel):
+    kg_id: UUID
+    id: UUID
+    name: str
+    aliases: tuple[str, ...]
+    descriptions: tuple[str, ...]
+    entity_types: tuple[str, ...]
+    observations: tuple[ResolvedEntity, ...]
+    observation_count: int
+    support_count: int
+    neighbor_count: int
+    truncation: bool = False
+
+
+class EdgeView(FrozenModel):
+    subject_id: UUID
+    target_id: UUID
+    assertion_id: UUID
+    support_id: UUID
+    predicate: str
+    polarity: str
+    confidence: float | None
+    source: SourceVersion
+    spans: tuple[Span, ...]
+
+
+class SubgraphView(FrozenModel):
+    kg_id: UUID
+    revision: int
+    nodes: tuple[NodeView, ...]
+    edges: tuple[EdgeView, ...]
+    truncation: bool = False

@@ -27,7 +27,9 @@ from domain_kg.revisions.models import PublishRevision
 pytestmark = pytest.mark.storage
 
 
-async def make_publishing(material_service, team):
+async def make_publishing(
+    material_service, team, *, extraction_factory=batch_for, restricted=False
+):
     from domain_kg.revisions.publication import ProjectionCoordinator
 
     materials, kg = material_service
@@ -40,6 +42,7 @@ async def make_publishing(material_service, team):
         embedding_model="fixture-embedding",
         embedding_dimensions=3,
         data_policy_approved=True,
+        allow_restricted=restricted,
         allowed_namespaces=(Namespace(org_id=org, kg_id=kg),),
     )
     faults = {}
@@ -62,7 +65,7 @@ async def make_publishing(material_service, team):
                 },
             )
         chunk = ParsedChunk.model_validate(json.loads(body["messages"][1]["content"])["source"])
-        batch = batch_for(chunk, profile.id)
+        batch = extraction_factory(chunk, profile.id)
         return httpx.Response(
             200,
             json={

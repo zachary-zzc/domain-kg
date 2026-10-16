@@ -12,6 +12,25 @@ from domain_kg.models import Namespace
 pytestmark = pytest.mark.storage
 
 
+async def test_retrieval_cannot_reuse_a_write_only_access_context(team):
+    from domain_kg.engine.scope import EligibilityResolver
+    from domain_kg.retrieval.models import SearchRequest
+    from domain_kg.revisions.models import PublishedView
+
+    _, policy, principals, _, org, kg = team
+    write_only = principals["editor"].model_copy(update={"scopes": frozenset({"domain_kg:write"})})
+    access = await policy.resolve_access(write_only, [kg], Action.INGEST)
+    view = PublishedView(org_id=org, kg_id=kg, revision=0, generation=uuid4())
+
+    class Views:
+        async def load(self, access, kg_id):
+            return view
+
+    resolver = EligibilityResolver(policy, Views())
+    with pytest.raises(DomainError):
+        await resolver.resolve(access, SearchRequest(kg_ids=(kg,), query="q"), kg)
+
+
 async def test_immutable_eligible_scopes_and_visibility_rechecks(
     team, mongo_db, graph, vectors
 ) -> None:
@@ -126,8 +145,8 @@ async def test_immutable_eligible_scopes_and_visibility_rechecks(
             )
             rows, _, _ = await graph.execute_query(
                 "MATCH (n:PolicyScopeProbe {org_id:$org_id,kg_id:$kg_id,generation:$generation}) "
-                "WHERE ANY(p IN $source_pairs WHERE p.material_id=n.material_id "
-                "AND p.version_id=n.source_version_id) AND ANY(p IN $accepted_projections WHERE "
+                "WHERE ANY(p IN $accepted_projections WHERE p.material_id=n.material_id "
+                "AND p.source_version_id=n.source_version_id AND "
                 "p.attempt_id=n.attempt_id AND p.manifest_id=n.manifest_id "
                 "AND p.manifest_hash=n.manifest_hash) RETURN n.material_id AS id",
                 **predicate.graph_parameters,
@@ -148,6 +167,19 @@ async def test_immutable_eligible_scopes_and_visibility_rechecks(
             org=str(org),
             kg=str(kg),
         )
+    # Even an unchanged header revision cannot authenticate a changed binding.
+    original_view = view
+    view = view.model_copy(
+        update={
+            "projections": (
+                bindings[0].model_copy(update={"content_hash": "b" * 64}),
+                bindings[1],
+            )
+        }
+    )
+    with pytest.raises(DomainError):
+        await resolver.revalidate(scopes[0])
+    view = original_view
     await mongo_db.kgs.update_one(
         {"org_id": str(org), "id": str(kg)}, {"$inc": {"visibility_revision": 1}}
     )

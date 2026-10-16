@@ -12,6 +12,7 @@ from qdrant_client import AsyncQdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from domain_kg.catalog.backends import BackendRegistry, s3_client
+from domain_kg.catalog.models import StorageProfile
 from domain_kg.contracts import KGStores
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.identity.models import AccessContext
@@ -142,6 +143,13 @@ class RoutedStores(KGStores):
     blobs: BlobBinding
 
 
+@dataclass(frozen=True)
+class SourceStores:
+    namespace: Namespace
+    authority: NamespaceRepository
+    blobs: BlobBinding
+
+
 class KGStoreRouter:
     def __init__(
         self, policy: Policy, registry: BackendRegistry, *, dimensions: int, max_backends: int = 4
@@ -153,6 +161,90 @@ class KGStoreRouter:
         self._blobs: dict[UUID, Any] = {}
         self._blob_uploads: dict[UUID, asyncio.Semaphore] = {}
         self._lock = asyncio.Lock()
+
+    async def _placement(
+        self, access: AccessContext, kg_id: UUID
+    ) -> tuple[Namespace, StorageProfile, NamespaceRepository, UUID]:
+        current = await self.policy.revalidate(access)
+        if kg_id not in current.kg_ids:
+            raise inaccessible_reference()
+        kg = await self.policy.database.kgs.find_one(
+            {"org_id": str(current.org_id), "id": str(kg_id)}
+        )
+        if kg is None:
+            raise inaccessible_reference()
+        profile = await self.registry.profile(UUID(kg["storage_profile_id"]), current.org_id)
+        mongo = await self.registry.connection(profile.mongo_id, "mongo")
+        namespace = Namespace(org_id=current.org_id, kg_id=kg_id)
+        return (
+            namespace,
+            profile,
+            NamespaceRepository(self.policy.database.client[mongo.database], namespace),
+            UUID(kg["generation"]),
+        )
+
+    def _capacity(self, identifier: UUID, pool: dict[UUID, Any]) -> None:
+        if identifier not in pool and len(pool) >= self.max_backends:
+            raise DomainError(
+                ErrorCode.QUOTA_EXCEEDED, "The configured backend pool limit was reached."
+            )
+
+    async def for_sources(self, access: AccessContext, kg_id: UUID) -> SourceStores:
+        """Authority and object storage, without opening either derived backend."""
+        namespace, profile, authority, _ = await self._placement(access, kg_id)
+        blob = await self.registry.connection(profile.object_store_id, "s3")
+        async with self._lock:
+            self._capacity(profile.object_store_id, self._blobs)
+            if profile.object_store_id not in self._blobs:
+                self._blobs[profile.object_store_id] = s3_client(blob)
+                self._blob_uploads[profile.object_store_id] = asyncio.Semaphore(1)
+        await self.policy.revalidate(access)
+        return SourceStores(
+            namespace,
+            authority,
+            BlobBinding(
+                namespace,
+                self._blobs[profile.object_store_id],
+                blob.bucket,
+                self._blob_uploads[profile.object_store_id],
+            ),
+        )
+
+    async def for_graph(self, access: AccessContext, kg_id: UUID) -> GraphBinding:
+        namespace, profile, _, _ = await self._placement(access, kg_id)
+        graph = await self.registry.connection(profile.neo4j_id, "neo4j")
+        async with self._lock:
+            self._capacity(profile.neo4j_id, self._graphs)
+            if profile.neo4j_id not in self._graphs:
+                self._graphs[profile.neo4j_id] = AsyncGraphDatabase.driver(
+                    graph.endpoint,
+                    auth=(graph.username, graph.credential.get_secret_value()),
+                    max_connection_pool_size=2,
+                    connection_timeout=5,
+                    connection_acquisition_timeout=5,
+                    max_transaction_retry_time=5,
+                )
+        await self.policy.revalidate(access)
+        return GraphBinding(namespace, self._graphs[profile.neo4j_id])
+
+    async def for_vectors(self, access: AccessContext, kg_id: UUID) -> VectorBinding:
+        namespace, profile, _, generation = await self._placement(access, kg_id)
+        vector = await self.registry.connection(profile.qdrant_id, "qdrant")
+        async with self._lock:
+            self._capacity(profile.qdrant_id, self._vectors)
+            if profile.qdrant_id not in self._vectors:
+                self._vectors[profile.qdrant_id] = await open_qdrant(
+                    url=vector.endpoint,
+                    api_key=vector.credential.get_secret_value(),
+                    timeout_seconds=5,
+                    limits=httpx.Limits(max_connections=2, max_keepalive_connections=1),
+                )
+        await self.policy.revalidate(access)
+        return VectorBinding(
+            namespace,
+            self._vectors[profile.qdrant_id],
+            f"kg_{namespace.org_id.hex}_{kg_id.hex}_{generation.hex}",
+        )
 
     async def _bind(self, access: AccessContext, kg_id: UUID) -> RoutedStores:
         current = await self.policy.revalidate(access)

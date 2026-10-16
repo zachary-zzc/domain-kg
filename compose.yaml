@@ -42,7 +42,9 @@ services:
       NEO4J_server_memory_heap_max__size: 128m
       NEO4J_server_memory_pagecache_size: 32m
       NEO4J_server_bolt_thread__pool__max__size: 8
-      JAVA_TOOL_OPTIONS: -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=64m
+      NEO4J_server_memory_query__cache_per__db__cache__num__entries: 128
+      # Bound compiler/direct overhead for this tiny one-core smoke profile.
+      JAVA_TOOL_OPTIONS: -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=32m -XX:ReservedCodeCacheSize=48m -XX:TieredStopAtLevel=1 -XX:NativeMemoryTracking=summary
     mem_limit: 512m
     memswap_limit: 512m
     cpus: 1.0

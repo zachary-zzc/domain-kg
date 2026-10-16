@@ -223,20 +223,27 @@ async def catalog(team, mongo_db, settings):
             }
         ).to_list()
         vector_client = router._vectors.get(profile.qdrant_id)
-        for kg in owned:
-            if vector_client is not None:
-                from uuid import UUID
+        cleanup_errors = []
+        try:
+            for kg in owned:
+                if vector_client is not None:
+                    from uuid import UUID
 
-                collection = f"kg_{org.hex}_{UUID(kg['id']).hex}_{UUID(kg['generation']).hex}"
-                if await vector_client.collection_exists(collection):
-                    await vector_client.delete_collection(collection)
+                    collection = f"kg_{org.hex}_{UUID(kg['id']).hex}_{UUID(kg['generation']).hex}"
+                    if await vector_client.collection_exists(collection):
+                        await vector_client.delete_collection(collection)
+        except Exception as error:
+            cleanup_errors.append(error)
         graph_driver = router._graphs.get(profile.neo4j_id)
-        if graph_driver is not None and owned:
-            await graph_driver.execute_query(
-                "MATCH (n {org_id:$org}) WHERE n.kg_id IN $kgs DETACH DELETE n",
-                org=str(org),
-                kgs=[kg["id"] for kg in owned],
-            )
+        try:
+            if graph_driver is not None and owned:
+                await graph_driver.execute_query(
+                    "MATCH (n {org_id:$org}) WHERE n.kg_id IN $kgs DETACH DELETE n",
+                    org=str(org),
+                    kgs=[kg["id"] for kg in owned],
+                )
+        except Exception as error:
+            cleanup_errors.append(error)
         for connection in approved.values():
             if connection.kind == "s3":
                 from domain_kg.catalog.backends import s3_client
@@ -254,9 +261,13 @@ async def catalog(team, mongo_db, settings):
                                     Bucket=connection.bucket, Delete={"Objects": objects}
                                 )
                         client.delete_bucket(Bucket=connection.bucket)
+                except Exception as error:
+                    cleanup_errors.append(error)
                 finally:
                     client.close()
         await router.close()
+        if cleanup_errors:
+            raise ExceptionGroup("Fixture-owned store cleanup failed", cleanup_errors)
 
 
 @pytest.fixture

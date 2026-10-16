@@ -8,7 +8,7 @@ from uuid import UUID
 from qdrant_client import models
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
-from domain_kg.identity.models import AccessContext
+from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.policy import Policy
 from domain_kg.materials.models import MaterialMetadata
 from domain_kg.retrieval.models import SearchRequest
@@ -26,7 +26,8 @@ class EligibilityResolver:
     async def resolve(
         self, access: AccessContext, request: SearchRequest, kg_id: UUID
     ) -> ReadScope:
-        current = await self.policy.revalidate(access)
+        request = SearchRequest.model_validate(request)
+        current = await self.policy.revalidate(access, action=Action.SEARCH)
         if kg_id not in request.kg_ids or kg_id not in current.kg_ids:
             raise inaccessible_reference()
         view = await self.views.load(current, kg_id)
@@ -95,7 +96,7 @@ class EligibilityResolver:
         return scope
 
     async def revalidate(self, scope: ReadScope) -> None:
-        await self.policy.revalidate(scope.access)
+        await self.policy.revalidate(scope.access, action=Action.SEARCH)
         kg = await self.policy.database.kgs.find_one(
             {
                 "org_id": str(scope.view.org_id),
@@ -106,10 +107,13 @@ class EligibilityResolver:
         if kg is None:
             raise DomainError(ErrorCode.POLICY_CHANGED, "Visibility changed during the request.")
         view = await self.views.load(scope.access, scope.view.kg_id)
-        if (view.revision, view.generation, view.manifest_id) != (
-            scope.view.revision,
-            scope.view.generation,
-            scope.view.manifest_id,
+        if (
+            (view.revision, view.generation, view.manifest_id)
+            != (scope.view.revision, scope.view.generation, scope.view.manifest_id)
+            or frozenset(view.projections) != frozenset(scope.view.projections)
+            or frozenset(view.receipts) != frozenset(scope.view.receipts)
+            or frozenset(view.sources) != frozenset(scope.view.sources)
+            or frozenset(view.curations) != frozenset(scope.view.curations)
         ):
             raise DomainError(
                 ErrorCode.POLICY_CHANGED, "The accepted publication changed during the request."
