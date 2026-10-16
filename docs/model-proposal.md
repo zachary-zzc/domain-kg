@@ -46,8 +46,43 @@ Never place an actual key in the tracked example.
 
 The local runtime file records the approved launch settings and measured smoke;
 it is not an application provider file or an automatic startup command.
-A generative LLM is not automatically a suitable
-embedding model. The embedding endpoint/model must be configured separately;
-split provider connections are part of the next retrieval implementation step.
+A generative LLM is not automatically a suitable embedding model. Separate
+approved chat and embedding connections are implemented, with embedding-space
+fingerprints that prevent incompatible query vectors from reaching a published KG.
 The existing [provider boundary](providers.md) continues to validate structured
 output and source spans independently of any model's claims.
+
+The user also approved **Qwen3-Embedding-0.6B Q8_0**, a 639,150,592-byte file from
+[Qwen's official GGUF repository](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF).
+The exact revision and SHA-256 are recorded in the runtime file. Its publisher
+documents multilingual input and up to 1,024 output dimensions. The pinned file
+was downloaded and verified outside Git. Six tiny native CPU requests passed the
+real embedding-client contract and four bilingual semantic comparisons in 0.688
+seconds, with sampled peak RSS **965,410,816 bytes** (about 921 MiB). These are small
+smoke measurements, not retrieval-quality benchmarks.
+
+The embedding process used two threads, one slot, a 2,048-token context and last
+pooling. It ran after the chat process was paused and stopped after the smoke.
+The chat background process was then restored; its repeated tiny fact cases passed
+with sampled peak RSS 817,528,832 bytes. The embedding endpoint on port 29501 is
+currently stopped. No automatic model switching or login startup is configured.
+To repeat the embedding check, pause the chat model first and run
+`uv run --no-sync python scripts/smoke_native_embedding.py`; the script refuses
+overlapping listeners, verifies the checksum, measures its owned process and stops
+it after the tiny check.
+
+The requested private application profile is
+`/Users/zachary/.cache/domain-kg/providers.local.json` (owner-only). It now names both
+local models and their deployed context limits, while preserving the empty
+namespace allowlist and disabled data-policy flag. Review the safe tracked
+[laptop profile example](../config/providers.laptop.example.json) and
+[environment settings](../config/laptop.env.example). A fresh local KG must use
+1,024 dimensions; changing an existing published generation requires migration.
+The [model-specific window implementation](model-windows.md) fits source inputs
+to both model limits and preserves citation offsets.
+
+Embedding acceptance does not resolve extraction quality. A separate two-case
+prototype with compact ordinal span references reduced input to 212/213 tokens,
+but still failed grounding or omitted the required relationship. That prototype
+is not enabled in the application. No graph was published and the extraction
+provider acceptance gate remains open.

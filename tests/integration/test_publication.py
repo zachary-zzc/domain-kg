@@ -34,6 +34,8 @@ async def make_publishing(
     extraction_factory=batch_for,
     embedding_factory=None,
     restricted=False,
+    embedding_model="fixture-embedding",
+    profile_overrides=None,
 ):
     from domain_kg.revisions.publication import ProjectionCoordinator
 
@@ -44,12 +46,14 @@ async def make_publishing(
         id=uuid4(),
         connection_ref="fixture",
         extraction_model="fixture-extraction",
-        embedding_model="fixture-embedding",
+        embedding_model=embedding_model,
         embedding_dimensions=3,
         data_policy_approved=True,
         allow_restricted=restricted,
         allowed_namespaces=(Namespace(org_id=org, kg_id=kg),),
     )
+    if profile_overrides:
+        profile = ProviderProfile.model_validate(profile.model_copy(update=profile_overrides))
     faults = {}
 
     def response(request):
@@ -113,7 +117,7 @@ async def make_publishing(
     access = await policy.resolve_access(principals["editor"], [kg], Action.INGEST)
     queue = JobQueue(policy, materials.router, lease_seconds=120)
     await queue.initialize()
-    preparation = preparation_steps(queue)
+    preparation = preparation_steps(queue, providers=providers)
     steps = preparation + extraction_steps(queue, providers, preparation[-1])
     coordinator = ProjectionCoordinator(queue, providers)
     return materials, access, queue, coordinator, steps, faults

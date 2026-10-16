@@ -6,7 +6,7 @@ import unicodedata
 from collections import Counter
 
 from domain_kg.engine.scope import ScopePredicates
-from domain_kg.errors import DomainError, ErrorCode
+from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.graph.repository import ACCEPTED
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.evidence import SealedEvidence
@@ -62,9 +62,7 @@ class LexicalRetrievalBranch:
                     ids=batch,
                 )
             except Exception as error:
-                raise DomainError(
-                    ErrorCode.BACKEND_UNAVAILABLE, "Lexical recall is unavailable.", retryable=True
-                ) from error
+                raise BranchUnavailable("Lexical recall is unavailable.") from error
             for record in records:
                 payload = record["value"]
                 identifier = payload.get("projection_id")

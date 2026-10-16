@@ -1,0 +1,37 @@
+{
+  "connections": [
+    {
+      "ref": "local-chat",
+      "endpoint": "http://127.0.0.1:29500/v1",
+      "api_key": "REPLACE_IN_PRIVATE_COPY"
+    },
+    {
+      "ref": "local-embedding",
+      "endpoint": "http://127.0.0.1:29501/v1",
+      "api_key": "REPLACE_IN_PRIVATE_COPY"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "91974082-1c65-4e03-9b84-11f16464c886",
+      "revision": 1,
+      "connection_ref": "local-chat",
+      "embedding_connection_ref": "local-embedding",
+      "extraction_model": "domain-kg-small-llm",
+      "embedding_model": "domain-kg-small-embedding",
+      "embedding_dimensions": 1024,
+      "embedding_revision": "370f27d7550e0def9b39c1f16d3fbaa13aa67728-Q8_0",
+      "extraction_context_tokens": 4096,
+      "embedding_context_tokens": 2048,
+      "max_completion_tokens": 1024,
+      "schema_string_limit": 512,
+      "schema_in_context": false,
+      "embedding_batch_size": 1,
+      "embedding_query_prefix": "Instruct: Retrieve relevant evidence passages.\nQuery: ",
+      "timeout_seconds": 120,
+      "allowed_namespaces": [],
+      "data_policy_approved": false,
+      "allow_restricted": false
+    }
+  ]
+}

@@ -43,7 +43,30 @@
     "graph_publications": 0
   },
   "embeddings": {
-    "status": "requires_separately_selected_embedding_model_or_webserver_api",
-    "use_llm_hidden_states_as_embeddings": false
+    "status": "approved_download_verified_native_smoke_passed_stopped_after_smoke",
+    "repository": "Qwen/Qwen3-Embedding-0.6B-GGUF",
+    "revision": "370f27d7550e0def9b39c1f16d3fbaa13aa67728",
+    "filename": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+    "size_bytes": 639150592,
+    "sha256": "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
+    "license": "Apache-2.0",
+    "endpoint": "http://127.0.0.1:29501/v1",
+    "served_model_name": "domain-kg-small-embedding",
+    "dimensions": 1024,
+    "context_tokens": 2048,
+    "threads": 2,
+    "parallel_slots": 1,
+    "batch_tokens": 2048,
+    "microbatch_tokens": 2048,
+    "gpu_layers": 0,
+    "pooling": "last",
+    "rss_watchdog_bytes": 1250000000,
+    "sampled_peak_rss_bytes": 965410816,
+    "measured_seconds": 0.688,
+    "smoke_calls": 6,
+    "semantic_comparisons_passed": 4,
+    "run_sequentially_with_chat_model": true,
+    "use_llm_hidden_states_as_embeddings": false,
+    "ingestion_quality_acceptance": "extraction_provider_gate_remains_open"
   }
 }

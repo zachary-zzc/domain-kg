@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from domain_kg.engine.scope import EligibilityResolver
-from domain_kg.errors import DomainError, ErrorCode
+from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.graph.repository import GraphData
 from domain_kg.graph.service import AcceptedMetadata
 from domain_kg.jobs.queue import JobQueue
@@ -139,10 +139,8 @@ class SealedEvidence:
                 )
                 if isinstance(error, DomainError):
                     raise
-                raise DomainError(
-                    ErrorCode.BACKEND_UNAVAILABLE,
-                    "The requested retrieval backend is unavailable.",
-                    retryable=True,
+                raise BranchUnavailable(
+                    "The requested retrieval backend is unavailable."
                 ) from error
             bodies.extend(
                 ProjectionBody.model_validate(row.model_dump(exclude={"vector"}))

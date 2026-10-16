@@ -67,7 +67,9 @@ def create_app(
             policy = Policy(repository.database)
             registry = BackendRegistry(policy, approved_from_settings(settings))
             catalog = CatalogService(
-                policy, registry, KGStoreRouter(policy, registry, dimensions=1536)
+                policy,
+                registry,
+                KGStoreRouter(policy, registry, dimensions=settings.embedding_dimensions),
             )
             owns_catalog = True
         materials = MaterialService(catalog.policy, catalog.router)

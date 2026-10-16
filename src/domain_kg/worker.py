@@ -45,7 +45,7 @@ async def main(*, once: bool, repair_only: bool = False) -> None:
     )
     policy = Policy(client[settings.mongo_database])
     registry = BackendRegistry(policy, approved_from_settings(settings))
-    router = KGStoreRouter(policy, registry, dimensions=1536)
+    router = KGStoreRouter(policy, registry, dimensions=settings.embedding_dimensions)
     try:
         queue = JobQueue(policy, router)
         approved_providers = ProviderRegistry.from_file(settings.provider_config)

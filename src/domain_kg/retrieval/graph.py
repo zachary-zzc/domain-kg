@@ -1,8 +1,10 @@
 """Source evidence recall through visible seeds and bounded accepted graph paths."""
 
+from dataclasses import dataclass
 from uuid import UUID, uuid5
 
 from domain_kg.graph.service import GraphService
+from domain_kg.graph.views import SubgraphView
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.models import EvidenceCandidate, GraphStep, SearchRequest, SubgraphRequest
 from domain_kg.revisions.models import ReadScope
@@ -12,12 +14,29 @@ def source_citation(org: UUID, kg: UUID, material: UUID, version: UUID, chunk: U
     return uuid5(org, f"{kg}/citation/{material}/{version}/{chunk}")
 
 
+@dataclass(frozen=True)
+class GraphRecall:
+    candidates: list[EvidenceCandidate]
+    graph: SubgraphView | None
+    truncated: bool
+
+
 class GraphRetrievalBranch:
     def __init__(self, queue: JobQueue) -> None:
         service = GraphService(queue)
         self.resolver, self.repository = service.resolver, service.repository
 
     async def retrieve(self, scope: ReadScope, request: SearchRequest) -> list[EvidenceCandidate]:
+        return (await self.recall(scope, request)).candidates
+
+    async def recall(
+        self,
+        scope: ReadScope,
+        request: SearchRequest,
+        *,
+        seed_ids: tuple[UUID, ...] = (),
+        keywords: tuple[str, ...] = (),
+    ) -> GraphRecall:
         request = SearchRequest.model_validate(request)
         if scope.view.kg_id not in request.kg_ids or request.filters != scope.filters:
             raise ValueError("graph request and immutable scope differ")
@@ -25,13 +44,14 @@ class GraphRetrievalBranch:
             raise ValueError("graph expansion requires graph or deep mode")
         data = await self.repository.open(scope)
         query = request.query.casefold()
-        seeds = tuple(
+        all_seeds = tuple(
             sorted(
-                {
+                set(seed_ids)
+                | {
                     observation.entity.id
                     for observation in data.observations
                     if any(
-                        query in text.casefold()
+                        any(term.casefold() in text.casefold() for term in (keywords or (query,)))
                         for text in (
                             observation.name,
                             observation.description,
@@ -42,10 +62,11 @@ class GraphRetrievalBranch:
                 },
                 key=str,
             )
-        )[: request.max_nodes]
+        )
+        seeds = all_seeds[: request.max_nodes]
         if not seeds:
             await self.resolver.revalidate(scope)
-            return []
+            return GraphRecall([], None, False)
         graph = await self.repository.traverse(
             scope,
             SubgraphRequest(
@@ -133,4 +154,8 @@ class GraphRetrievalBranch:
                 )
             )
         await self.resolver.revalidate(scope)
-        return candidates[:50]
+        return GraphRecall(
+            candidates[:50],
+            graph,
+            graph.truncation or len(all_seeds) > len(seeds) or len(candidates) > 50,
+        )

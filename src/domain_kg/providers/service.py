@@ -232,7 +232,7 @@ class ProviderService:
             transport=self.transport,
         )
         try:
-            return profile, await client.embed(texts, profile)
+            return profile, await client.embed(texts, profile, query=source is None)
         finally:
             await client.close()
 

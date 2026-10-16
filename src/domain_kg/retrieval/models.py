@@ -194,7 +194,7 @@ class EvidenceCandidate(FrozenModel):
 
 class BranchStatus(FrozenModel):
     kg_id: UUID
-    branch: Literal["vector", "lexical", "graph", "rerank"]
+    branch: Literal["vector", "lexical", "graph", "rerank", "keywords"]
     status: Literal["ok", "empty", "unavailable", "unsupported", "skipped"]
 
 

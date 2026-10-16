@@ -59,8 +59,12 @@ class EmbeddingClient:
     async def close(self) -> None:
         await self.client.aclose()
 
-    async def embed(self, texts: list[str], profile: EmbeddingProfile) -> list[list[float]]:
+    async def embed(
+        self, texts: list[str], profile: EmbeddingProfile, *, query: bool = False
+    ) -> list[list[float]]:
         from tiktoken import get_encoding
+
+        from domain_kg.providers.budget import split_embedding_input
 
         if (
             (profile.id, profile.revision, profile.model, profile.dimensions)
@@ -83,9 +87,18 @@ class EmbeddingClient:
         tokenizer = get_encoding("cl100k_base")
         if any(len(tokenizer.encode(text, disallowed_special=())) > 8000 for text in texts):
             raise unavailable()
+        prefix = self.approved.embedding_query_prefix if query else ""
+        windows = [
+            split_embedding_input(
+                text, context_tokens=self.approved.embedding_context_tokens, prefix=prefix
+            )
+            for text in texts
+        ]
+        inputs = [prefix + part for parts in windows for part in parts]
         result: list[list[float]] = []
-        for start in range(0, len(texts), 16):
-            batch = texts[start : start + 16]
+        size = self.approved.embedding_batch_size
+        for start in range(0, len(inputs), size):
+            batch = inputs[start : start + size]
             await self.authorize()
             request = {"input": batch, "model": profile.model, "encoding_format": "float"}
             try:
@@ -137,4 +150,23 @@ class EmbeddingClient:
                 raise unavailable() from exc
             await self.authorize()
             result.extend(list(positions[index]) for index in range(len(batch)))
-        return result
+        pooled, offset = [], 0
+        for parts in windows:
+            vectors = result[offset : offset + len(parts)]
+            offset += len(parts)
+            weights = [len(part.encode()) for part in parts]
+            pooled.append(
+                list(
+                    normalized_vector(
+                        [
+                            sum(
+                                vector[dimension] * weight
+                                for vector, weight in zip(vectors, weights, strict=True)
+                            )
+                            for dimension in range(profile.dimensions)
+                        ],
+                        profile.dimensions,
+                    )
+                )
+            )
+        return pooled

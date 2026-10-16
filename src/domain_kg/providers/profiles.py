@@ -42,6 +42,11 @@ class ProviderProfile(FrozenModel):
     max_completion_tokens: Annotated[int, Field(ge=128, le=16384, strict=True)] = 4096
     schema_string_limit: Annotated[int, Field(ge=64, le=1000, strict=True)] | None = None
     timeout_seconds: Annotated[int, Field(ge=1, le=120, strict=True)] = 60
+    extraction_context_tokens: Annotated[int, Field(ge=1024, le=131072, strict=True)] = 16384
+    embedding_context_tokens: Annotated[int, Field(ge=256, le=32768, strict=True)] = 8192
+    schema_in_context: bool = True
+    embedding_batch_size: Annotated[int, Field(ge=1, le=16, strict=True)] = 16
+    embedding_query_prefix: Annotated[str, Field(max_length=1000)] = ""
 
 
 class ProviderConfig(FrozenModel):
@@ -56,6 +61,9 @@ def embedding_space_id(profile: ProviderProfile, connection: ProviderConnection)
         "model": profile.embedding_model,
         "dimensions": profile.embedding_dimensions,
         "weights_revision": profile.embedding_revision,
+        "input_window": profile.embedding_context_tokens,
+        "query_prefix": profile.embedding_query_prefix,
+        "window_pooling": "utf8-bound-weighted-mean-v1",
     }
     return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 

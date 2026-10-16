@@ -70,6 +70,7 @@ def preparation_steps(
     *,
     options: "ParseOptions | None" = None,
     chunk_config: "ChunkConfig | None" = None,
+    providers: "ProviderService | None" = None,
 ) -> tuple[PipelineStep, ...]:
     """Per-job source identity is fixed by the durable command and artifact ledger.
 
@@ -94,6 +95,32 @@ def preparation_steps(
         (parse_hash + VERSION + chunk_config.model_dump_json()).encode()
     ).hexdigest()
 
+    async def current_chunk_hash(job: LeasedJob) -> str:
+        if providers is None:
+            return chunk_hash
+        from uuid import UUID
+
+        from domain_kg.graph.schema import schema_for_kg
+        from domain_kg.models import Namespace
+
+        access = await queue.authorize(job)
+        selected = await providers.selected(access, job.kg_id)
+        profile, _ = providers.registry.resolve(
+            UUID(selected["profile_id"]),
+            Namespace(org_id=job.org_id, kg_id=job.kg_id),
+            restricted=False,
+        )
+        schema = await schema_for_kg(queue.policy, access, job.kg_id)
+        return hashlib.sha256(
+            (
+                chunk_hash
+                + "/model-window-v1/"
+                + profile.model_dump_json()
+                + schema.model_dump_json()
+                + str(selected["revision"])
+            ).encode()
+        ).hexdigest()
+
     async def validate(job: LeasedJob) -> Checkpoint:
         blob, blobs = await source.original(job)
         async for _ in blobs.open(blob):
@@ -112,6 +139,7 @@ def preparation_steps(
         return checkpoint
 
     async def chunk(job: LeasedJob) -> Checkpoint:
+        wanted_hash = await current_chunk_hash(job)
         parsed = await queue.load_checkpoint(job, "parsing", parse_hash)
         if parsed is None:
             raise DomainError(
@@ -119,11 +147,29 @@ def preparation_steps(
             )
         document = await source.read(job, parsed)
         chunks = chunk_document(document, chunk_config)
+        if providers is not None:
+            from uuid import UUID
+
+            from domain_kg.graph.schema import schema_for_kg
+            from domain_kg.models import Namespace
+            from domain_kg.providers.budget import fit_source_chunks
+
+            access = await queue.authorize(job)
+            selected = await providers.selected(access, job.kg_id)
+            profile, _ = providers.registry.resolve(
+                UUID(selected["profile_id"]),
+                Namespace(org_id=job.org_id, kg_id=job.kg_id),
+                restricted=False,
+            )
+            schema = await schema_for_kg(queue.policy, access, job.kg_id)
+            chunks = fit_source_chunks(chunks, schema, profile)
+            if await current_chunk_hash(job) != wanted_hash:
+                raise DomainError(ErrorCode.VERSION_CONFLICT, "Model window configuration changed.")
         document = ParsedDocument.model_validate(
             document.model_copy(update={"chunks": tuple(chunks)})
         )
         checkpoint = await queue.store_artifact(
-            job, "chunking", chunk_hash, document.model_dump_json().encode()
+            job, "chunking", wanted_hash, document.model_dump_json().encode()
         )
         await source.persist(job, document, checkpoint, chunked=True)
         return checkpoint
@@ -136,7 +182,12 @@ def preparation_steps(
             execute=parse,
             timeout_seconds=options.timeout_seconds,
         ),
-        PipelineStep(stage="chunking", input_hash=chunk_hash, execute=chunk),
+        PipelineStep(
+            stage="chunking",
+            input_hash=chunk_hash,
+            execute=chunk,
+            input_hash_for=current_chunk_hash,
+        ),
     )
 
 
@@ -422,7 +473,7 @@ def publication_steps(
 def configured_pipeline(queue: "JobQueue", providers: "ProviderService") -> Pipeline:
     from domain_kg.revisions.publication import ProjectionCoordinator
 
-    preparation = preparation_steps(queue)
+    preparation = preparation_steps(queue, providers=providers)
     extraction = extraction_steps(queue, providers, preparation[-1])
     publication = publication_steps(queue, ProjectionCoordinator(queue, providers), extraction[-1])
     repair = publication_steps(

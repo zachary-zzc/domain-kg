@@ -3,7 +3,7 @@
 from qdrant_client import models
 
 from domain_kg.engine.scope import ScopePredicates
-from domain_kg.errors import DomainError, ErrorCode
+from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.models import Namespace
 from domain_kg.providers.service import ProviderService
@@ -63,9 +63,7 @@ class VectorRetrievalBranch:
                 with_payload=True,
             )
         except Exception as error:
-            raise DomainError(
-                ErrorCode.BACKEND_UNAVAILABLE, "Vector recall is unavailable.", retryable=True
-            ) from error
+            raise BranchUnavailable("Vector recall is unavailable.") from error
         for point in response.points:
             if str(point.id) not in chunks or point.payload != expected[str(point.id)]:
                 raise inconsistent()

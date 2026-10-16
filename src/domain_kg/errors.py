@@ -39,6 +39,13 @@ class DomainError(Exception):
         self.request_id = request_id or uuid4()
 
 
+class BranchUnavailable(DomainError):
+    """Only a derived retrieval I/O boundary may permit partial branch coverage."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(ErrorCode.BACKEND_UNAVAILABLE, message, retryable=True)
+
+
 def inaccessible_reference() -> DomainError:
     return DomainError(
         ErrorCode.RESOURCE_NOT_ACCESSIBLE, "The referenced resource is not accessible."

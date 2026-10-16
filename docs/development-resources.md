@@ -82,6 +82,8 @@ Seaweed mini persists nondefault CLI settings in `mini.options`. Removing a flag
 from Compose can restore its saved value on restart; inspect only the relevant
 nonsecret keys when troubleshooting. Trial concurrency gates were removed from
 that saved configuration after preserving a backup. These configuration changes
-do not delete bucket data. Eight lazy volume slots allow tests to continue while
-older abandoned fixture buckets are preserved pending explicit cleanup approval.
+do not delete bucket data. Eight lazy volume slots allow bounded fixture reuse.
+The user later approved deletion of the three exact abandoned buckets previously
+listed for review; those three were deleted and absence verified. Other historical
+bucket data was not targeted.
 Additional slots do not reserve RAM or eagerly allocate eight full data files.

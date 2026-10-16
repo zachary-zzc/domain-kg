@@ -7,7 +7,7 @@ from uuid import UUID
 from neo4j.exceptions import DriverError, Neo4jError
 
 from domain_kg.engine.scope import EligibilityResolver, ScopePredicates
-from domain_kg.errors import DomainError, ErrorCode
+from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.graph.views import EdgeView, NodeView, SubgraphView
 from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.jobs.queue import JobQueue
@@ -132,11 +132,7 @@ class GraphRepository:
                 )
                 if isinstance(error, DomainError):
                     raise
-                raise DomainError(
-                    ErrorCode.BACKEND_UNAVAILABLE,
-                    "The graph backend is unavailable.",
-                    retryable=True,
-                ) from error
+                raise BranchUnavailable("The graph backend is unavailable.") from error
         await self.resolver.revalidate(scope)
         return GraphData(scope, tuple(rows))
 
@@ -215,9 +211,7 @@ class GraphRepository:
                 limit=limit,
             )
         except (DriverError, Neo4jError) as error:
-            raise DomainError(
-                ErrorCode.BACKEND_UNAVAILABLE, "The graph backend is unavailable.", retryable=True
-            ) from error
+            raise BranchUnavailable("The graph backend is unavailable.") from error
         result = tuple(by_id[item["id"]] for item in records)
         if any(
             not row.assertion
