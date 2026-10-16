@@ -84,3 +84,18 @@ The five-case curation/scope/read-fence/competing-publication gate passed in
 221.99 seconds. The unit/protocol suite passed 174 cases in 6.54 seconds, and
 Ruff/strict mypy passed. Docker hard limits remained 1.476 GB with swap disabled.
 Identity/visibility previews and the operator console are still being added.
+
+Identity and visibility forms now preview the actual typed merge/split/suppression
+impact before submission. Merge/split retains explicit original IDs, disjoint
+partitions and each original's revision guard. Visibility restoration is available
+from authorized suppressed history; public changes require an owner. These
+metadata/visibility operations and relationship tags require no model calls.
+History's explicit `include_unverified` opt-in is shared by HTTP and MCP and bound
+to its cursor, while default imported facts remain excluded.
+
+Owner operations measure graph/vector readiness against accepted receipts and
+queue real source repair jobs. The separate operator view lists registered backend
+IDs and performs selected capability checks with current CSRF and operator access;
+it displays no connection strings, credentials or KG evidence. The four-case
+import/identity/visibility/operator/history regression passed in 220.59 seconds.
+The unit/protocol suite passed 181 cases in 5.49 seconds; Ruff and strict mypy passed.

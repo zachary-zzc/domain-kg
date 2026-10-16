@@ -16,7 +16,7 @@ from domain_kg.graph.visibility_history import authorize_visibility_record
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.models import Namespace, ScopedRef
-from domain_kg.retrieval.models import SearchRequest
+from domain_kg.retrieval.models import SearchFilters, SearchRequest
 from domain_kg.revisions.history_models import HistoryPage, HistoryRequest
 
 
@@ -38,6 +38,9 @@ class RevisionHistory:
                 kg_ids=(request.kg_id,),
                 query=str(request.target_id),
                 mode="graph",
+                filters=SearchFilters.for_curation()
+                if request.include_unverified
+                else SearchFilters(),
             ),
             request.kg_id,
         )
@@ -54,6 +57,7 @@ class RevisionHistory:
             "kind": request.kind,
             "limit": request.limit,
             "include_suppressed": request.include_suppressed,
+            "include_unverified": request.include_unverified,
         }
         cursor = None
         if request.cursor:

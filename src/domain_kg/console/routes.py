@@ -11,6 +11,8 @@ from domain_kg.console.grants import grant_router
 from domain_kg.console.jobs import job_router
 from domain_kg.console.material_commands import material_command_router
 from domain_kg.console.material_management import management_router
+from domain_kg.console.node_actions import node_action_router
+from domain_kg.console.operations import operations_router
 from domain_kg.console.rendering import browser_session, html, page
 from domain_kg.console.team import team_router
 from domain_kg.console.workspace import workspace_router
@@ -23,6 +25,8 @@ from domain_kg.transport.runtime import ServiceRuntime
 def console_router(runtime: ServiceRuntime) -> APIRouter:
     router = APIRouter(prefix="/admin")
     router.include_router(curation_router(runtime))
+    router.include_router(node_action_router(runtime))
+    router.include_router(operations_router(runtime))
     router.include_router(team_router(runtime))
     router.include_router(grant_router(runtime))
     router.include_router(job_router(runtime))

@@ -170,6 +170,7 @@ def curation_router(runtime: ServiceRuntime) -> APIRouter:
         kind: Literal["node", "relation"],
         cursor: str | None,
         include_suppressed: bool,
+        include_unverified: bool,
     ) -> HTMLResponse:
         session, access, scope = await read_context(runtime, request, kg, filters_for(True))
         result = await runtime.revisions.get_revisions(
@@ -180,6 +181,7 @@ def curation_router(runtime: ServiceRuntime) -> APIRouter:
                 kind=kind,
                 cursor=cursor,
                 include_suppressed=include_suppressed,
+                include_unverified=include_unverified,
             ),
         )
         return await page(
@@ -194,6 +196,7 @@ def curation_router(runtime: ServiceRuntime) -> APIRouter:
                 "kind": kind,
                 "target_id": target,
                 "include_suppressed": include_suppressed,
+                "include_unverified": include_unverified,
                 "command_key": str(uuid4()),
             },
             scope=scope,
@@ -206,8 +209,11 @@ def curation_router(runtime: ServiceRuntime) -> APIRouter:
         target_id: UUID,
         cursor: str | None = None,
         include_suppressed: bool = False,
+        include_unverified: bool = False,
     ) -> HTMLResponse:
-        return await history_page(request, kg_id, target_id, "node", cursor, include_suppressed)
+        return await history_page(
+            request, kg_id, target_id, "node", cursor, include_suppressed, include_unverified
+        )
 
     @router.get("/kgs/{kg_id}/relations/{target_id}/history")
     async def relation_history(
@@ -216,8 +222,11 @@ def curation_router(runtime: ServiceRuntime) -> APIRouter:
         target_id: UUID,
         cursor: str | None = None,
         include_suppressed: bool = False,
+        include_unverified: bool = False,
     ) -> HTMLResponse:
-        return await history_page(request, kg_id, target_id, "relation", cursor, include_suppressed)
+        return await history_page(
+            request, kg_id, target_id, "relation", cursor, include_suppressed, include_unverified
+        )
 
     @router.post("/kgs/{kg_id}/revisions/{revision_id}/rollback")
     async def rollback(request: Request, kg_id: UUID, revision_id: UUID) -> RedirectResponse:

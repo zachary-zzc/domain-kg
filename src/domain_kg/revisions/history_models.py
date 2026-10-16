@@ -16,6 +16,7 @@ class HistoryRequest(FrozenModel):
     target_id: UUID
     kind: Literal["node", "relation"] = "node"
     include_suppressed: bool = False
+    include_unverified: bool = False
     limit: Annotated[int, Field(ge=1, le=100, strict=True)] = 25
     cursor: Annotated[str, Field(min_length=1, max_length=256)] | None = None
 

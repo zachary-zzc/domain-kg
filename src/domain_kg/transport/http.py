@@ -56,6 +56,7 @@ class HistoryQuery(HTTPPageRequest):
     target_id: UUID
     kind: Literal["node", "relation"] = "node"
     include_suppressed: bool = False
+    include_unverified: bool = False
 
 
 class JobControl(FrozenModel):
