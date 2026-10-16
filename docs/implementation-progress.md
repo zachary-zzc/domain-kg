@@ -115,3 +115,25 @@ files. Parsed/chunk snapshots have scoped Mongo/S3 ownership and checksums, and
 resume without duplicate ledger records. Three preparation stages remain
 explicitly pending graph publication. [Parser profile and verification](parsing.md)
 describe limits, source locations, public fixtures, and the OCR boundary.
+
+## Extraction and publication
+
+Task 9's local extraction boundary passed 20 smoke checks and the regular suite
+passed 142 tests at that step. Approved structured-provider configuration,
+source/schema validation and real LightRAG 1.5.7 mapping preserve per-source
+observations and independent supports. Actual approved-provider quality smoke
+remains pending; no model is selected or paid request made by default.
+
+Task 10 passed 33 local smoke checks and the regular suite passed 170 tests, with
+one separately invoked physical drill skipped. It adds immutable graph/vector
+attempts, read-back receipts, atomic Mongo acceptance and job completion,
+concurrent replacement fences, idempotent acknowledgement recovery, retained
+originals and provider-free repair. Accepted queries bind exact attempts rather
+than source versions alone. The native nine-stage worker and repair-only worker
+are verified. Manual curation production/read integration follows in Task 14.
+
+The current resource allocation is Mongo512/Neo512/Qdrant192/S3192 MiB, totaling
+1,408 MiB (1.476 GB), with swap disabled. Bounded S3 reader buffers, small filer
+chunks and a shared writer budget passed the 50 MiB streaming boundary and warm
+regression. Older abandoned fixture buckets remain preserved while explicit
+cleanup approval is pending; this does not block implementation.
