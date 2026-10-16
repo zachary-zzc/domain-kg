@@ -10,7 +10,7 @@ from domain_kg.jobs.models import JobReceipt
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.models import FrozenModel, IdempotencyKey, NonNegative
 from domain_kg.retrieval.evidence import SealedEvidence
-from domain_kg.retrieval.models import SearchRequest
+from domain_kg.retrieval.models import SearchFilters, SearchRequest
 from domain_kg.revisions.repair import RepairService
 
 
@@ -38,7 +38,11 @@ class ProjectionManagement:
     async def status(self, access: AccessContext, kg: UUID) -> ProjectionStatus:
         current = await self.queue.policy.revalidate(access, action=Action.CONFIGURE)
         scope = await self.graph.resolver.resolve(
-            current, SearchRequest(kg_ids=(kg,), query="projection readiness"), kg
+            current,
+            SearchRequest(
+                kg_ids=(kg,), query="projection readiness", filters=SearchFilters.for_curation()
+            ),
+            kg,
         )
         warnings = []
         graph_ready = vector_ready = True
