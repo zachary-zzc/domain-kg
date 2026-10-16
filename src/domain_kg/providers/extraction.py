@@ -24,23 +24,26 @@ class Usage(FrozenModel):
     output_tokens: int
 
 
-def strict_schema(value: dict[str, Any]) -> dict[str, Any]:
+def strict_schema(value: dict[str, Any], string_limit: int | None = None) -> dict[str, Any]:
     """Normalize optional Pydantic properties to required nullable strict-schema fields."""
     result: dict[str, Any] = {}
     for key, item in value.items():
         if key == "default":
             continue
         if isinstance(item, dict):
-            result[key] = strict_schema(item)
+            result[key] = strict_schema(item, string_limit)
         elif isinstance(item, list):
             result[key] = [
-                strict_schema(child) if isinstance(child, dict) else child for child in item
+                strict_schema(child, string_limit) if isinstance(child, dict) else child
+                for child in item
             ]
         else:
             result[key] = item
     if result.get("type") == "object":
         result["additionalProperties"] = False
         result["required"] = list(result.get("properties", {}))
+    if string_limit is not None and "maxLength" in result:
+        result["maxLength"] = min(result["maxLength"], string_limit)
     return result
 
 
@@ -120,7 +123,9 @@ class ExtractionClient:
                 "json_schema": {
                     "name": "source_extraction",
                     "strict": True,
-                    "schema": strict_schema(ExtractionContent.model_json_schema()),
+                    "schema": strict_schema(
+                        ExtractionContent.model_json_schema(), self.profile.schema_string_limit
+                    ),
                 },
             },
         }

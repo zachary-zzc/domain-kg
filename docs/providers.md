@@ -14,6 +14,29 @@ default. A KG owner selects an approved profile through the shared configuration
 service. Embedding dimensions must match its provisioned generation; changing an
 accepted embedding model requires a new generation.
 
+`embedding_connection_ref` optionally selects a separate approved connection;
+otherwise embeddings use `connection_ref`. This lets the small local chat model
+and an embedding API use different endpoints and credentials. `embedding_revision`
+(default `"1"`) identifies an operator-pinned weight revision. A vector-space
+fingerprint covers the embedding endpoint, model, dimensions and weight revision.
+Credential rotation and chat-only profile changes preserve it; a changed space
+requires a new generation once evidence is published. Both publication and query
+embeddings verify the selected fingerprint. Legacy artifacts without one remain
+readable for graph inspection and require migration before vector retrieval.
+
+For a constrained grammar server, `schema_string_limit` may tighten existing
+transport string maxima to 64–1,000 characters. The approved local profile uses
+512 because its grammar compiler rejects an 8,000-repeat description rule.
+This changes only the request's generation schema; canonical evidence/storage
+limits and source-grounding validation remain intact. Provider/validation errors
+are handled before entering LightRAG's callback so upstream exception-prefixing
+cannot erase the service's safe domain error code.
+
+The approved small-model settings and measured smoke are documented in
+[the model setup](model-proposal.md). The tracked
+[webserver example](../config/providers.webserver.example.json) is deliberately
+disabled until its private copy has approved namespaces and real model settings.
+
 Extraction uses strict structured Chat Completions output with `store:false`, no
 tools, bounded completion tokens, a wall-clock deadline, a 2 MiB response limit,
 and current access checks before transmission and after completion. Source text

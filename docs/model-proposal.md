@@ -17,6 +17,16 @@ and Chinese (1.063 seconds), each using 41 prompt and 19 completion tokens.
 These measurements describe those smoke cases, not corpus performance or KG
 extraction quality. The full evidence-grounded provider gate remains open.
 
+The subsequent full source-span contract smoke rejected both English and Chinese
+outputs with `EVIDENCE_VALIDATION_FAILED` (24.381 and 20.349 seconds; 934/940 input
+tokens and 258/263 output tokens). No graph was published. The server's initial
+large-string grammar incompatibility was resolved with a 512-character transport
+schema cap; the outputs still did not meet grounding/reference validation.
+The model is usable for lightweight background prototyping, but has **not**
+passed the KG extraction quality gate. Use a suitable approved provider before
+relying on automatic ingestion. The local profile remains disabled for corpus
+access until its namespace/data-policy settings are explicitly configured.
+
 The four database services already reserve hard limits totaling 1.476 GB.
 The user explicitly confirmed that the 1.5 GB ceiling applies to the Docker
 databases and approved a separately measured native LLM. The model is running

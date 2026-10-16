@@ -138,33 +138,34 @@ class Extractor:
                 ErrorCode.PROVIDER_UNAVAILABLE,
                 "The configured extraction engine version is unsupported.",
             )
-        validated: ExtractionBatch | None = None
+        # Validate outside the upstream callback: LightRAG prefixes exceptions
+        # by reconstructing their type with one argument, which cannot preserve
+        # a DomainError(code, message) or its safe classification.
+        try:
+            content = ExtractionContent.model_validate(await self.provider.complete(chunk, schema))
+            validated = validate_extraction(
+                chunk,
+                schema,
+                ExtractionBatch(
+                    org_id=chunk.org_id,
+                    kg_id=chunk.kg_id,
+                    material_id=chunk.material_id,
+                    version_id=chunk.version_id,
+                    chunk_id=chunk.id,
+                    schema_id=schema.id,
+                    schema_revision=schema.revision,
+                    provider_profile_id=self.provider.id,
+                    **content.model_dump(),
+                ),
+            )
+        except ValidationError as exc:
+            raise invalid() from exc
+        called = False
         native_names: dict[str, str] = {}
 
         async def completion(_prompt: str, **_kwargs: Any) -> str:
-            nonlocal validated
-            if validated is None:
-                try:
-                    content = ExtractionContent.model_validate(
-                        await self.provider.complete(chunk, schema)
-                    )
-                except ValidationError as exc:
-                    raise invalid() from exc
-                validated = validate_extraction(
-                    chunk,
-                    schema,
-                    ExtractionBatch(
-                        org_id=chunk.org_id,
-                        kg_id=chunk.kg_id,
-                        material_id=chunk.material_id,
-                        version_id=chunk.version_id,
-                        chunk_id=chunk.id,
-                        schema_id=schema.id,
-                        schema_revision=schema.revision,
-                        provider_profile_id=self.provider.id,
-                        **content.model_dump(),
-                    ),
-                )
+            nonlocal called
+            called = True
             native_names.update(
                 {
                     entity.local_id: engine_name(chunk, entity.local_id)
@@ -214,7 +215,7 @@ class Extractor:
                 "addon_params": {"language": "English"},
             },
         )
-        if validated is None:
+        if not called:
             raise invalid()
         observed: set[str] = set()
         relationships: set[tuple[str, str]] = set()

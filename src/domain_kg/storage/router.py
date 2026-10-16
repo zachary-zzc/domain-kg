@@ -348,6 +348,7 @@ class KGStoreRouter:
                 "material_id",
                 "source_version_id",
                 "curation_revision_id",
+                "embedding_space_id",
                 "generation",
                 "attempt_id",
                 "manifest_id",

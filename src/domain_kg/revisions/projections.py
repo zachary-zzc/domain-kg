@@ -163,6 +163,8 @@ class ProjectionRow(ProjectionBody):
             "embedding_profile_revision": profile.revision,
             "lexical_key": self.projection_id(attempt, manifest).hex,
         }
+        if profile.space_id is not None:
+            payload["embedding_space_id"] = profile.space_id
         if self.source:
             payload.update(
                 material_id=str(self.source.material_id),

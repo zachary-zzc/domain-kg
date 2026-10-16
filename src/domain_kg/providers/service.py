@@ -15,7 +15,7 @@ from domain_kg.ingestion.models import ExtractionBatch, ParsedChunk
 from domain_kg.materials.repository import MaterialRepository
 from domain_kg.models import IdempotencyKey, Namespace, NonNegative, SourceVersion
 from domain_kg.providers.extraction import ExtractionClient, Usage
-from domain_kg.providers.profiles import ProviderRegistry
+from domain_kg.providers.profiles import ProviderRegistry, embedding_space_id
 from domain_kg.storage.router import KGStoreRouter
 
 if TYPE_CHECKING:
@@ -52,7 +52,10 @@ class ProviderService:
         if kg not in current.kg_ids:
             raise inaccessible_reference()
         namespace = Namespace(org_id=current.org_id, kg_id=kg)
-        profile, _ = self.registry.resolve(profile_id, namespace, restricted=False)
+        profile, embedding_connection = self.registry.resolve_embedding(
+            profile_id, namespace, restricted=False
+        )
+        space_id = embedding_space_id(profile, embedding_connection)
         if profile.embedding_dimensions != self.router.dimensions:
             raise DomainError(
                 ErrorCode.VERSION_CONFLICT, "Embedding dimensions require a new generation."
@@ -70,6 +73,7 @@ class ProviderService:
             "profile_id": str(profile.id),
             "profile_revision": profile.revision,
             "expected_revision": expected_revision,
+            "embedding_space_id": space_id,
         }
 
         async def commit(session: AsyncClientSession) -> int:
@@ -90,14 +94,7 @@ class ProviderService:
             )
             if kg_row is None:
                 raise inaccessible_reference()
-            if (
-                old
-                and kg_row["published_revision"]
-                and (
-                    old["embedding_model"] != profile.embedding_model
-                    or old["embedding_dimensions"] != profile.embedding_dimensions
-                )
-            ):
+            if old and kg_row["published_revision"] and old.get("embedding_space_id") != space_id:
                 raise DomainError(
                     ErrorCode.VERSION_CONFLICT, "Embedding changes require a new generation."
                 )
@@ -109,6 +106,7 @@ class ProviderService:
                         "profile_revision": profile.revision,
                         "embedding_model": profile.embedding_model,
                         "embedding_dimensions": profile.embedding_dimensions,
+                        "embedding_space_id": space_id,
                         "revision": revision + 1,
                     }
                 },
@@ -187,10 +185,12 @@ class ProviderService:
                 restricted = material["acl_mode"] == "restricted"
             elif current.action not in (Action.READ, Action.SEARCH):
                 raise inaccessible_reference()
-            configured, _ = self.registry.resolve(
+            configured, embedding_connection = self.registry.resolve_embedding(
                 UUID(selected["profile_id"]), namespace, restricted=restricted
             )
-            if configured.revision != selected["profile_revision"]:
+            if configured.revision != selected["profile_revision"] or embedding_space_id(
+                configured, embedding_connection
+            ) != selected.get("embedding_space_id"):
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider configuration changed.")
 
         async def usage(value: Usage) -> None:
@@ -213,7 +213,7 @@ class ProviderService:
             )
 
         await authorize()
-        configured, connection = self.registry.resolve(
+        configured, connection = self.registry.resolve_embedding(
             UUID(selected["profile_id"]), namespace, restricted=False
         )
         profile = EmbeddingProfile(
@@ -222,6 +222,7 @@ class ProviderService:
             revision=configured.revision,
             model=configured.embedding_model,
             dimensions=configured.embedding_dimensions,
+            space_id=selected["embedding_space_id"],
         )
         client = EmbeddingClient(
             configured,

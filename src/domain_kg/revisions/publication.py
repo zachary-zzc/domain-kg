@@ -18,6 +18,7 @@ from domain_kg.jobs.queue import JobQueue, now
 from domain_kg.materials.models import BlobRef, MaterialMetadata
 from domain_kg.models import Namespace, ScopedRef, SourceVersion
 from domain_kg.providers.embeddings import EmbeddingProfile
+from domain_kg.providers.profiles import embedding_space_id
 from domain_kg.providers.service import ProviderService
 from domain_kg.revisions.journal import PublicationJournal, read_artifact
 from domain_kg.revisions.models import (
@@ -269,15 +270,19 @@ class ProjectionCoordinator:
             extraction.domain_schema,
         ):
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Extraction configuration changed.")
-        configured, _ = self.providers.registry.resolve(
+        configured, embedding_connection = self.providers.registry.resolve_embedding(
             UUID(selected["profile_id"]), Namespace(**namespace), restricted=False
         )
+        space_id = embedding_space_id(configured, embedding_connection)
+        if space_id != selected.get("embedding_space_id"):
+            raise DomainError(ErrorCode.VERSION_CONFLICT, "Embedding configuration changed.")
         expected_profile = EmbeddingProfile(
             **namespace,
             id=configured.id,
             revision=configured.revision,
             model=configured.embedding_model,
             dimensions=configured.embedding_dimensions,
+            space_id=space_id,
         )
         input_hash = (
             input_hash
@@ -306,7 +311,7 @@ class ProjectionCoordinator:
         profile, vectors = await self.providers.embeddings(
             access, Namespace(**namespace), [body.text for body in bodies], source=source
         )
-        if profile.dimensions != self.queue.router.dimensions:
+        if profile != expected_profile or profile.dimensions != self.queue.router.dimensions:
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Embedding generation dimensions differ.")
         document = EmbeddedDocument(
             **source.model_dump(),
@@ -641,12 +646,14 @@ class ProjectionCoordinator:
                     selected["profile_id"],
                     selected["profile_revision"],
                     selected["revision"],
+                    selected.get("embedding_space_id"),
                     schema.id,
                     schema.revision,
                 ) != (
                     str(document.profile.id),
                     document.profile.revision,
                     document.profile_selection_revision,
+                    document.profile.space_id,
                     document.schema_id,
                     document.schema_revision,
                 ):

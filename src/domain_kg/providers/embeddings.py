@@ -10,9 +10,9 @@ from uuid import UUID
 import httpx
 from pydantic import Field
 
-from domain_kg.models import Namespace, NonNegative
+from domain_kg.models import SHA256, Namespace, NonNegative
 from domain_kg.providers.extraction import Usage, unavailable
-from domain_kg.providers.profiles import ProviderConnection, ProviderProfile
+from domain_kg.providers.profiles import ProviderConnection, ProviderProfile, embedding_space_id
 
 
 class EmbeddingProfile(Namespace):
@@ -20,6 +20,9 @@ class EmbeddingProfile(Namespace):
     revision: NonNegative
     model: str
     dimensions: Annotated[int, Field(ge=1, le=4096, strict=True)]
+    space_id: SHA256 | None = (
+        None  # Legacy artifacts remain readable, but cannot serve vector queries.
+    )
 
 
 def normalized_vector(values: list[float], dimensions: int) -> tuple[float, ...]:
@@ -70,6 +73,10 @@ class EmbeddingClient:
             or Namespace(org_id=profile.org_id, kg_id=profile.kg_id)
             not in self.approved.allowed_namespaces
             or not self.approved.data_policy_approved
+            or (
+                profile.space_id is not None
+                and profile.space_id != embedding_space_id(self.approved, self.connection)
+            )
             or any(not text or len(text) > 32000 for text in texts)
         ):
             raise unavailable()

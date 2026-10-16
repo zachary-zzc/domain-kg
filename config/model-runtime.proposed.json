@@ -20,6 +20,7 @@
     "installed_runtime_version": "10050 (b15ca938a)",
     "context_tokens": 4096,
     "max_output_tokens": 1024,
+    "schema_string_limit": 512,
     "threads": 2,
     "batch_tokens": 128,
     "microbatch_tokens": 32,
@@ -34,6 +35,12 @@
     "multimodal_projector": false,
     "thinking": false,
     "ram_measurement": "two_tiny_structured_output_cases_passed_english_and_chinese"
+  },
+  "source_grounded_extraction_smoke": {
+    "status": "rejected",
+    "cases": 2,
+    "code": "EVIDENCE_VALIDATION_FAILED",
+    "graph_publications": 0
   },
   "embeddings": {
     "status": "requires_separately_selected_embedding_model_or_webserver_api",

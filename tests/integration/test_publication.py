@@ -28,7 +28,12 @@ pytestmark = pytest.mark.storage
 
 
 async def make_publishing(
-    material_service, team, *, extraction_factory=batch_for, restricted=False
+    material_service,
+    team,
+    *,
+    extraction_factory=batch_for,
+    embedding_factory=None,
+    restricted=False,
 ):
     from domain_kg.revisions.publication import ProjectionCoordinator
 
@@ -50,10 +55,16 @@ async def make_publishing(
     def response(request):
         body = json.loads(request.content)
         if request.url.path.endswith("/embeddings"):
+            faults.setdefault("embedding_inputs", []).extend(body["input"])
             vectors = [
                 {"index": index, "embedding": [1.0, 0.1 * (index + 1), 0.2]}
                 for index, _ in enumerate(body["input"])
             ]
+            if embedding_factory is not None:
+                vectors = [
+                    {"index": index, "embedding": embedding_factory(text)}
+                    for index, text in enumerate(body["input"])
+                ]
             if faults.get("dimensions"):
                 vectors[0]["embedding"] = [1.0]
             return httpx.Response(

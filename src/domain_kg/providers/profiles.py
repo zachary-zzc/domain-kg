@@ -1,5 +1,6 @@
 """Approved server configuration. Requests can select IDs, never endpoints or secrets."""
 
+import hashlib
 import json
 import stat
 from pathlib import Path
@@ -30,19 +31,33 @@ class ProviderProfile(FrozenModel):
     id: UUID
     revision: Annotated[int, Field(ge=1, strict=True)] = 1
     connection_ref: str
+    embedding_connection_ref: str | None = None
     extraction_model: Annotated[str, Field(min_length=1, max_length=200)]
     embedding_model: Annotated[str, Field(min_length=1, max_length=200)]
     embedding_dimensions: Annotated[int, Field(ge=1, le=4096, strict=True)]
+    embedding_revision: Annotated[str, Field(min_length=1, max_length=200)] = "1"
     allowed_namespaces: tuple[Namespace, ...]
     data_policy_approved: bool
     allow_restricted: bool = False
     max_completion_tokens: Annotated[int, Field(ge=128, le=16384, strict=True)] = 4096
+    schema_string_limit: Annotated[int, Field(ge=64, le=1000, strict=True)] | None = None
     timeout_seconds: Annotated[int, Field(ge=1, le=120, strict=True)] = 60
 
 
 class ProviderConfig(FrozenModel):
     connections: tuple[ProviderConnection, ...] = ()
     profiles: tuple[ProviderProfile, ...] = ()
+
+
+def embedding_space_id(profile: ProviderProfile, connection: ProviderConnection) -> str:
+    """Stable compatibility identity; credential and extraction changes do not rotate it."""
+    identity = {
+        "endpoint": connection.endpoint,
+        "model": profile.embedding_model,
+        "dimensions": profile.embedding_dimensions,
+        "weights_revision": profile.embedding_revision,
+    }
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 
 
 class ProviderRegistry:
@@ -56,6 +71,12 @@ class ProviderRegistry:
             raise ValueError("duplicate approved provider configuration")
         if any(profile.connection_ref not in self.connections for profile in config.profiles):
             raise ValueError("provider connection reference is not approved")
+        if any(
+            profile.embedding_connection_ref is not None
+            and profile.embedding_connection_ref not in self.connections
+            for profile in config.profiles
+        ):
+            raise ValueError("embedding connection reference is not approved")
 
     @classmethod
     def from_file(cls, path: Path | None) -> "ProviderRegistry":
@@ -83,3 +104,9 @@ class ProviderRegistry:
         ):
             raise inaccessible_reference()
         return profile, self.connections[profile.connection_ref]
+
+    def resolve_embedding(
+        self, profile_id: UUID, namespace: Namespace, *, restricted: bool
+    ) -> tuple[ProviderProfile, ProviderConnection]:
+        profile, _ = self.resolve(profile_id, namespace, restricted=restricted)
+        return profile, self.connections[profile.embedding_connection_ref or profile.connection_ref]
