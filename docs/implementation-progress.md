@@ -11,7 +11,8 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | 5: Catalog and registered storage profiles | Complete locally | 14 smoke tests pass, including three KGs across independent physical graph/vector deployments run serially. |
 | 6: Original files and material submission | Complete locally | 15 smoke tests pass; full regular suite 100 passed, one physical drill skipped; lint/mypy pass. |
 | 7: Durable MongoDB jobs and recovery | Complete locally | 18 smoke checks pass; full suite 112 passed, one physical skip; lint/mypy pass. |
-| 8–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
+| 8: Structured parsing and chunking | Complete for laptop profile | 20 smoke checks pass; full suite 127 passed, one physical skip; native Docling PDF and bounded text/XML decoders. OCR quality remains outside this run. |
+| 9–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
@@ -98,3 +99,19 @@ unused Mongo heap sooner. Qdrant compatibility and data requests now share the
 same direct approved transport, including explicit rejection of incompatible
 versions. [Resource notes](development-resources.md) record earlier warm-service
 failures and the limits of these local correctness checks.
+
+Task 8 preserves immutable decoded blocks and exact span offsets, physical PDF
+pages, DOCX paragraphs/table rows, CSV records and JSON pointers. The local
+profile uses model-free Docling native PDF parsing and deterministic decoders,
+with 700-token/100-token-overlap limits and stable chunk IDs. Scans emit explicit
+OCR warnings; model-based OCR/layout quality was not exercised under the user's
+resource constraint. The parser runs offline in a bounded subprocess; the Mac
+kernel sandbox's network denial, runtime and memory enforcement were verified
+using tiny inputs. No Torch/OCR models were installed or downloaded.
+
+The final regular suite passed 127 tests in 84.75 seconds with one physical skip.
+Task 8 smoke passed 20 checks in 28.69 seconds; Ruff and strict mypy pass 48 source
+files. Parsed/chunk snapshots have scoped Mongo/S3 ownership and checksums, and
+resume without duplicate ledger records. Three preparation stages remain
+explicitly pending graph publication. [Parser profile and verification](parsing.md)
+describe limits, source locations, public fixtures, and the OCR boundary.
