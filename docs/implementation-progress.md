@@ -10,7 +10,8 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | 4: Shared policy and scoped repositories | Complete locally | 18 smoke tests pass; full suite 81 tests; real MongoDB, Neo4j and Qdrant scope checks. |
 | 5: Catalog and registered storage profiles | Complete locally | 14 smoke tests pass, including three KGs across independent physical graph/vector deployments run serially. |
 | 6: Original files and material submission | Complete locally | 15 smoke tests pass; full regular suite 100 passed, one physical drill skipped; lint/mypy pass. |
-| 7–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
+| 7: Durable MongoDB jobs and recovery | Complete locally | 18 smoke checks pass; full suite 112 passed, one physical skip; lint/mypy pass. |
+| 8–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
@@ -73,3 +74,27 @@ Qdrant192 and S3128. Mongo primary readiness is checked from host Python; its
 periodic Node shell health process was removed. Earlier OOM failures and limits
 are recorded in [resource notes](development-resources.md); the final smoke and
 regular suite pass with the corrected configuration.
+
+Task 7 implements durable atomic claims, expiring leases, fresh attempt IDs,
+immutable checksum-backed S3 checkpoints, bounded retries, explicit cancellation,
+current actor/source checks, and a separate per-KG publication fence. Preparation
+can run concurrently; stale workers cannot update checkpoints or retain a
+publication slot. A native single-job runner heartbeats and resumes compatible
+preparation artifacts. An unconfigured/partial pipeline never claims graph
+readiness; parsing/extraction/publication factories follow in Tasks 8–10.
+
+The final regular suite passed 112 tests in 55.03 seconds with one physical skip;
+the recorded Task 7 smoke passed 18 tests in 19.18 seconds. Ruff and strict mypy
+pass 43 source files. Real byte corruption, missing artifact references, actor
+revocation, source tombstones, competing publishers and interrupted requests are
+covered. The native worker entry point refuses an incomplete pipeline before
+claiming work. See [job recovery details](jobs.md).
+
+For the fixed 1.476 GB service budget, fixtures now reuse schema/index definitions
+while clearing every synthetic document between cases. This avoids repeated
+indexed-database churn; real Mongo, graph/vector deployments, transactions and
+namespace checks are retained. A documented allocator release rate returns
+unused Mongo heap sooner. Qdrant compatibility and data requests now share the
+same direct approved transport, including explicit rejection of incompatible
+versions. [Resource notes](development-resources.md) record earlier warm-service
+failures and the limits of these local correctness checks.
