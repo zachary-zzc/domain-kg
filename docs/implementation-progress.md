@@ -4,8 +4,9 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 
 | Task | Status | Verification |
 | --- | --- | --- |
-| 1: LightRAG and NoSQL compatibility spike | In progress; retrying real stores after Docker cleanup | Eleven lightweight tests, lint, and mypy pass. Six real-store tests await services. |
-| 2–19 | Pending | Depend on the Task 1 real-store gate. |
+| 1: LightRAG and NoSQL compatibility spike | Complete | 17 tests pass against the real local stores; lint and mypy pass. Kernel RAM/swap limits verified. |
+| 2: Domain contracts and namespace integrity | Next | Contract and real-store namespace checks must pass before identity work. |
+| 3–19 | Pending | Follow the plan's dependency order. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
@@ -28,4 +29,6 @@ The four services have hard limits of MongoDB 448 MiB, Neo4j 640 MiB, Qdrant 192
 
 The runner stops services it started after the test; `--keep-services` keeps them running for inspection. It retains volumes and never prunes images during ordinary smoke runs. Existing running services are left running. Credentials live in ignored `.env`, generated with restrictive file permissions.
 
-The initial full-suite attempt failed on a Neo4j connection while Docker was full; its retry awaits the real stores. Task 1 is not complete; its plan checkboxes remain unchecked. Source decisions, exact versions, verification limits, and the resumption gate are in [decision 0001](decisions/0001-runtime-and-lightrag.md).
+Task 1's final real-store smoke passed all 17 tests in 7.86 seconds. Three Qdrant SDK warnings identify intentional HTTP use on loopback; shared deployment TLS remains a later release requirement. The kernel reported the exact configured limits, zero swap allowance, no OOM kills, and no container restarts.
+
+The retry fixed an unsupported Neo4j Community metrics setting, macOS system-proxy routing of local S3 traffic, and a SeaweedFS disk-volume-slot limit. The S3 probe bypasses system proxies for loopback while retaining the SDK's default checksum validation. Four bounded 64 MiB volume slots permit the internal volume and bucket collections without increasing RAM. Source decisions and verification limits are in [decision 0001](decisions/0001-runtime-and-lightrag.md).

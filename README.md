@@ -2,7 +2,7 @@
 
 Domain KG is a proposed shared web service for preserving work materials, constructing traceable knowledge graphs, and retrieving evidence through MCP and HTTP. Users manage multiple KGs, control access, add or replace materials, and remove a material without removing evidence supplied by other materials.
 
-**Status:** Task 1 compatibility implementation is in progress. Eleven lightweight checks pass; the real-store smoke is being retried after the requested Docker cleanup. Team accounts, domain services, and later plan tasks remain pending. See [implementation progress](docs/implementation-progress.md).
+**Status:** Task 1 compatibility spike is verified: 17 smoke tests pass against real MongoDB, Neo4j, Qdrant, and S3 within the 1.5 GB RAM cap. Team accounts, domain services, and later plan tasks remain pending. See [implementation progress](docs/implementation-progress.md).
 
 ## Laptop smoke checks
 
