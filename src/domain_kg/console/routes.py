@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from domain_kg.console.curation import curation_router
-from domain_kg.console.forms import decode_form
+from domain_kg.console.forms import read_form
 from domain_kg.console.grants import grant_router
 from domain_kg.console.jobs import job_router
 from domain_kg.console.material_commands import material_command_router
@@ -62,7 +62,7 @@ def console_router(runtime: ServiceRuntime) -> APIRouter:
 
     @router.post("/logout")
     async def logout(request: Request) -> RedirectResponse:
-        fields = decode_form(await request.body(), request.headers.get("content-type", ""))
+        fields = await read_form(request)
         csrf = fields.pop("csrf_token", "")
         if fields:
             raise DomainError(ErrorCode.VALIDATION_ERROR, "The form fields are invalid.")

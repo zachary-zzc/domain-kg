@@ -3,6 +3,8 @@
 import re
 from urllib.parse import parse_qsl
 
+from starlette.requests import Request
+
 from domain_kg.errors import DomainError, ErrorCode
 
 FORM_LIMIT = 64 * 1024
@@ -33,3 +35,15 @@ def decode_form(body: bytes, content_type: str) -> dict[str, str]:
         return fields
     except (UnicodeError, ValueError):
         raise DomainError(ErrorCode.VALIDATION_ERROR, "The form fields are invalid.") from None
+
+
+async def read_form(request: "Request") -> dict[str, str]:
+    """Stop at the form byte ceiling instead of buffering an unbounded request."""
+    content_type = request.headers.get("content-type", "")
+    decode_form(b"", content_type)
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > FORM_LIMIT:
+            raise DomainError(ErrorCode.QUOTA_EXCEEDED, "The form exceeds its byte budget.")
+        body.extend(chunk)
+    return decode_form(bytes(body), content_type)

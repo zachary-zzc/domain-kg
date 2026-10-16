@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 
-from domain_kg.console.forms import decode_form
+from domain_kg.console.forms import read_form
 from domain_kg.console.material_commands import command_context, invalid_form, redirect
 from domain_kg.console.rendering import browser_session, page
 from domain_kg.console.workspace import filters_for, read_context
@@ -74,7 +74,7 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
 
     @router.post("/infrastructure/{backend_id}/validate")
     async def validate(request: Request, backend_id: UUID) -> HTMLResponse:
-        fields = decode_form(await request.body(), request.headers.get("content-type", ""))
+        fields = await read_form(request)
         session = await browser_session(runtime, request, csrf=fields.pop("csrf_token", ""))
         if fields:
             raise invalid_form()

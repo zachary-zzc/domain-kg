@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import StringConstraints, TypeAdapter, ValidationError
 
-from domain_kg.console.forms import decode_form
+from domain_kg.console.forms import read_form
 from domain_kg.console.material_commands import invalid_form, redirect
 from domain_kg.console.rendering import BrowserSession, browser_session, page
 from domain_kg.identity.models import AccessContext, Action, Principal
@@ -28,7 +28,7 @@ def form_key(fields: dict[str, str]) -> str:
 async def team_command(
     runtime: ServiceRuntime, request: Request
 ) -> tuple[dict[str, str], BrowserSession, AccessContext]:
-    fields = decode_form(await request.body(), request.headers.get("content-type", ""))
+    fields = await read_form(request)
     session = await browser_session(runtime, request, csrf=fields.pop("csrf_token", ""))
     access = await runtime.access(
         session.principal, (), Action.MANAGE_ORGANIZATION, session.member.org_id

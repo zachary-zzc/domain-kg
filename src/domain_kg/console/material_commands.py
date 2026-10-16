@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 
-from domain_kg.console.forms import decode_form
+from domain_kg.console.forms import read_form
 from domain_kg.console.rendering import BrowserSession, browser_session, page
 from domain_kg.console.workspace import filters_for, read_context
 from domain_kg.errors import DomainError, ErrorCode
@@ -59,7 +59,7 @@ def source_fields(fields: dict[str, str]) -> dict[str, Any]:
 async def command_context(
     runtime: ServiceRuntime, request: Request, kg: UUID, action: Action
 ) -> tuple[dict[str, str], BrowserSession, AccessContext]:
-    fields = decode_form(await request.body(), request.headers.get("content-type", ""))
+    fields = await read_form(request)
     session = await browser_session(runtime, request, csrf=fields.pop("csrf_token", ""))
     access = await runtime.access(session.principal, (kg,), action, session.member.org_id)
     return fields, session, access

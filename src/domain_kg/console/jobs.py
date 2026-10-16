@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import TypeAdapter, ValidationError
 
-from domain_kg.console.forms import decode_form
+from domain_kg.console.forms import read_form
 from domain_kg.console.rendering import browser_session, page
 from domain_kg.console.workspace import filters_for, read_context
 from domain_kg.errors import DomainError, ErrorCode
@@ -69,7 +69,7 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
         job_id: UUID,
         operation: Literal["cancel", "retry"],
     ) -> RedirectResponse:
-        fields = decode_form(await request.body(), request.headers.get("content-type", ""))
+        fields = await read_form(request)
         session = await browser_session(runtime, request, csrf=fields.pop("csrf_token", ""))
         access = await runtime.access(
             session.principal, (kg_id,), Action.INGEST, session.member.org_id
