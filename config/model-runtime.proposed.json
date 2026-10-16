@@ -1,0 +1,42 @@
+{
+  "status": "approved_smoke_passed_native_background_running",
+  "autostart": false,
+  "download_permitted": true,
+  "local_service_memory_budget_bytes": 1500000000,
+  "memory_budget_scope": "docker_databases_only_native_llm_measured_separately",
+  "run_alongside_databases": true,
+  "llm": {
+    "source_model": "Qwen/Qwen3.5-0.8B",
+    "repository": "ggml-org/Qwen3.5-0.8B-GGUF",
+    "revision": "8fea620810c4afa23dd6443f999a48574c1611a3",
+    "filename": "Qwen3.5-0.8B-Q4_0.gguf",
+    "size_bytes": 563036064,
+    "sha256": "57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf",
+    "license": "Apache-2.0",
+    "use": "text_only_development_smoke",
+    "endpoint": "http://127.0.0.1:29500/v1",
+    "served_model_name": "domain-kg-small-llm",
+    "runtime": "llama.cpp",
+    "installed_runtime_version": "10050 (b15ca938a)",
+    "context_tokens": 4096,
+    "max_output_tokens": 1024,
+    "threads": 2,
+    "batch_tokens": 128,
+    "microbatch_tokens": 32,
+    "parallel_slots": 1,
+    "prompt_cache_mib": 0,
+    "rss_watchdog_bytes": 1250000000,
+    "repack_weights": false,
+    "warmup": false,
+    "sampled_peak_rss_bytes": 831127552,
+    "api_key_file": "PRIVATE_CACHE/llm-api-key",
+    "gpu_layers": 0,
+    "multimodal_projector": false,
+    "thinking": false,
+    "ram_measurement": "two_tiny_structured_output_cases_passed_english_and_chinese"
+  },
+  "embeddings": {
+    "status": "requires_separately_selected_embedding_model_or_webserver_api",
+    "use_llm_hidden_states_as_embeddings": false
+  }
+}

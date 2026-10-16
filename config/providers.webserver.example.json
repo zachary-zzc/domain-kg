@@ -1,0 +1,24 @@
+{
+  "connections": [
+    {
+      "ref": "approved-webserver",
+      "endpoint": "https://api.example.com/v1",
+      "api_key": "REPLACE_IN_PRIVATE_COPY"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "91974082-1c65-4e03-9b84-11f16464c886",
+      "revision": 1,
+      "connection_ref": "approved-webserver",
+      "extraction_model": "REPLACE_WITH_EXTRACTION_MODEL",
+      "embedding_model": "REPLACE_WITH_EMBEDDING_MODEL",
+      "embedding_dimensions": 1536,
+      "allowed_namespaces": [],
+      "data_policy_approved": false,
+      "allow_restricted": false,
+      "max_completion_tokens": 1024,
+      "timeout_seconds": 120
+    }
+  ]
+}
