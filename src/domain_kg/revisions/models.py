@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from domain_kg.identity.models import AccessContext
+from domain_kg.materials.models import MaterialMetadata
 from domain_kg.models import (
     SHA256,
     FrozenModel,
@@ -63,18 +64,43 @@ class PublishedView(Namespace):
         return self
 
 
+class RetainedSelection(FrozenModel):
+    view: PublishedView
+    source: SourceVersion
+    metadata: MaterialMetadata
+
+    @model_validator(mode="after")
+    def accepted_source(self) -> Self:
+        if self.source not in self.view.sources or (
+            self.metadata.material_id,
+            self.metadata.version_id,
+        ) != (self.source.material_id, self.source.version_id):
+            raise ValueError("retained metadata must bind the accepted source")
+        return self
+
+
 class ReadScope(FrozenModel):
     access: AccessContext
     view: PublishedView
+    fence_view: PublishedView | None = None
     visible_sources: tuple[SourceVersion, ...] = ()
     visible_curations: tuple[ScopedRef, ...] = ()
     visibility_revision: NonNegative
     filters: SearchFilters = SearchFilters()
 
+    @property
+    def current_view(self) -> PublishedView:
+        return self.fence_view or self.view
+
     @model_validator(mode="after")
     def accepted_and_authorized(self) -> Self:
         if self.access.org_id != self.view.org_id or self.view.kg_id not in self.access.kg_ids:
             raise ValueError("view is outside the resolved access context")
+        if self.fence_view and (
+            (self.fence_view.org_id, self.fence_view.kg_id) != (self.view.org_id, self.view.kg_id)
+            or self.view.revision > self.fence_view.revision
+        ):
+            raise ValueError("retained view must have a current publication fence")
         if any(source not in self.view.sources for source in self.visible_sources):
             raise ValueError("visible sources must belong to the accepted view")
         if any(curation not in self.view.curations for curation in self.visible_curations):

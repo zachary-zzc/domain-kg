@@ -35,3 +35,16 @@ artifact fails closed rather than becoming an unauthenticated cache hit.
 Local verification uses small nonprivate fixtures and real MongoDB replica-set,
 Neo4j, Qdrant and object-storage services. Provider responses in these lifecycle tests
 are synthetic; they establish reuse, ownership and race behavior, not model quality.
+
+Explicit retained-version searches select an actual accepted historical manifest.
+They retain a separate current publication and visibility fence, use current grants
+and mutable material metadata, and use the requested original's media type. The
+response reports the current KG revision and the selected projection generation.
+Active versions remain the default. Staged versions fail with `REVISION_NOT_READY`;
+a version belonging to another material is inaccessible. A tombstone or a revoked
+grant prevents retained evidence from being returned.
+
+Retained reads currently require the selected generation to remain the current
+routed generation. An older generation returns an explicit readiness error until
+its routing/rebuild is available; the service does not search another collection
+or embedding space as a substitute.

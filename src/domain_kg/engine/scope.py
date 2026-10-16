@@ -12,11 +12,27 @@ from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.policy import Policy
 from domain_kg.materials.models import MaterialMetadata
 from domain_kg.retrieval.models import SearchRequest
-from domain_kg.revisions.models import PublishedView, ReadScope
+from domain_kg.revisions.models import PublishedView, ReadScope, RetainedSelection
 
 
 class AcceptedViews(Protocol):
     async def load(self, access: AccessContext, kg_id: UUID) -> PublishedView: ...
+
+    async def retained(
+        self, access: AccessContext, kg_id: UUID, material_id: UUID, version_id: UUID
+    ) -> RetainedSelection: ...
+
+
+def same_view(left: PublishedView, right: PublishedView) -> bool:
+    """Mongo cursor order is not part of an immutable accepted mapping."""
+    return (
+        (left.org_id, left.kg_id, left.revision, left.generation, left.manifest_id)
+        == (right.org_id, right.kg_id, right.revision, right.generation, right.manifest_id)
+        and frozenset(left.projections) == frozenset(right.projections)
+        and frozenset(left.receipts) == frozenset(right.receipts)
+        and frozenset(left.sources) == frozenset(right.sources)
+        and frozenset(left.curations) == frozenset(right.curations)
+    )
 
 
 class EligibilityResolver:
@@ -35,6 +51,19 @@ class EligibilityResolver:
             raise DomainError(
                 ErrorCode.PROJECTION_INCONSISTENT, "The accepted view namespace is inconsistent."
             )
+        fence_view = None
+        retained = None
+        if request.filters.version_id is not None:
+            material_id = request.filters.material_ids[0]
+            if await self.policy.material_visible(current, kg_id, material_id) and not any(
+                source.material_id == material_id
+                and source.version_id == request.filters.version_id
+                for source in view.sources
+            ):
+                retained = await self.views.retained(
+                    current, kg_id, material_id, request.filters.version_id
+                )
+                fence_view, view = view, retained.view
         kg = await self.policy.database.kgs.find_one(
             {"org_id": str(current.org_id), "id": str(kg_id)}
         )
@@ -54,6 +83,8 @@ class EligibilityResolver:
                 raise DomainError(
                     ErrorCode.PROJECTION_INCONSISTENT, "Source ownership is inconsistent."
                 )
+            if retained and source == retained.source:
+                metadata = retained.metadata
             if request.filters.version_id is not None:
                 if source.version_id != request.filters.version_id:
                     continue
@@ -87,6 +118,7 @@ class EligibilityResolver:
         scope = ReadScope(
             access=current,
             view=view,
+            fence_view=fence_view,
             visible_sources=tuple(visible),
             visible_curations=tuple(curations),
             filters=request.filters,
@@ -107,17 +139,32 @@ class EligibilityResolver:
         if kg is None:
             raise DomainError(ErrorCode.POLICY_CHANGED, "Visibility changed during the request.")
         view = await self.views.load(scope.access, scope.view.kg_id)
-        if (
-            (view.revision, view.generation, view.manifest_id)
-            != (scope.view.revision, scope.view.generation, scope.view.manifest_id)
-            or frozenset(view.projections) != frozenset(scope.view.projections)
-            or frozenset(view.receipts) != frozenset(scope.view.receipts)
-            or frozenset(view.sources) != frozenset(scope.view.sources)
-            or frozenset(view.curations) != frozenset(scope.view.curations)
-        ):
+        expected = scope.current_view
+        if not same_view(view, expected):
             raise DomainError(
                 ErrorCode.POLICY_CHANGED, "The accepted publication changed during the request."
             )
+        if scope.fence_view is not None:
+            if scope.filters.version_id is None or len(scope.filters.material_ids) != 1:
+                raise inaccessible_reference()
+            retained = await self.views.retained(
+                scope.access,
+                scope.view.kg_id,
+                scope.filters.material_ids[0],
+                scope.filters.version_id,
+            )
+            if not same_view(retained.view, scope.view):
+                raise DomainError(ErrorCode.POLICY_CHANGED, "Retained acceptance changed.")
+        # Metadata/visibility may change while validating acceptance metadata.
+        final = await self.policy.database.kgs.find_one(
+            {
+                "org_id": str(scope.view.org_id),
+                "id": str(scope.view.kg_id),
+                "visibility_revision": scope.visibility_revision,
+            }
+        )
+        if final is None:
+            raise DomainError(ErrorCode.POLICY_CHANGED, "Visibility changed during the request.")
 
 
 class ScopePredicates:

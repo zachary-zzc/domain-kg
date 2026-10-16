@@ -10,7 +10,7 @@ from domain_kg.identity.models import AccessContext
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.models import SearchFilters, SearchRequest, SubgraphRequest
 from domain_kg.revisions.journal import PublicationJournal
-from domain_kg.revisions.models import PublishedView
+from domain_kg.revisions.models import PublishedView, RetainedSelection
 
 
 class AcceptedMetadata:
@@ -21,6 +21,11 @@ class AcceptedMetadata:
 
     async def load(self, access: AccessContext, kg_id: UUID) -> PublishedView:
         return await self.journal.load_metadata(access, kg_id)
+
+    async def retained(
+        self, access: AccessContext, kg_id: UUID, material_id: UUID, version_id: UUID
+    ) -> RetainedSelection:
+        return await self.journal.retained(access, kg_id, material_id, version_id)
 
 
 class GraphService:

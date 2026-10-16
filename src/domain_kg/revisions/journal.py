@@ -9,9 +9,9 @@ from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.identity.models import AccessContext
 from domain_kg.jobs.models import Checkpoint, JobArtifact
 from domain_kg.jobs.queue import JobQueue
-from domain_kg.materials.models import RestoreReadPermit
+from domain_kg.materials.models import BlobRef, MaterialMetadata, RestoreReadPermit
 from domain_kg.models import ScopedRef, SourceVersion
-from domain_kg.revisions.models import ProjectionReceipt, PublishedView
+from domain_kg.revisions.models import ProjectionReceipt, PublishedView, RetainedSelection
 from domain_kg.revisions.projections import AcceptedProjection
 from domain_kg.storage.blobs import BlobStore
 
@@ -101,6 +101,16 @@ class PublicationJournal:
             await self.database[name].create_index(
                 [("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True
             )
+        await self.database.projection_attempts.create_index(
+            [
+                ("org_id", 1),
+                ("kg_id", 1),
+                ("source.material_id", 1),
+                ("source.version_id", 1),
+                ("state", 1),
+                ("receipt.published_revision", -1),
+            ]
+        )
         await self.database.publication_bindings.create_index(
             [("org_id", 1), ("kg_id", 1), ("view_manifest_id", 1), ("owner_key", 1)], unique=True
         )
@@ -193,6 +203,16 @@ class PublicationJournal:
             raise DomainError(
                 ErrorCode.PROJECTION_INCONSISTENT, "The accepted view marker is inconsistent."
             )
+        return await self._from_header(access, kg_id, header)
+
+    async def _from_header(
+        self, access: AccessContext, kg_id: UUID, header: dict[str, Any]
+    ) -> PublishedView:
+        ns = {"org_id": str(access.org_id), "kg_id": str(kg_id)}
+        if any(header.get(field) != value for field, value in ns.items()) or (
+            header["state"] != "accepted"
+        ):
+            raise inaccessible_reference()
         bindings = [
             AcceptedProjection.model_validate(row["binding"])
             async for row in self.database.publication_bindings.find(
@@ -228,6 +248,88 @@ class PublicationJournal:
         )
         await self.queue.policy.revalidate(access)
         return view
+
+    async def retained(
+        self, access: AccessContext, kg_id: UUID, material_id: UUID, version_id: UUID
+    ) -> RetainedSelection:
+        try:
+            return await self._retained(access, kg_id, material_id, version_id)
+        except (ValidationError, KeyError, TypeError):
+            raise DomainError(
+                ErrorCode.PROJECTION_INCONSISTENT, "Retained source mappings are invalid."
+            ) from None
+
+    async def _retained(
+        self, access: AccessContext, kg_id: UUID, material_id: UUID, version_id: UUID
+    ) -> RetainedSelection:
+        await self.queue.policy.revalidate(access)
+        if not await self.queue.policy.material_visible(access, kg_id, material_id):
+            raise inaccessible_reference()
+        ns = {"org_id": str(access.org_id), "kg_id": str(kg_id)}
+        source = SourceVersion(
+            org_id=access.org_id, kg_id=kg_id, material_id=material_id, version_id=version_id
+        )
+        stores = await self.queue.router.for_sources(access, kg_id)
+        version = await stores.authority.get_material_version(
+            ScopedRef(org_id=access.org_id, kg_id=kg_id, id=version_id)
+        )
+        if version is None or version.material.id != material_id:
+            raise inaccessible_reference()
+        original = await stores.authority._database.version_blobs.find_one(
+            ns | {"id": str(version_id), "material_id": str(material_id)}
+        )
+        if original is None:
+            raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Retained original is missing.")
+        blob = BlobRef.model_validate(original["blob"])
+        if any(
+            getattr(blob, field) != getattr(source, field) for field in SourceVersion.model_fields
+        ):
+            raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Retained original owner differs.")
+        if original["state"] == "staged":
+            raise DomainError(ErrorCode.REVISION_NOT_READY, "This version has not been accepted.")
+        if original["state"] not in ("accepted", "retained"):
+            raise inaccessible_reference()
+        attempt = await self.database.projection_attempts.find_one(
+            ns | {"source": source.model_dump(mode="json"), "state": "accepted"},
+            sort=[("receipt.published_revision", -1)],
+        )
+        header = (
+            await self.database.publication_manifests.find_one(
+                ns | {"id": attempt["id"], "state": "accepted"}
+            )
+            if attempt
+            else None
+        )
+        kg = await self.database.kgs.find_one({"org_id": ns["org_id"], "id": ns["kg_id"]})
+        if header is None or kg is None:
+            raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Retained acceptance is missing.")
+        if header["revision"] > kg["published_revision"]:
+            raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Retained acceptance is invalid.")
+        if header["generation"] != kg["generation"]:
+            raise DomainError(
+                ErrorCode.REVISION_NOT_READY, "This retained index generation needs a rebuild."
+            )
+        view = await self._from_header(access, kg_id, header)
+        if source not in view.sources:
+            raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Retained binding is missing.")
+        row = await self.queue.policy.database.material_access.find_one(
+            ns | {"id": str(material_id)}
+        )
+        if row is None or not await self.queue.policy.material_visible(access, kg_id, material_id):
+            raise inaccessible_reference()
+        metadata = MaterialMetadata.model_validate(row["metadata"])
+        if (metadata.material_id, str(metadata.version_id)) != (
+            material_id,
+            row["active_version_id"],
+        ):
+            raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Material metadata owner differs.")
+        return RetainedSelection(
+            view=view,
+            source=source,
+            metadata=metadata.model_copy(
+                update={"version_id": version_id, "media_type": blob.media_type}
+            ),
+        )
 
     async def load(self, access: AccessContext, kg_id: UUID) -> PublishedView:
         from domain_kg.revisions.publication import verify_accepted

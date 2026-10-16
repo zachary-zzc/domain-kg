@@ -119,7 +119,7 @@ class RetrievalService:
             else "ok",
             results=selected,
             applied_filters=request.filters,
-            kg_revisions={scope.view.kg_id: scope.view.revision for scope in scopes},
+            kg_revisions={scope.view.kg_id: scope.current_view.revision for scope in scopes},
             policy_revision=current.policy_revision,
             branch_status=tuple(statuses),
             projection_generations={scope.view.kg_id: scope.view.generation for scope in scopes},

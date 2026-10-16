@@ -272,7 +272,7 @@ class GraphRepository:
         await self.resolver.revalidate(scope)
         return SubgraphView(
             kg_id=scope.view.kg_id,
-            revision=scope.view.revision,
+            revision=scope.current_view.revision,
             nodes=tuple(nodes[key] for key in sorted(nodes, key=str)),
             edges=tuple(edges[key] for key in sorted(edges, key=str)),
             truncation=truncated,
