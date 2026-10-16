@@ -190,5 +190,7 @@ mapping, independent support, curation and native helper comparison passed nine
 checks in 279.27 seconds; exact-source import/native purge passed two more in
 62.06 seconds. Native replacement performs fresh validated extraction; unpublished
 imports reconstruct as unverified under the current restoring actor. The final
-combined Task 16 laptop command remains before its checkboxes are updated.
+combined Task 16 laptop command passed all 59 checks in 395.61 seconds, completing
+its local implementation gate. Running hard database limits remained 1.476 GB
+with swap disabled and no OOM or restart.
 See [legacy imports](legacy-imports.md) and [the compatibility decision](decisions/0002-lightrag-compatibility.md).

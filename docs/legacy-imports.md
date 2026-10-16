@@ -141,3 +141,9 @@ cannot be restored. The import cleanup and independent native source/curation
 regression passed two checks in 62.06 seconds. Run the combined bounded gate with
 `python3 scripts/smoke.py --task 16 --keep-services`; Task 16 completion remains
 subject to that full command.
+
+The final combined `python3 scripts/smoke.py --task 16 --keep-services` passed
+all 59 checks against real local stores in 395.61 seconds. Configured and running
+Docker limits were 1,476,395,008 bytes with swap disabled; a post-run check found
+no OOM or container restart. Task 16's local implementation gate is complete.
+No real corpus migration or separate unfiltered legacy gateway is claimed.

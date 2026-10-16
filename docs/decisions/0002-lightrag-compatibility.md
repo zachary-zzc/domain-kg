@@ -43,7 +43,8 @@ editor fixture retained exactly two nodes, one relation and one vector chunk;
 default unverified retrieval and the denied reader retained zero. Managed deep
 results and upstream helper chunk IDs agreed. The offline Task 16 smoke passed
 31 checks with 27 real-store cases explicitly deselected; the combined final
-Task 16 gate remains separate.
+Task 16 gate subsequently passed all 59 checks in 395.61 seconds against real
+local stores, including server-backed deferred-write characterization.
 
 The upgrade suite is `test_lightrag_capabilities.py`,
 `test_lightrag_scope_probe.py`, `test_legacy_import.py`, `test_import_worker.py`,
