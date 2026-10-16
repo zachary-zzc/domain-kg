@@ -1,6 +1,6 @@
 # Implementation progress
 
-Updated 16 October 2026. Execution is native in this chat, following the current NoSQL design and the task dependency order. Each completed task requires a laptop smoke test; expensive OCR, local models, load tests, and large-corpus benchmarks are outside this run.
+Updated 16 October 2026. Execution is native in this chat, following the current NoSQL design and the task dependency order. Each completed task requires a laptop smoke test; expensive OCR, model training, load tests, and large-corpus benchmarks are outside this run. The user separately approved a bounded native small-LLM smoke; its measured memory is separate from the Docker database ceiling.
 
 | Task | Status | Verification |
 | --- | --- | --- |
@@ -12,7 +12,10 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | 6: Original files and material submission | Complete locally | 15 smoke tests pass; full regular suite 100 passed, one physical drill skipped; lint/mypy pass. |
 | 7: Durable MongoDB jobs and recovery | Complete locally | 18 smoke checks pass; full suite 112 passed, one physical skip; lint/mypy pass. |
 | 8: Structured parsing and chunking | Complete for laptop profile | 20 smoke checks pass; full suite 127 passed, one physical skip; native Docling PDF and bounded text/XML decoders. OCR quality remains outside this run. |
-| 9–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
+| 9: Schema-driven LightRAG extraction | Local checks pass; live-model gate pending | 20 smoke checks; full suite 142 passed, one physical skip. Approved small-model smoke is being configured. |
+| 10: Staging and publication | Complete locally | 33 smoke checks; full regular suite 170 passed, one physical skip; durable publication/repair verified against real stores. |
+| 11: Scoped graph inspection and traversal | Complete locally | 13 smoke checks; regular regression 176 passed, one physical skip; two additional reproduced integrity failures fixed and verified. |
+| 12–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
