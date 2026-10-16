@@ -3,6 +3,7 @@
 from typing import Literal
 from uuid import UUID
 
+from domain_kg.ingestion.models import ParsedChunk
 from domain_kg.materials.models import MaterialMetadata
 from domain_kg.models import FrozenModel, NonNegative
 
@@ -33,3 +34,5 @@ class MaterialDetail(FrozenModel):
     versions: tuple[MaterialVersionSummary, ...]
     selected_version_id: UUID
     versions_truncated: bool = False
+    chunks: tuple[ParsedChunk, ...] = ()
+    chunks_truncated: bool = False

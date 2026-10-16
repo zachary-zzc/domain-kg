@@ -55,6 +55,9 @@ async def test_material_pages_and_inspection_never_include_hidden_source_fields(
     detail = await inspection.get(reader, kg, sources[1].material_id)
     assert detail.material.title == "team-one"
     assert detail.versions and detail.versions[0].id == sources[1].version_id
+    assert detail.chunks and detail.chunks[0].text == TEXT
+    assert detail.chunks[0].version_id == sources[1].version_id
+    assert detail.chunks[0].spans and not detail.chunks_truncated
     assert "blob" not in detail.model_dump_json() and "object_id" not in detail.model_dump_json()
     await MaterialLifecycle(materials, queue).remove(
         editor,

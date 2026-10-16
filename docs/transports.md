@@ -32,6 +32,10 @@ Material pages contain accepted, currently visible materials and current metadat
 version inspection lists accepted or retained originals. Opaque page cursors bind
 the caller, organization/KG, filters, limit, policy, visibility and accepted view.
 Material details expose no object keys, bucket names or connection configuration.
+They include at most 25 permitted source chunks with original spans and an explicit
+truncation flag. Current node suppression also hides their incident chunks when a
+retained version is explicitly selected. Every listed retained version is checked
+against the accepted publication ledger.
 Owner grant pages use a compound subject UUID/kind cursor, so independent member
 and group UUIDs cannot cause skipped grants.
 

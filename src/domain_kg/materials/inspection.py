@@ -25,7 +25,8 @@ from domain_kg.revisions.models import ReadScope
 class MaterialInspection:
     def __init__(self, queue: JobQueue) -> None:
         self.queue, self.database = queue, queue.database
-        self.resolver = GraphService(queue).resolver
+        self.graph = GraphService(queue)
+        self.resolver = self.graph.resolver
 
     async def _summary(self, scope: ReadScope, identifier: UUID) -> MaterialSummary:
         current = scope.access
@@ -163,6 +164,11 @@ class MaterialInspection:
                 row["id"],
             ):
                 raise inaccessible_reference()
+            if not any(
+                accepted.material_id == material and str(accepted.version_id) == row["id"]
+                for accepted in scope.current_view.sources
+            ):
+                await self.resolver.views.retained(current, kg, material, blob.version_id)
             versions.append(
                 MaterialVersionSummary(
                     id=row["id"],
@@ -172,10 +178,17 @@ class MaterialInspection:
                     sha256=blob.sha256,
                 )
             )
+        data = await self.graph.repository.open(scope)
+        chunks = sorted(
+            (row.chunk for row in data.rows if row.chunk is not None and row.source == source),
+            key=lambda chunk: str(chunk.id),
+        )
         await self.resolver.revalidate(scope)
         return MaterialDetail(
             material=summary,
             versions=tuple(versions),
             selected_version_id=source.version_id,
             versions_truncated=len(rows) > 100,
+            chunks=tuple(chunks[:25]),
+            chunks_truncated=len(chunks) > 25,
         )

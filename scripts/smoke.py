@@ -21,6 +21,7 @@ TASK_FILES = {
         "tests/integration/test_transport_authorization.py",
         "tests/integration/test_citation_resolution.py",
         "tests/integration/test_material_inspection.py",
+        "tests/integration/test_material_chunk_visibility.py",
         "tests/integration/test_identity.py",
     ],
     14: [
