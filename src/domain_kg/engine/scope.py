@@ -75,7 +75,15 @@ class EligibilityResolver:
         if kg is None:
             raise inaccessible_reference()
         visible = []
+        origins = {
+            binding.source: binding.import_origin for binding in view.projections if binding.source
+        }
         for source in view.sources:
+            if (
+                origins.get(source) is not None
+                and "imported_unverified" not in request.filters.support_statuses
+            ):
+                continue
             if not await self.policy.material_visible(current, kg_id, source.material_id):
                 continue
             record = await self.policy.database.material_access.find_one(

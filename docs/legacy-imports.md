@@ -57,3 +57,13 @@ changed exports from the same legacy system. Without one, the exact upload hash
 provides an isolated origin. Neither an origin nor an export establishes a grant.
 Planning alone creates no job or accepted publication binding and is not yet a
 public transport operation.
+
+Accepted import provenance is a source-qualified immutable marker copied into the
+embedded document, projection attempt and accepted binding, and reconciled with
+the authoritative origin ledger. Missing or mismatched markers fail closed before
+visibility selection. Native records omit this optional extension to preserve
+existing sealed serialization. Default scopes exclude imported sources before
+branch predicates; opting into unverified evidence still requires current ACLs.
+The explicit prepared-import type rejects verified/manual claim support, invented
+claim spans and inherited descriptions; its snapshot chunks retain their actual
+parsed artifact separately. Admission and the import worker are not wired yet.

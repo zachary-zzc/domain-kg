@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.visibility_models import NodeFence
 from domain_kg.identity.models import AccessContext
+from domain_kg.imports.provenance import check_import_origin
 from domain_kg.jobs.models import Checkpoint, JobArtifact
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.materials.models import BlobRef, MaterialMetadata, MaterialReadPermit
@@ -233,12 +234,21 @@ class PublicationJournal:
             )
         receipts: list[ProjectionReceipt] = []
         for binding in bindings:
+            if binding.source is not None:
+                await check_import_origin(self.database, binding.source, binding.import_origin)
             attempt = await self.attempt(access, binding.manifest_id)
             if attempt["state"] != "accepted" or attempt["batch"]["attempt_id"] != str(
                 binding.attempt_id
             ):
                 raise DomainError(
                     ErrorCode.PROJECTION_INCONSISTENT, "Accepted projection ownership differs."
+                )
+            expected_origin = (
+                binding.import_origin.model_dump(mode="json") if binding.import_origin else None
+            )
+            if attempt.get("import_origin") != expected_origin:
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Accepted import provenance differs."
                 )
             receipts.extend(
                 ProjectionReceipt.model_validate(value) for value in attempt["receipts"]

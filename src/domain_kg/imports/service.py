@@ -26,6 +26,9 @@ class Importer:
         self.database, self.transactions = materials.database, materials.repository
 
     async def initialize(self) -> None:
+        await self.database.import_source_origins.create_index(
+            [("org_id", 1), ("kg_id", 1), ("material_id", 1), ("version_id", 1)], unique=True
+        )
         await self.database.import_plans.create_index(
             [("org_id", 1), ("kg_id", 1), ("issuer", 1), ("subject", 1), ("key", 1)], unique=True
         )

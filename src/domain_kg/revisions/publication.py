@@ -11,6 +11,7 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.schema import schema_for_kg
 from domain_kg.identity.models import AccessContext, Principal
+from domain_kg.imports.provenance import check_import_origin
 from domain_kg.ingestion.models import ParsedDocument
 from domain_kg.ingestion.resolved import ResolvedDocument
 from domain_kg.jobs.models import Checkpoint, LeasedJob, PublicationLease
@@ -191,8 +192,12 @@ async def _accepted_document(
     if (
         source_of(document) != binding.source
         or document.chunk_checkpoint.artifact_id != binding.chunk_artifact_id
+        or document.import_origin != binding.import_origin
+        or attempt.get("import_origin")
+        != (document.import_origin.model_dump(mode="json") if document.import_origin else None)
     ):
         raise inconsistent()
+    await check_import_origin(queue.database, binding.source, document.import_origin)
     return (
         document,
         batch,
@@ -436,6 +441,7 @@ class ProjectionCoordinator:
         )
         if source_of(document) != source or embedded_checkpoint.stage != "embedding":
             raise inaccessible_reference()
+        await check_import_origin(self.database, source, document.import_origin)
         lease = await self.queue.acquire_publication(job)
         kg = await self.database.kgs.find_one({"org_id": str(job.org_id), "id": str(job.kg_id)})
         if kg is None:
@@ -470,6 +476,8 @@ class ProjectionCoordinator:
             "receipts": [],
             "repair_parent_manifest_id": raw.get("repair_parent_manifest_id"),
         }
+        if document.import_origin is not None:
+            record["import_origin"] = document.import_origin.model_dump(mode="json")
         if job.kind in ("repair", "restore_material"):
             parent = await self.journal.attempt(access, UUID(raw["repair_parent_manifest_id"]))
             if (
@@ -684,11 +692,15 @@ class ProjectionCoordinator:
             generation=batch.generation,
             content_hash=batch.content_hash,
             chunk_artifact_id=document.chunk_checkpoint.artifact_id,
+            import_origin=document.import_origin,
         )
 
         async def commit(session: AsyncClientSession) -> RevisionReceipt:
             active = await self.queue.authorize(job, session)
             await self.queue.transactions.fence(active, active.action, session)
+            await check_import_origin(
+                self.database, source, document.import_origin, session=session
+            )
             await self.queue.validate_publication(job, lease, session)
             kg = await self.database.kgs.find_one(
                 {"org_id": ns["org_id"], "id": ns["kg_id"]}, session=session

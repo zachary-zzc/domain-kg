@@ -5,11 +5,12 @@ import json
 from typing import Annotated, Any, Literal, Self
 from uuid import UUID, uuid5
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from domain_kg.graph.curation_models import ManualNode
 from domain_kg.graph.identity_models import ManualIdentity
 from domain_kg.graph.manual_relations import ManualRelation
+from domain_kg.imports.provenance import ImportOrigin
 from domain_kg.ingestion.models import ParsedChunk
 from domain_kg.ingestion.resolved import ResolvedAssertion, ResolvedEntity
 from domain_kg.jobs.models import Checkpoint
@@ -235,6 +236,14 @@ class EmbeddedDocument(SourceVersion):
     schema_revision: int
     rows: tuple[ProjectionRow, ...]
     warnings: tuple[str, ...] = ()
+    import_origin: ImportOrigin | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_native_shape(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        result: dict[str, Any] = handler(self)
+        if self.import_origin is None:
+            result.pop("import_origin", None)
+        return result
 
     @model_validator(mode="after")
     def sealed_rows(self) -> Self:
@@ -244,6 +253,8 @@ class EmbeddedDocument(SourceVersion):
             material_id=self.material_id,
             version_id=self.version_id,
         )
+        if self.import_origin is not None and not self.import_origin.matches(owner):
+            raise ValueError("import provenance must bind this exact source version")
         if (self.profile.org_id, self.profile.kg_id) != (self.org_id, self.kg_id):
             raise ValueError("embedding profile namespace differs")
         for checkpoint in (self.chunk_checkpoint, self.resolved_checkpoint):
@@ -260,6 +271,14 @@ class EmbeddedDocument(SourceVersion):
         for row in self.rows:
             if row.source != owner:
                 raise ValueError("projection row source differs")
+            if self.import_origin is not None and (
+                row.curation is not None
+                or row.assertion is not None
+                and row.assertion.support.status != "imported_unverified"
+            ):
+                raise ValueError(
+                    "imported rows cannot promote a claim to verified or human provenance"
+                )
             normalized_vector(list(row.vector), self.profile.dimensions)
         return self
 
@@ -306,9 +325,21 @@ class AcceptedProjection(Namespace):
     content_hash: SHA256
     generation: UUID
     chunk_artifact_id: UUID | None = None
+    import_origin: ImportOrigin | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_native_shape(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        result: dict[str, Any] = handler(self)
+        if self.import_origin is None:
+            result.pop("import_origin", None)
+        return result
 
     @model_validator(mode="after")
     def accepted_owner(self) -> Self:
+        if self.import_origin is not None and (
+            self.source is None or not self.import_origin.matches(self.source)
+        ):
+            raise ValueError("import provenance must bind an accepted source version")
         if self.source is None and self.curation is None:
             raise ValueError("accepted projection requires an owner")
         for owner in (self.source, self.curation):
