@@ -12,6 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVICES = ["mongo", "neo4j", "qdrant", "object-store"]
 MEMORY_BUDGET_BYTES = 1_500_000_000
 TASK_FILES = {
+    7: [
+        "tests/unit/test_smoke_budget.py",
+        "tests/integration/test_job_recovery.py",
+        "tests/integration/test_catalog.py::test_approved_qdrant_connection_ignores_ambient_proxy",
+        "tests/integration/test_catalog.py::test_backend_compatibility_probe_uses_the_approved_transport",
+        "tests/integration/test_catalog.py::test_direct_compatibility_check_rejects_incompatible_server",
+    ],
     6: [
         "tests/unit/test_smoke_budget.py",
         "tests/integration/test_uploads.py",

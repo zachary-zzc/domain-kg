@@ -5,11 +5,12 @@ from uuid import uuid4
 
 import pytest
 from neo4j import AsyncDriver, AsyncGraphDatabase
-from pymongo import AsyncMongoClient
+from pymongo import AsyncMongoClient, MongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 from qdrant_client import AsyncQdrantClient
 
 from domain_kg.settings import Settings
+from domain_kg.storage.qdrant import open_qdrant
 
 
 def pytest_addoption(parser):
@@ -34,15 +35,34 @@ def settings() -> Settings:
     return Settings()
 
 
-@pytest.fixture
-async def mongo_db(settings: Settings) -> AsyncIterator[AsyncDatabase]:
-    client = AsyncMongoClient(settings.mongo_uri.get_secret_value(), serverSelectionTimeoutMS=5000)
+@pytest.fixture(scope="session")
+def mongo_database_name():
+    # Reuse only schema/index definitions. All synthetic documents are cleared
+    # between cases; each run and each parallel pytest worker gets its own DB.
     name = f"domain_kg_smoke_{uuid4().hex}"
+    yield name
+    client = MongoClient(
+        Settings().mongo_uri.get_secret_value(), serverSelectionTimeoutMS=5000, maxPoolSize=2
+    )
+    try:
+        client.drop_database(name)
+    finally:
+        client.close()
+
+
+@pytest.fixture
+async def mongo_db(settings: Settings, mongo_database_name) -> AsyncIterator[AsyncDatabase]:
+    client = AsyncMongoClient(
+        settings.mongo_uri.get_secret_value(), serverSelectionTimeoutMS=5000, maxPoolSize=4
+    )
+    database = client[mongo_database_name]
     try:
         await client.admin.command("ping")
-        yield client[name]
+        yield database
     finally:
-        await client.drop_database(name)
+        for collection in await database.list_collection_names():
+            if not collection.startswith("system."):
+                await database[collection].delete_many({})
         await client.close()
 
 
@@ -59,11 +79,10 @@ async def graph(settings: Settings) -> AsyncIterator[AsyncDriver]:
 
 @pytest.fixture
 async def vectors(settings: Settings) -> AsyncIterator[AsyncQdrantClient]:
-    client = AsyncQdrantClient(
+    client = await open_qdrant(
         url=settings.qdrant_url,
         api_key=settings.qdrant_api_key.get_secret_value(),
-        trust_env=False,
-        timeout=5,
+        timeout_seconds=5,
     )
     try:
         yield client

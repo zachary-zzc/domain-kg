@@ -20,6 +20,7 @@ from domain_kg.materials.models import BlobRef
 from domain_kg.models import Namespace
 from domain_kg.revisions.models import ProjectionReceipt
 from domain_kg.storage.integrity import NamespaceRepository, install_mongo_schema
+from domain_kg.storage.qdrant import open_qdrant
 
 
 def projection_checksum(identifiers: list[str]) -> str:
@@ -183,11 +184,10 @@ class KGStoreRouter:
                     max_transaction_retry_time=5,
                 )
             if profile.qdrant_id not in self._vectors:
-                self._vectors[profile.qdrant_id] = AsyncQdrantClient(
+                self._vectors[profile.qdrant_id] = await open_qdrant(
                     url=vector.endpoint,
                     api_key=vector.credential.get_secret_value(),
-                    trust_env=False,
-                    timeout=5,
+                    timeout_seconds=5,
                     limits=httpx.Limits(max_connections=2, max_keepalive_connections=1),
                 )
             if profile.object_store_id not in self._blobs:

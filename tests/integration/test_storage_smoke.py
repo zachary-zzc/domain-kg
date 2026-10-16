@@ -16,15 +16,30 @@ pytestmark = pytest.mark.storage
 
 
 async def test_mongo_replica_set_commit_and_abort(mongo_db: AsyncDatabase) -> None:
+    # The transaction probe also remains valid when real canonical validators
+    # were installed by an earlier case in this schema-reusing test database.
+    org, kg = str(uuid4()), str(uuid4())
+
+    def material():
+        identifier = str(uuid4())
+        return {
+            "_id": f"{org}:{kg}:{identifier}",
+            "id": identifier,
+            "org_id": org,
+            "kg_id": kg,
+            "title": "Transaction probe",
+        }
+
+    accepted, aborted = material(), material()
     async with mongo_db.client.start_session() as session:
         async with await session.start_transaction():
-            await mongo_db.materials.insert_one({"_id": "accepted"}, session=session)
-        assert await mongo_db.materials.find_one({"_id": "accepted"}) is not None
+            await mongo_db.materials.insert_one(accepted, session=session)
+        assert await mongo_db.materials.find_one({"_id": accepted["_id"]}) is not None
         with pytest.raises(RuntimeError, match="abort fixture"):
             async with await session.start_transaction():
-                await mongo_db.materials.insert_one({"_id": "aborted"}, session=session)
+                await mongo_db.materials.insert_one(aborted, session=session)
                 raise RuntimeError("abort fixture")
-        assert await mongo_db.materials.find_one({"_id": "aborted"}) is None
+        assert await mongo_db.materials.find_one({"_id": aborted["_id"]}) is None
 
 
 async def test_neo4j_source_link_and_fulltext(graph: AsyncDriver) -> None:

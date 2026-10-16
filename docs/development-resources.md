@@ -31,3 +31,26 @@ writable `rs0` primary with a two-connection client before smoke tests. Run
 `uv run python scripts/init_replica_set.py` after a direct `docker compose up`.
 Application connection strings still require the replica set and fail closed
 while it is unavailable; a listening socket alone never authorizes a transaction.
+
+The health change alone did not resolve sustained warm-service growth: Mongo
+later reached its cap again after the passing Task 6 runs. Allocator diagnostics
+showed about 41 MiB of unused heap immediately after recovery. Task 7 configures
+`tcmallocReleaseRate=10485760` (10 MiB/s) to return unused allocator memory sooner,
+using the [MongoDB 8.0 parameter](https://www.mongodb.com/docs/v8.0/reference/parameters/#mongodb-parameter-param.tcmallocReleaseRate).
+This trades reuse/performance for headroom and changes no RAM cap or persistence
+setting. Warm repeated correctness runs must still be checked; this is not a
+production-sizing claim.
+
+Correctness fixtures reuse one randomly named Mongo test database's schema per
+pytest run. They remove all synthetic documents between cases, close each
+case's client, and drop that owned database at run end. This avoids repeatedly
+creating/dropping hundreds of identical indexed collections while preserving
+fresh application state and real cross-KG/organization checks. Independent Mongo
+profile/source-database tests still allocate separate databases explicitly.
+
+Qdrant's pinned SDK has a separate background compatibility probe that ignores
+the configured HTTP transport. The adapter replaces that probe with an explicit
+version check through the same bounded direct client used for data requests.
+Incompatible versions fail the capability check; compatibility checking is
+preserved. Tests reproduce ambient-proxy routing and verify both version and
+data traffic stay on the approved connection.

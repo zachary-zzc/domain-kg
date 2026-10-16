@@ -14,7 +14,6 @@ from neo4j import AsyncGraphDatabase
 from pydantic import SecretStr
 from pymongo.asynchronous.client_session import AsyncClientSession
 from pymongo.asynchronous.database import AsyncDatabase
-from qdrant_client import AsyncQdrantClient
 
 from domain_kg.catalog.models import BackendCapabilities, RegisterBackend, StorageProfile
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
@@ -22,6 +21,7 @@ from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.policy import Policy
 from domain_kg.models import FrozenModel, PageRequest
 from domain_kg.settings import Settings
+from domain_kg.storage.qdrant import open_qdrant
 
 
 class PrivateConnection(FrozenModel):
@@ -315,11 +315,10 @@ class BackendRegistry:
                 ) as driver:
                     await driver.verify_connectivity()
             elif connection.kind == "qdrant":
-                client = AsyncQdrantClient(
+                client = await open_qdrant(
                     url=connection.endpoint,
                     api_key=connection.credential.get_secret_value(),
-                    trust_env=False,
-                    timeout=5,
+                    timeout_seconds=5,
                 )
                 try:
                     await client.get_collections()

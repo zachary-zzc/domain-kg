@@ -186,7 +186,13 @@ async def test_real_lightrag_qdrant_upsert_requires_flush(
                 url=settings.qdrant_url,
                 api_key=settings.qdrant_api_key.get_secret_value(),
                 trust_env=False,
+                check_compatibility=False,
             )
+            from importlib.metadata import version
+
+            from qdrant_client.common.version_check import is_compatible
+
+            assert is_compatible(version("qdrant-client"), client.info().version)
         storage._client = client
         await storage.initialize()
         try:

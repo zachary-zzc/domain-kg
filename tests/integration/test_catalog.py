@@ -237,3 +237,50 @@ async def test_approved_qdrant_connection_ignores_ambient_proxy(catalog, team, m
     for name in ("NO_PROXY", "no_proxy"):
         monkeypatch.setenv(name, "")
     assert (await registry.probe(record.backend_id, connection)).healthy
+
+
+async def test_backend_compatibility_probe_uses_the_approved_transport(catalog, team, monkeypatch):
+    import asyncio
+    import threading
+
+    import httpx
+
+    _, registry, _, _ = catalog
+    _, policy, principals, _, _, _ = team
+    access = await policy.resolve_access(principals["owner"], [], Action.REGISTER_BACKEND)
+    target = next(item for item in await registry.list_backends(access) if item.kind == "qdrant")
+    ambient = threading.Event()
+
+    def unsafe_default_transport(*args, **kwargs):
+        ambient.set()
+        return httpx.Response(200, json={"version": "1.19.2"})
+
+    monkeypatch.setattr(httpx, "get", unsafe_default_transport)
+    assert (
+        await registry.probe(
+            target.backend_id, await registry.connection(target.backend_id, "qdrant")
+        )
+    ).healthy
+    await asyncio.sleep(0.1)
+    assert not ambient.is_set(), "SDK background probe bypassed the configured private transport"
+
+
+async def test_direct_compatibility_check_rejects_incompatible_server(catalog, team, monkeypatch):
+    from types import SimpleNamespace
+
+    from qdrant_client import AsyncQdrantClient
+
+    _, registry, _, _ = catalog
+    _, policy, principals, _, _, _ = team
+    access = await policy.resolve_access(principals["owner"], [], Action.REGISTER_BACKEND)
+    target = next(item for item in await registry.list_backends(access) if item.kind == "qdrant")
+
+    async def incompatible(_client):
+        return SimpleNamespace(version="99.0.0")
+
+    monkeypatch.setattr(AsyncQdrantClient, "info", incompatible)
+    with pytest.raises(DomainError) as rejected:
+        await registry.probe(
+            target.backend_id, await registry.connection(target.backend_id, "qdrant")
+        )
+    assert rejected.value.code == "BACKEND_UNAVAILABLE"
