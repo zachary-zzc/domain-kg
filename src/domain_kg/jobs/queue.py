@@ -152,6 +152,8 @@ class JobQueue:
 
     @staticmethod
     def _action(kind: str) -> Action:
+        if kind == "purge_material":
+            return Action.PURGE
         if kind == "curate":
             return Action.CURATE
         if kind not in ("ingest", "replace", "repair", "restore_material", "reprocess_material"):
@@ -173,7 +175,7 @@ class JobQueue:
         if session is None:
             stores = (
                 await self.router.for_sources(access, command.kg_id)
-                if command.kind in ("restore_material", "reprocess_material")
+                if command.kind in ("restore_material", "reprocess_material", "purge_material")
                 else await self.router.for_kg(access, command.kg_id)
             )
             self._authorities[key] = stores.authority
@@ -183,6 +185,12 @@ class JobQueue:
                 ErrorCode.REVISION_NOT_READY, "Bind the source before opening a transaction."
             )
         reference = ScopedRef(org_id=command.org_id, kg_id=command.kg_id, id=command.target_id)
+        if command.kind == "purge_material":
+            from domain_kg.materials.purge import authorize_purge_job
+
+            await authority._require("materials", reference, session=session)
+            await authorize_purge_job(self, access, command, session)
+            return command.target_id
         raw = await authority._require("material_versions", reference, session=session)
         await authority.require_version(reference, session=session)
         material = UUID(raw["material"]["id"])
@@ -312,10 +320,26 @@ class JobQueue:
         allowed = (
             kinds
             if kinds is not None
-            else ("ingest", "replace", "repair", "restore_material", "reprocess_material", "curate")
+            else (
+                "ingest",
+                "replace",
+                "repair",
+                "restore_material",
+                "reprocess_material",
+                "curate",
+                "purge_material",
+            )
         )
         if not allowed or not set(allowed).issubset(
-            {"ingest", "replace", "repair", "restore_material", "reprocess_material", "curate"}
+            {
+                "ingest",
+                "replace",
+                "repair",
+                "restore_material",
+                "reprocess_material",
+                "curate",
+                "purge_material",
+            }
         ):
             raise ValueError("job kinds require a configured handler")
         # Expired leases at the bound become explicit terminal failures; no
@@ -748,6 +772,11 @@ class JobQueue:
                 or record["actor"] != raw["actor"]
             ):
                 raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Curation acceptance differs.")
+        elif job.kind == "purge_material":
+            from domain_kg.materials.purge import verify_purge_acceptance
+
+            await verify_purge_acceptance(self, access, raw)
+            return True
         elif not await self.policy.material_visible(access, job.kg_id, UUID(raw["material_id"])):
             raise inaccessible_reference()
         manifest = await self.database.publication_manifests.find_one(
@@ -784,6 +813,11 @@ class JobQueue:
         )
         if raw is None:
             raise inaccessible_reference()
+        if raw["kind"] == "purge_material":
+            from domain_kg.materials.purge import visible_purge_job
+
+            await visible_purge_job(self, current, raw, session)
+            return raw
         if raw["kind"] == "curate":
             from domain_kg.graph.curation import authorize_curation
 

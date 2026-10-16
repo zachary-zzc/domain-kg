@@ -17,7 +17,7 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | 11: Scoped graph inspection and traversal | Complete locally | 13 smoke checks; regular regression 176 passed, one physical skip; two additional reproduced integrity failures fixed and verified. |
 | 12: Filtered vector and lexical retrieval | Complete locally | 22 smoke checks; regular regression 184 passed, one physical skip; current metadata/support filters, scoped native adapter and embedding-space fences. |
 | 13: Federated fast/deep search | Complete locally | 34 smoke checks; regular regression 202 passed, one physical skip; native mix, two-KG fusion, partial failure rules and model-specific source windows verified. |
-| 14: Persistent edits and material changes | In progress | Removal/restoration, metadata and delta reuse, and retained-version substeps pass local checks. Initial source-scoped node curation smoke passes; remaining curation/lifecycle cases are still in progress. |
+| 14: Persistent edits and material changes | In progress | Material lifecycle, delta reuse, node/relation curation, visibility, history and retained cleanup pass local checks. Reversible merge/split remains in progress. |
 | 15–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
@@ -167,6 +167,9 @@ Its final real-store regression passed 21 checks in 711.76 seconds, including ra
 current-permission rollback and source/public scope boundaries. Never-published
 originals now restore through a fully authorized reconstruction job while remaining
 hidden until verified publication. The combined restoration/replacement regression
-passed 18 checks in 358.74 seconds. Merge/split and retained physical purge remain
-unfinished, so Task 14's plan boxes remain unchecked. See [curation](curation.md)
-and [material changes](incremental-changes.md).
+passed 18 checks in 358.74 seconds. Retained cleanup passed five recovery checks in
+87.58 seconds and two source/curation checks in 90.80 seconds. It preserves B's
+support, retained reads and human corrections, and independently public claims.
+Merge/split remains unfinished, so Task 14's plan boxes remain unchecked. See
+[curation](curation.md), [material changes](incremental-changes.md), and
+[retained cleanup](material-purge.md).

@@ -33,6 +33,8 @@ from domain_kg.materials.models import RemoveMaterial as RemoveMaterial
 from domain_kg.materials.models import ReplaceMaterial as ReplaceMaterial
 from domain_kg.materials.models import UploadCommand as UploadCommand
 from domain_kg.materials.models import UploadReceipt as UploadReceipt
+from domain_kg.materials.purge_models import PurgeMaterial as PurgeMaterial
+from domain_kg.materials.purge_models import PurgeReceipt as PurgeReceipt
 from domain_kg.models import Namespace, ScopedRef
 from domain_kg.models import PageRequest as PageRequest
 from domain_kg.models import SourceVersion as SourceVersion
@@ -116,6 +118,7 @@ class MaterialService(Protocol):
     async def add(self, access: AccessContext, command: AddMaterial) -> IngestReceipt: ...
     async def replace(self, access: AccessContext, command: ReplaceMaterial) -> IngestReceipt: ...
     async def remove(self, access: AccessContext, command: RemoveMaterial) -> RemovalReceipt: ...
+    async def purge(self, access: AccessContext, command: PurgeMaterial) -> PurgeReceipt: ...
 
 
 class Parser(Protocol):

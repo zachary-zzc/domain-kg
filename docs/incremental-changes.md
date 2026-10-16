@@ -76,5 +76,8 @@ The combined local restoration and replacement regression passed 18 real-store
 checks in 358.74 seconds, including current provider restrictions and activation
 failures after original loss, grant revocation, deletion and retention expiry.
 
-Complete transport exposure, merge/split and retained physical purge are still in
-progress; Task 14's plan gates have not been marked complete.
+Owner-only retained physical cleanup now passes its bounded local checks, including
+partial deletion recovery, active pins, conflicting references, independent source
+corrections and public human claims. See [material purge](material-purge.md).
+Complete transport exposure and merge/split are still in progress; Task 14's plan
+gates have not been marked complete.

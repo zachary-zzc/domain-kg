@@ -13,6 +13,11 @@ class JobRunner:
         self.queue, self.pipeline = queue, pipeline
 
     async def _steps(self, job: LeasedJob) -> None:
+        if job.kind == "purge_material":
+            from domain_kg.materials.purge import PurgeService
+
+            await PurgeService(self.queue).run(job)
+            return
         if not self.pipeline.steps:
             self.pipeline.require_configured()
         steps = (
@@ -59,7 +64,11 @@ class JobRunner:
             if heartbeat in done:
                 await heartbeat  # Lost lease/revocation cancels any ongoing step.
             await work
-            await self.queue.finish(job)
+            if job.kind == "purge_material":
+                if not await self.queue.accepted(job):
+                    raise DomainError(ErrorCode.REVISION_NOT_READY, "Cleanup is not accepted.")
+            else:
+                await self.queue.finish(job)
         except asyncio.CancelledError:
             # Worker/request death leaves the durable command recoverable after
             # lease expiration. Only explicit authorized cancel changes its state.

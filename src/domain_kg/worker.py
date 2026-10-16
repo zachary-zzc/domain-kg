@@ -29,11 +29,14 @@ async def serve(
     repair_only: bool = False,
     restore_only: bool = False,
     curation_only: bool = False,
+    purge_only: bool = False,
 ) -> None:
     runner.pipeline.require_configured()
     while True:
         kinds = (
-            ("curate",)
+            ("purge_material",)
+            if purge_only
+            else ("curate",)
             if curation_only
             else ("restore_material",)
             if restore_only
@@ -56,6 +59,7 @@ async def main(
     repair_only: bool = False,
     restore_only: bool = False,
     curation_only: bool = False,
+    purge_only: bool = False,
 ) -> None:
     settings = Settings()
     client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
@@ -67,7 +71,9 @@ async def main(
     try:
         queue = JobQueue(policy, router)
         approved_providers = ProviderRegistry.from_file(settings.provider_config)
-        if not approved_providers.profiles and not (repair_only or restore_only or curation_only):
+        if not approved_providers.profiles and not (
+            repair_only or restore_only or curation_only or purge_only
+        ):
             raise DomainError(
                 ErrorCode.PROVIDER_UNAVAILABLE,
                 "Configure approved provider profiles before starting a worker.",
@@ -84,6 +90,7 @@ async def main(
             repair_only=repair_only,
             restore_only=restore_only,
             curation_only=curation_only,
+            purge_only=purge_only,
         )
     finally:
         await router.close()
@@ -103,6 +110,11 @@ if __name__ == "__main__":
         help="restore retained material projections without a provider",
     )
     mode.add_argument(
+        "--purge-only",
+        action="store_true",
+        help="clean expired, owner-authorized material data without a provider",
+    )
+    mode.add_argument(
         "--curation-only",
         action="store_true",
         help="process human curations; unchanged embedded text needs no provider",
@@ -115,6 +127,7 @@ if __name__ == "__main__":
                 repair_only=args.repair_only,
                 restore_only=args.restore_only,
                 curation_only=args.curation_only,
+                purge_only=args.purge_only,
             )
         )
     except DomainError as exc:

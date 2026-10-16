@@ -22,6 +22,7 @@ from domain_kg.materials.models import (
     RestoreReadPermit,
     UpdateMaterialMetadata,
 )
+from domain_kg.materials.purge_models import PurgeMaterial, PurgeReceipt
 from domain_kg.materials.service import MaterialService, digest
 from domain_kg.models import ScopedRef, SourceVersion
 from domain_kg.revisions.journal import PublicationJournal
@@ -32,6 +33,11 @@ class MaterialLifecycle:
         self.materials, self.queue = materials, queue
         self.policy, self.database = materials.policy, materials.database
         self.transactions = materials.repository
+
+    async def purge(self, access: AccessContext, command: PurgeMaterial) -> PurgeReceipt:
+        from domain_kg.materials.purge import PurgeService
+
+        return await PurgeService(self.queue).admit(access, command)
 
     async def _record(
         self,
