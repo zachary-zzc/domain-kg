@@ -196,3 +196,127 @@ async def test_import_plan_replay_authenticates_its_sealed_normalized_records(
     with pytest.raises(DomainError) as altered:
         await service.plan(editor, source)
     assert altered.value.code == ErrorCode.EVIDENCE_VALIDATION_FAILED
+
+
+async def test_private_import_admission_is_atomic_replayable_and_not_normal_ingestion(
+    material_service, team
+):
+    import asyncio
+
+    from domain_kg.jobs.queue import JobQueue
+
+    materials, editor, upload = await upload_csv(material_service, team)
+    service = Importer(materials)
+    await service.initialize()
+    plan = await service.plan(
+        editor,
+        ImportSource(
+            kg_id=upload.kg_id,
+            upload_id=upload.upload_id,
+            format="csv",
+            idempotency_key="admission-plan",
+        ),
+    )
+    first, second = await asyncio.gather(service._admit(editor, plan), service._admit(editor, plan))
+    assert first == second and first.stage == "queued"
+    raw = await materials.database.jobs.find_one({"id": str(first.job_id)})
+    assert raw["kind"] == "import" and raw["import_plan_id"] == str(plan.id)
+    record = await materials.database.import_plans.find_one({"id": str(plan.id)})
+    assert record["state"] == "admitted" and record["job_id"] == str(first.job_id)
+    origin = await materials.database.import_source_origins.find_one(
+        {
+            "org_id": str(editor.org_id),
+            "kg_id": str(upload.kg_id),
+            "material_id": raw["material_id"],
+            "version_id": raw["target_id"],
+        }
+    )
+    assert origin and origin["plan_id"] == str(plan.id)
+    assert origin["support_status"] == "imported_unverified"
+    target = await materials.database.material_access.find_one({"id": raw["material_id"]})
+    assert target["acl_mode"] == "restricted" and target["active_version_id"] is None
+    assert await materials.database.jobs.count_documents({"kg_id": str(upload.kg_id)}) == 1
+    assert await materials.database.outbox.count_documents({"kg_id": str(upload.kg_id)}) == 1
+    assert not await materials.database.publication_bindings.find_one({"kg_id": str(upload.kg_id)})
+    queue = JobQueue(materials.policy, materials.router)
+    await queue.initialize()
+    assert await queue.claim("normal-worker") is None
+
+
+async def test_private_import_admission_rejects_stale_or_forged_plan_without_claiming_upload(
+    material_service, team
+):
+    materials, editor, upload = await upload_csv(material_service, team)
+    service = Importer(materials)
+    await service.initialize()
+    plan = await service.plan(
+        editor,
+        ImportSource(
+            kg_id=upload.kg_id,
+            upload_id=upload.upload_id,
+            format="csv",
+            idempotency_key="invalid-admission-plan",
+        ),
+    )
+    with pytest.raises(DomainError):
+        await service._admit(editor, plan.model_copy(update={"assertions": 999}))
+    assert not await materials.database.material_commands.find_one(
+        {"org_id": str(editor.org_id), "kg_id": str(plan.kg_id), "key": f"import-execute:{plan.id}"}
+    )
+    await materials.database.kgs.update_one(
+        {"id": str(upload.kg_id), "org_id": str(editor.org_id)},
+        {"$inc": {"visibility_revision": 1}},
+    )
+    with pytest.raises(DomainError) as stale:
+        await service._admit(editor, plan)
+    assert stale.value.code == ErrorCode.VERSION_CONFLICT
+    uploaded = await materials.database.uploads.find_one({"id": str(upload.upload_id)})
+    assert uploaded["state"] == "complete"
+    assert not await materials.database.import_source_origins.find_one({"kg_id": str(upload.kg_id)})
+    assert not await materials.database.jobs.find_one({"kg_id": str(upload.kg_id)})
+
+
+async def test_private_import_admission_replay_checks_job_ownership(material_service, team):
+    materials, editor, upload = await upload_csv(material_service, team)
+    service = Importer(materials)
+    await service.initialize()
+    plan = await service.plan(
+        editor,
+        ImportSource(
+            kg_id=upload.kg_id,
+            upload_id=upload.upload_id,
+            format="csv",
+            idempotency_key="job-proof-plan",
+        ),
+    )
+    receipt = await service._admit(editor, plan)
+    await materials.database.jobs.update_one(
+        {"id": str(receipt.job_id), "org_id": str(editor.org_id), "kg_id": str(upload.kg_id)},
+        {"$set": {"import_plan_hash": "0" * 64}},
+    )
+    with pytest.raises(DomainError) as altered:
+        await service._admit(editor, plan)
+    assert altered.value.code == ErrorCode.PROJECTION_INCONSISTENT
+
+
+async def test_import_plan_cannot_admit_after_current_kg_grant_is_revoked(material_service, team):
+    materials, editor, upload = await upload_csv(material_service, team)
+    service = Importer(materials)
+    await service.initialize()
+    plan = await service.plan(
+        editor,
+        ImportSource(
+            kg_id=upload.kg_id,
+            upload_id=upload.upload_id,
+            format="csv",
+            idempotency_key="revoked-plan",
+        ),
+    )
+    owner = await team[1].resolve_access(team[2]["owner"], [upload.kg_id], Action.MANAGE_GRANTS)
+    await team[1].set_grant(
+        owner, upload.kg_id, "member", team[3]["editor"].id, None, idempotency_key="revoke-importer"
+    )
+    with pytest.raises(DomainError):
+        await service._admit(editor, plan)
+    assert not await materials.database.jobs.find_one({"kg_id": str(upload.kg_id)})
+    assert not await materials.database.import_source_origins.find_one({"kg_id": str(upload.kg_id)})

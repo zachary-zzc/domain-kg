@@ -67,3 +67,13 @@ branch predicates; opting into unverified evidence still requires current ACLs.
 The explicit prepared-import type rejects verified/manual claim support, invented
 claim spans and inherited descriptions; its snapshot chunks retain their actual
 parsed artifact separately. Admission and the import worker are not wired yet.
+
+Internal atomic admission now joins the material/version, restricted uploader ACL,
+import job/outbox, origin ledger, quota transfer and upload claim in the existing
+MongoDB material transaction. It validates the exact sealed plan and current
+policy/schema/publication again, and verifies plan/job/source/provenance references
+before returning a receipt. Concurrent and original-read-racing calls observe one
+accepted job. Forged plans cannot reserve the valid command key. Native material
+submission remains unchanged. This component is private: ordinary workers still
+exclude import jobs, and no public execute route is available until the dedicated
+import pipeline is ready.

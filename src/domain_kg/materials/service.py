@@ -5,7 +5,7 @@ import hashlib
 import json
 from collections.abc import AsyncGenerator, AsyncIterable, AsyncIterator
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from pymongo.asynchronous.client_session import AsyncClientSession
@@ -28,6 +28,9 @@ from domain_kg.models import ScopedRef
 from domain_kg.storage.blobs import BlobStore
 from domain_kg.storage.models import MaterialRecord, MaterialVersionRecord
 from domain_kg.storage.router import KGStoreRouter
+
+if TYPE_CHECKING:
+    from domain_kg.imports.models import ImportPlan
 
 
 def digest(value: dict[str, Any]) -> str:
@@ -232,7 +235,12 @@ class MaterialService:
         return await self._submit(access, ReplaceMaterial.model_validate(command), Action.REPLACE)
 
     async def _submit(
-        self, access: AccessContext, command: AddMaterial | ReplaceMaterial, action: Action
+        self,
+        access: AccessContext,
+        command: AddMaterial | ReplaceMaterial,
+        action: Action,
+        *,
+        import_plan: "ImportPlan | None" = None,
     ) -> IngestReceipt:
         current = await self._access(access, command.kg_id, action)
         stores = await self.router.for_kg(current, command.kg_id)
@@ -241,6 +249,16 @@ class MaterialService:
             [("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True
         )
         data = command.model_dump(mode="json", exclude={"inline_text"})
+        if import_plan is not None:
+            if (
+                not isinstance(command, AddMaterial)
+                or action != Action.INGEST
+                or command.upload_id != import_plan.source.upload_id
+                or command.kg_id != import_plan.kg_id
+                or command.acl_mode != "restricted"
+            ):
+                raise inaccessible_reference()
+            data["import_plan"] = import_plan.model_dump(mode="json")
         inline = command.inline_text.encode("utf-8") if command.inline_text is not None else None
         if inline is not None:
             data["inline_sha256"], data["inline_bytes"] = (
@@ -396,10 +414,21 @@ class MaterialService:
             job = JobCommand(
                 **ns,
                 id=uuid4(),
-                kind="replace" if isinstance(command, ReplaceMaterial) else "ingest",
+                kind="import"
+                if import_plan is not None
+                else ("replace" if isinstance(command, ReplaceMaterial) else "ingest"),
                 target_id=version,
                 idempotency_key=command.idempotency_key,
             )
+            import_fields: dict[str, str] = {}
+            if import_plan is not None:
+                from domain_kg.imports.admission import admit_import
+
+                origin = await admit_import(self, current, import_plan, blob, job.id, session)
+                import_fields = {
+                    "import_plan_id": str(origin.plan_id),
+                    "import_plan_hash": origin.plan_hash,
+                }
             metadata_target = await self.database.material_access.find_one(
                 {"org_id": str(current.org_id), "kg_id": str(command.kg_id), "id": str(material)},
                 session=session,
@@ -408,6 +437,7 @@ class MaterialService:
                 raise inaccessible_reference()
             await self.database.jobs.insert_one(
                 job.model_dump(mode="json")
+                | import_fields
                 | {
                     "actor": current.principal.model_dump(mode="json"),
                     "material_id": str(material),

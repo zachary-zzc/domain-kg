@@ -14,9 +14,11 @@ from domain_kg.graph.schema import schema_for_kg
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.imports.legacy import MAX_BYTES, parse_legacy
 from domain_kg.imports.models import ImportPlan, ImportSource
-from domain_kg.materials.models import BlobRef
+from domain_kg.imports.provenance import ImportOrigin, check_import_origin
+from domain_kg.jobs.models import JobReceipt
+from domain_kg.materials.models import AddMaterial, BlobRef
 from domain_kg.materials.service import MaterialService
-from domain_kg.models import Namespace
+from domain_kg.models import Namespace, SourceVersion
 from domain_kg.storage.blobs import BlobStore
 
 
@@ -35,6 +37,127 @@ class Importer:
         await self.database.import_plans.create_index(
             [("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True
         )
+
+    async def _admit(self, access: AccessContext, plan: ImportPlan) -> JobReceipt:
+        """Internal component; not exposed until the import worker is configured."""
+        from domain_kg.imports.admission import record_matches_plan
+
+        plan = ImportPlan.model_validate(plan)
+        current = await self.policy.revalidate(access, action=Action.INGEST)
+        if plan.org_id != current.org_id or plan.kg_id not in current.kg_ids:
+            raise inaccessible_reference()
+        record = await self.database.import_plans.find_one(
+            {
+                "org_id": str(current.org_id),
+                "kg_id": str(plan.kg_id),
+                "id": str(plan.id),
+                "issuer": current.principal.issuer,
+                "subject": current.principal.subject,
+            }
+        )
+        if record is None or not record_matches_plan(record, plan):
+            raise DomainError(
+                ErrorCode.EVIDENCE_VALIDATION_FAILED, "The import plan differs from its seal."
+            )
+        if record["state"] == "validated":
+            try:
+                if await self.plan(current, plan.source) != plan:
+                    raise DomainError(
+                        ErrorCode.VERSION_CONFLICT, "The validated import scope changed."
+                    )
+            except DomainError as error:
+                if error.code not in (
+                    ErrorCode.VERSION_CONFLICT,
+                    ErrorCode.RESOURCE_NOT_ACCESSIBLE,
+                ):
+                    raise
+                winner = await self.database.import_plans.find_one(
+                    {
+                        "org_id": str(current.org_id),
+                        "kg_id": str(plan.kg_id),
+                        "id": str(plan.id),
+                        "issuer": current.principal.issuer,
+                        "subject": current.principal.subject,
+                        "state": "admitted",
+                    }
+                )
+                if winner is None or not record_matches_plan(winner, plan):
+                    raise
+                record = winner
+        elif record["state"] != "admitted":
+            raise DomainError(ErrorCode.VERSION_CONFLICT, "The import plan is not executable.")
+        accepted = await self.materials._submit(
+            current,
+            AddMaterial(
+                kg_id=plan.kg_id,
+                upload_id=plan.source.upload_id,
+                title=f"Legacy import {plan.source.origin or plan.content_hash[:12]}"[:1000],
+                acl_mode="restricted",
+                idempotency_key=f"import-execute:{plan.id}",
+            ),
+            Action.INGEST,
+            import_plan=plan,
+        )
+        blob = BlobRef.model_validate(record["binding"]["blob"])
+        if (accepted.org_id, accepted.kg_id, accepted.material_id, accepted.version_id) != (
+            current.org_id,
+            plan.kg_id,
+            blob.material_id,
+            blob.version_id,
+        ):
+            raise DomainError(
+                ErrorCode.PROJECTION_INCONSISTENT, "The admitted import source differs."
+            )
+        raw_job = await self.database.jobs.find_one(
+            {
+                "org_id": str(current.org_id),
+                "kg_id": str(plan.kg_id),
+                "id": str(accepted.job_id),
+                "kind": "import",
+                "import_plan_id": str(plan.id),
+                "import_plan_hash": record["plan_hash"],
+                "material_id": str(accepted.material_id),
+                "target_id": str(accepted.version_id),
+                "actor.issuer": current.principal.issuer,
+                "actor.subject": current.principal.subject,
+                "actor.kind": current.principal.kind,
+            }
+        )
+        if raw_job is None:
+            raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "The admitted import job differs.")
+        source = SourceVersion(
+            **{field: getattr(blob, field) for field in SourceVersion.model_fields}
+        )
+        admitted_plan = await self.database.import_plans.find_one(
+            {
+                "org_id": str(current.org_id),
+                "kg_id": str(plan.kg_id),
+                "id": str(plan.id),
+                "issuer": current.principal.issuer,
+                "subject": current.principal.subject,
+                "state": "admitted",
+                "job_id": str(accepted.job_id),
+                "source": source.model_dump(mode="json"),
+                "plan_hash": record["plan_hash"],
+            }
+        )
+        if admitted_plan is None or not record_matches_plan(admitted_plan, plan):
+            raise DomainError(
+                ErrorCode.PROJECTION_INCONSISTENT, "The admitted import plan differs."
+            )
+        await check_import_origin(
+            self.database,
+            source,
+            ImportOrigin(
+                **source.model_dump(),
+                plan_id=plan.id,
+                plan_hash=record["plan_hash"],
+                graph_hash=record["graph_hash"],
+                origin=plan.source.origin or plan.content_hash,
+            ),
+        )
+        await self.policy.revalidate(current, action=Action.INGEST)
+        return JobReceipt(org_id=current.org_id, kg_id=plan.kg_id, job_id=accepted.job_id)
 
     async def plan(self, access: AccessContext, source: ImportSource) -> ImportPlan:
         source = ImportSource.model_validate(source)
