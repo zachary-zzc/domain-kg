@@ -7,7 +7,8 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | 1: LightRAG and NoSQL compatibility spike | Complete | 17 tests pass against the real local stores; lint and mypy pass. Kernel RAM/swap limits verified. |
 | 2: Domain contracts and namespace integrity | Complete | 47 smoke tests pass; full regression 59 tests; lint and strict mypy pass. |
 | 3: OIDC identity and organization accounts | Local checks pass; external gate pending | 19 smoke tests pass, including signed issuer fixtures and real MongoDB transactions. A real development IdP login is still required. |
-| 4–19 | Pending | Follow the plan's dependency order. |
+| 4: Shared policy and scoped repositories | Complete locally | 18 smoke tests pass; full suite 81 tests; real MongoDB, Neo4j and Qdrant scope checks. |
+| 5–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
@@ -40,4 +41,8 @@ Reproduce the Task 2 laptop gate with `python3 scripts/smoke.py --task 2`. Its f
 
 Task 3 implements external JWT verification and JWKS refresh, protected-resource discovery, exact issuer/subject identity, admission/suspension, transactional last-admin protection, groups, bounded service identities, and browser sessions with PKCE/nonce/state/CSRF checks. Identity cursors bind the actor, organization and policy revision. The official MCP client successfully used the real verifier with an isolated signed fixture; suspending that member immediately denied the same token.
 
-The complete current suite passed 73 tests in 14.53 seconds; Ruff and strict mypy pass. Four Qdrant loopback-HTTP warnings remain the same documented development limitation. Docker limits remain 1.476 GB with swap disabled, no OOM kills and no restarts. [Development identity instructions](identity-development.md) describe the remaining real-provider login gate. No development issuer/client has been supplied, so Task 3 is not marked complete and Tasks 4–19 remain pending. The test-only issuer is never enabled in the application runtime. Smoke containers are stopped after the local checks to release RAM; the runner restarts them when needed.
+Task 3's complete suite passed 73 tests; Ruff and strict mypy passed. [Development identity instructions](identity-development.md) describe the remaining real-provider login gate. No development issuer/client has been supplied, so Task 3 is not marked complete. At the user's request, implementation continues using the locally verified identity boundary; the real login gate still blocks release acceptance. The test-only issuer is never enabled in the application runtime.
+
+Task 4's complete suite passed 81 tests in 21.09 seconds, including interleaved principals querying real graph/vector stores, empty eligible scopes, restricted ACL intersection, action scopes, service revocation, concurrent last-owner removal, and revocation between policy reads. Its laptop smoke passed 18 tests. Current policy and visibility revisions are rechecked before results return. Organization-admin and operator flags do not grant KG data access. Five loopback Qdrant warnings remain a documented development limitation.
+
+The smoke stack remains capped at 1.476 GB with swap disabled. Repeated disposable schema tests reached MongoDB's inherited file-descriptor limit; its volume recovered after applying the official 64,000 open-file setting. No RAM limit was raised. See [resource notes](development-resources.md). Smoke containers remain up during continued implementation and are stopped when work pauses.
