@@ -92,7 +92,11 @@ async def test_object_store_preserves_original_bytes(settings: Settings) -> None
             aws_access_key_id=settings.s3_access_key,
             aws_secret_access_key=settings.s3_secret_key.get_secret_value(),
             region_name="us-east-1",
-            config=Config(connect_timeout=5, read_timeout=5, retries={"max_attempts": 1}),
+            # This laptop probe addresses a loopback service directly. A system
+            # HTTP proxy can alter Expect/Continue uploads and their checksums.
+            config=Config(
+                connect_timeout=5, read_timeout=5, retries={"max_attempts": 1}, proxies={}
+            ),
         )
         client.create_bucket(Bucket=bucket)
         try:
