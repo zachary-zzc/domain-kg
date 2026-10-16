@@ -41,3 +41,12 @@ Status refresh uses a local HTMX request with fresh authorization and clears the
 view on an error. There is no automatic background polling. The six-case job
 service/browser gate passed in 17.86 seconds; durable recovery and signed HTTP/MCP
 regression passed 14 cases in 53.58 seconds.
+
+Editors can submit uploaded files or inline text, replace the current active
+version and edit metadata through explicit typed forms. The file picker computes
+SHA-256 and sends bytes to the existing owned-upload API; no filesystem path is
+accepted. Replacements retain the prior accepted source until publication, and
+metadata-only changes avoid model calls. Forged actor fields are rejected before
+job admission. The source form flow passed its dedicated 63.02-second check and
+a four-case source/workspace/job regression in 79.09 seconds. The JavaScript
+syntax check passed; the full browser acceptance remains separate.

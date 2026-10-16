@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}<nav class="tabs"><a href="/admin/kgs/{{ kg.id }}">Overview</a><a href="/admin/kgs/{{ kg.id }}/search">Search</a><a href="/admin/kgs/{{ kg.id }}/jobs">Jobs</a></nav>
+{% if can_edit %}<p><a class="button" href="/admin/kgs/{{ kg.id }}/materials/new">Add material</a></p>{% endif %}
 <form method="get"><label><input type="checkbox" name="include_unverified" value="true" {% if include_unverified %}checked{% endif %}> Include unverified legacy imports</label><button type="submit">Apply</button></form>
 <table><thead><tr><th>Material</th><th>Evidence</th><th>Revision</th></tr></thead><tbody>{% for item in materials.items %}<tr><td><a href="/admin/kgs/{{ kg.id }}/materials/{{ item.id }}?include_unverified={{ 'true' if include_unverified else 'false' }}">{{ item.title }}</a></td><td>{{ 'Unverified legacy import' if item.import_origin else 'Accepted source' }}</td><td>{{ item.revision }}</td></tr>{% else %}<tr><td colspan="3">No visible materials match this view.</td></tr>{% endfor %}</tbody></table>
 {% if materials.next_cursor %}<a href="?cursor={{ materials.next_cursor|urlencode }}&amp;include_unverified={{ 'true' if include_unverified else 'false' }}">Next page</a>{% endif %}{% endblock %}

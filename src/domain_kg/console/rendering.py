@@ -82,7 +82,8 @@ async def page(
             "csrf": session.csrf,
             "can_team": session.member.role == "admin",
             "can_operator": access.platform_operator,
-            "can_edit": any(grant.role in ("owner", "editor") for grant in access.grants),
+            "can_edit": any(grant.role in ("owner", "editor") for grant in access.grants)
+            and context.get("kg", {}).get("state") == "ready",
             "can_owner": any(grant.role == "owner" for grant in access.grants),
         }
         | context,
