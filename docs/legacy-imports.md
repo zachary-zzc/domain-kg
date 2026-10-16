@@ -3,7 +3,7 @@
 The offline decoder accepts a CSV triple export, directed GraphML, or a portable
 LightRAG 1.5.7 snapshot envelope. It consumes bytes supplied by the service, never
 opens a caller-selected path, connects to a legacy gateway or runs database text.
-The current decoder does not admit or publish imports; durable planning, jobs,
+The decoder and durable planning service do not admit or publish imports; jobs,
 source reconciliation and verified graph/vector publication are subsequent work.
 
 Inputs are at most 2 MiB, 1,000 nodes, 1,000 relations after source expansion and
@@ -42,3 +42,18 @@ The reviewed [PhageAgent reuse map](code-reuse.md) supplies the CSV format and
 manifest/normalization ideas. This adapter is newly written; no application code,
 corpus, private snapshot or evaluation output was copied. Stable namespaces,
 source ownership and current policy are Domain KG's responsibility.
+
+The shared planning service reads a completed upload owned by the current caller,
+checks all blob/reference fields and its byte checksum, validates node and
+predicate types against the selected schema, then seals an immutable MongoDB plan.
+The plan binds the actor, namespace, policy, KG configuration/publication/visibility,
+schema and original blob. It expires within one hour or with its upload. Replay
+rechecks the original, current transactional references and sealed plan/normalized
+records; a stale binding or conflicting idempotency key is rejected. Plans expose
+counts, hashes, warnings and revision pins, without private export text or keys.
+
+An optional opaque import `origin` preserves old/new identity mappings across
+changed exports from the same legacy system. Without one, the exact upload hash
+provides an isolated origin. Neither an origin nor an export establishes a grant.
+Planning alone creates no job or accepted publication binding and is not yet a
+public transport operation.
