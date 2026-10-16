@@ -21,7 +21,9 @@ class JobRunner:
         if not self.pipeline.steps:
             self.pipeline.require_configured()
         steps = (
-            self.pipeline.curation_steps
+            self.pipeline.import_steps
+            if job.kind == "import"
+            else self.pipeline.curation_steps
             if job.kind == "curate"
             else self.pipeline.restore_steps
             if job.kind == "restore_material"

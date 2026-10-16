@@ -28,10 +28,9 @@ export envelope, not an undocumented native database dump reader. Its consistenc
 flag and claimed source hashes do not prove that originals are available.
 
 All decoded assertions remain `imported_unverified`. No snapshot status, uploaded
-CSV or declared checksum manufactures a quotation from a missing document. The
-future execution service must reconcile originals, enforce current source policy
-and exclude unverified claims, descriptions and import chunks from default search
-before any activation is allowed.
+CSV or declared checksum manufactures a quotation from a missing document. The worker enforces current source policy and excludes unverified claims,
+descriptions and import chunks from default search. Missing original documents
+remain unverified even after their export snapshot is published.
 
 The raw SHA-256 identifies exact uploaded bytes. A separate versioned NFC/newline
 normalized fingerprint is scoped by organization, KG and import origin; it never
@@ -66,7 +65,7 @@ existing sealed serialization. Default scopes exclude imported sources before
 branch predicates; opting into unverified evidence still requires current ACLs.
 The explicit prepared-import type rejects verified/manual claim support, invented
 claim spans and inherited descriptions; its snapshot chunks retain their actual
-parsed artifact separately. Admission and the import worker are not wired yet.
+parsed artifact separately.
 
 Internal atomic admission now joins the material/version, restricted uploader ACL,
 import job/outbox, origin ledger, quota transfer and upload claim in the existing
@@ -74,9 +73,8 @@ MongoDB material transaction. It validates the exact sealed plan and current
 policy/schema/publication again, and verifies plan/job/source/provenance references
 before returning a receipt. Concurrent and original-read-racing calls observe one
 accepted job. Forged plans cannot reserve the valid command key. Native material
-submission remains unchanged. This component is private: ordinary workers still
-exclude import jobs, and no public execute route is available until the dedicated
-import pipeline is ready.
+submission remains unchanged. Public import execution is being added separately
+from this verified worker milestone.
 
 The prepared-row builder verifies the exact export checksum and retains its raw
 UTF-8 text (including a BOM, when present) as export context. Original document
@@ -87,3 +85,25 @@ positive, negative and uncertain polarity; the CSV contract implies positive.
 A decoded name absent literally from raw XML/JSON context produces an explicit
 unlocated-record warning, without a fabricated quotation. Earlier experimental
 private plans predating polarity support must be recreated rather than reused.
+
+The dedicated import pipeline validates and decodes the sealed export, persists
+version-owned observations/supports and old/new entity mappings, then uses only
+the selected approved embedding provider. It never invokes extraction or creates
+a fake provider extraction artifact. Existing isolated projection staging,
+readiness verification and MongoDB publication fencing remain authoritative.
+`python -m domain_kg.worker --import-only --once` processes one queued import.
+
+Explicit `imported_unverified` search filters expose labeled results only under
+current source ACLs. Search candidates, graph paths, nodes, edges, material details
+and opt-in citations preserve immutable import origin. Import citations point to
+the uploaded export and contain no invented claim spans. Material/citation reads
+require `include_unverified=true`; ordinary retrieval keeps its verified/manual
+default. Curator commands can inspect imported targets under their current ACLs.
+Suppressing an imported node hides all context chunks from that export, because
+legacy labels may recur or be escaped outside their anchor; independent materials
+remain eligible. Original download remains an authorized immutable-file operation.
+
+The worker's five-case serial database smoke passed in 192.89 seconds, covering
+all five retrieval modes, explicit provenance, suppression, native visibility,
+inspection, projection failure/retry and revocation. Unit/protocol checks passed
+159 tests in 4.89 seconds; Ruff and strict mypy passed. Task 16 remains in progress.

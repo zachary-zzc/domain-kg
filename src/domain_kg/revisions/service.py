@@ -288,7 +288,7 @@ class RevisionService:
                 kg_ids=(command.kg_id,),
                 query=str(command.target_id),
                 mode="graph",
-                filters=SearchFilters(material_ids=command.source_ids),
+                filters=SearchFilters.for_curation(command.source_ids),
             ),
             command.kg_id,
         )
@@ -594,7 +594,7 @@ class RevisionService:
                 kg_ids=(kg,),
                 query=str(subject),
                 mode="graph",
-                filters=SearchFilters(material_ids=source_ids),
+                filters=SearchFilters.for_curation(source_ids),
             ),
             kg,
         )

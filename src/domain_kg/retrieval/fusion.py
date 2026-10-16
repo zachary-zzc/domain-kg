@@ -34,6 +34,8 @@ def fuse(
                 previous.text != item.text
                 or set(previous.citation_ids) != set(item.citation_ids)
                 or previous.provenance != item.provenance
+                or previous.import_origin != item.import_origin
+                or previous.support_status != item.support_status
             ):
                 raise DomainError(
                     ErrorCode.PROJECTION_INCONSISTENT, "Evidence branches are inconsistent."

@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import Field, field_validator, model_validator
 
 from domain_kg.graph.identity_models import IdentityWitness
+from domain_kg.imports.provenance import ImportOrigin
 from domain_kg.materials.models import MaterialMetadata
 from domain_kg.models import FrozenModel, ManualProvenance, NonNegative, PreservedText, UTCDateTime
 
@@ -14,6 +15,14 @@ SupportStatus = Literal["verified", "manual", "imported_unverified"]
 
 
 class SearchFilters(FrozenModel):
+    @classmethod
+    def for_curation(cls, material_ids: tuple[UUID, ...] = ()) -> Self:
+        """Explicit curator commands inspect all current provenance under the same ACLs."""
+        return cls(
+            material_ids=material_ids,
+            support_statuses=("verified", "manual", "imported_unverified"),
+        )
+
     material_ids: tuple[UUID, ...] = ()
     exclude_material_ids: tuple[UUID, ...] = ()
     media_types: tuple[str, ...] = ()
@@ -162,6 +171,14 @@ class GraphStep(FrozenModel):
     original_subject_id: UUID | None = None
     original_target_id: UUID | None = None
     identity_mappings: tuple[IdentityWitness, ...] = ()
+    support_status: SupportStatus = "verified"
+    import_origin: ImportOrigin | None = None
+
+    @model_validator(mode="after")
+    def honest_import_path(self) -> Self:
+        if self.import_origin is not None and self.support_status != "imported_unverified":
+            raise ValueError("imported path support cannot claim verified or human provenance")
+        return self
 
 
 class EvidenceCandidate(FrozenModel):
@@ -180,9 +197,30 @@ class EvidenceCandidate(FrozenModel):
     method_ranks: dict[str, Annotated[int, Field(ge=1)]] = Field(default_factory=dict)
     graph_paths: tuple[tuple[GraphStep, ...], ...] = ()
     identity_mappings: tuple[IdentityWitness, ...] = ()
+    import_origin: ImportOrigin | None = None
+    support_status: SupportStatus | None = None
 
     @model_validator(mode="after")
     def honest_provenance(self) -> Self:
+        expected = (
+            "imported_unverified"
+            if self.import_origin
+            else ("manual" if self.kind == "manual" else "verified")
+        )
+        if self.support_status is None:
+            object.__setattr__(self, "support_status", expected)
+        elif self.support_status != expected:
+            raise ValueError("evidence status differs from its provenance")
+        if self.import_origin is not None and (
+            self.kind != "source"
+            or (self.kg_id, self.material_id, self.version_id)
+            != (
+                self.import_origin.kg_id,
+                self.import_origin.material_id,
+                self.import_origin.version_id,
+            )
+        ):
+            raise ValueError("import evidence must bind its exact source version")
         if any(witness.kg_id != self.kg_id for witness in self.identity_mappings):
             raise ValueError("identity witnesses must belong to the evidence KG")
         if self.kind == "source":

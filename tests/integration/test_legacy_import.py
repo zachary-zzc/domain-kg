@@ -240,7 +240,7 @@ async def test_private_import_admission_is_atomic_replayable_and_not_normal_inge
     assert not await materials.database.publication_bindings.find_one({"kg_id": str(upload.kg_id)})
     queue = JobQueue(materials.policy, materials.router)
     await queue.initialize()
-    assert await queue.claim("normal-worker") is None
+    assert await queue.claim("native-only-worker", kinds=("ingest", "replace")) is None
 
 
 async def test_private_import_admission_rejects_stale_or_forged_plan_without_claiming_upload(

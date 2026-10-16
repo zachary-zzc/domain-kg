@@ -56,7 +56,7 @@ class IdentityRollbackService:
                 kg_ids=(command.kg_id,),
                 query=str(directive.target.id),
                 mode="graph",
-                filters=SearchFilters(material_ids=sources),
+                filters=SearchFilters.for_curation(sources),
             ),
             command.kg_id,
         )

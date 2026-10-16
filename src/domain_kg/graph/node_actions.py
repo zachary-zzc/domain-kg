@@ -268,7 +268,7 @@ class NodeVisibilityService:
                 kg_ids=(command.kg_id,),
                 query=str(command.entity_id),
                 mode="graph",
-                filters=SearchFilters(material_ids=command.source_ids),
+                filters=SearchFilters.for_curation(command.source_ids),
             ),
             command.kg_id,
         )

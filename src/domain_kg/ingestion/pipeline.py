@@ -42,11 +42,14 @@ class Pipeline:
     repair_steps: tuple[PipelineStep, ...] = ()
     restore_steps: tuple[PipelineStep, ...] = ()
     curation_steps: tuple[PipelineStep, ...] = ()
+    import_steps: tuple[PipelineStep, ...] = ()
 
     def __post_init__(self) -> None:
         order = [STAGES.index(step.stage) for step in self.steps]
         if order != sorted(set(order)):
             raise ValueError("pipeline stages must be unique and ordered")
+        if self.import_steps and tuple(step.stage for step in self.import_steps) != STAGES:
+            raise ValueError("import work requires its complete dedicated pipeline")
         for steps in (self.repair_steps, self.restore_steps, self.curation_steps):
             if steps and tuple(step.stage for step in steps) != (
                 "embedding",
@@ -403,6 +406,7 @@ def publication_steps(
     repair: bool = False,
     restoration: bool = False,
     curation: bool = False,
+    importing: bool = False,
 ) -> tuple[PipelineStep, ...]:
     import hashlib
 
@@ -491,6 +495,12 @@ def publication_steps(
             from domain_kg.revisions.repair import RepairService
 
             return await RepairService(queue).embed(job, input_hash=await embed_hash(job))
+        if importing:
+            from domain_kg.imports.worker import ImportWorker
+
+            return await ImportWorker(queue, coordinator.providers).embed(
+                job, await required(job, resolve_step), await embed_hash(job)
+            )
         return await coordinator.embed(
             job, await required(job, resolve_step), input_hash=await embed_hash(job)
         )
@@ -567,6 +577,7 @@ def publication_steps(
 
 
 def configured_pipeline(queue: "JobQueue", providers: "ProviderService") -> Pipeline:
+    from domain_kg.imports.worker import import_steps
     from domain_kg.revisions.publication import ProjectionCoordinator
 
     preparation = preparation_steps(queue, providers=providers)
@@ -586,4 +597,5 @@ def configured_pipeline(queue: "JobQueue", providers: "ProviderService") -> Pipe
         repair_steps=repair,
         restore_steps=restore,
         curation_steps=curation,
+        import_steps=import_steps(queue, providers),
     )

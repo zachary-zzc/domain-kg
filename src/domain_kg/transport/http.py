@@ -85,6 +85,7 @@ def service_router(runtime: ServiceRuntime) -> APIRouter:
         kg_id: UUID,
         material_id: UUID | None = None,
         version_id: UUID | None = None,
+        include_unverified: bool = False,
     ) -> Citation:
         if version_id is not None and material_id is None:
             raise DomainError(ErrorCode.VALIDATION_ERROR, "A version requires its material ID.")
@@ -94,6 +95,7 @@ def service_router(runtime: ServiceRuntime) -> APIRouter:
             citation_id,
             material_id=material_id,
             version_id=version_id,
+            include_unverified=include_unverified,
         )
 
     @router.get("/kgs/{kg_id}/nodes/{entity_id}")
@@ -176,10 +178,16 @@ def service_router(runtime: ServiceRuntime) -> APIRouter:
 
     @router.get("/kgs/{kg_id}/materials/{material_id}")
     async def material(
-        request: Request, kg_id: UUID, material_id: UUID, version_id: UUID | None = None
+        request: Request,
+        kg_id: UUID,
+        material_id: UUID,
+        version_id: UUID | None = None,
+        include_unverified: bool = False,
     ) -> MaterialDetail:
         current = await access(request, (kg_id,), Action.READ)
-        return await runtime.inspection.get(current, kg_id, material_id, version_id)
+        return await runtime.inspection.get(
+            current, kg_id, material_id, version_id, include_unverified=include_unverified
+        )
 
     @router.patch("/kgs/{kg_id}/materials/{material_id}")
     async def metadata(

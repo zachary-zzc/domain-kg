@@ -30,11 +30,14 @@ async def serve(
     restore_only: bool = False,
     curation_only: bool = False,
     purge_only: bool = False,
+    import_only: bool = False,
 ) -> None:
     runner.pipeline.require_configured()
     while True:
         kinds = (
-            ("purge_material",)
+            ("import",)
+            if import_only
+            else ("purge_material",)
             if purge_only
             else ("curate",)
             if curation_only
@@ -60,6 +63,7 @@ async def main(
     restore_only: bool = False,
     curation_only: bool = False,
     purge_only: bool = False,
+    import_only: bool = False,
 ) -> None:
     settings = Settings()
     client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
@@ -91,6 +95,7 @@ async def main(
             restore_only=restore_only,
             curation_only=curation_only,
             purge_only=purge_only,
+            import_only=import_only,
         )
     finally:
         await router.close()
@@ -115,6 +120,11 @@ if __name__ == "__main__":
         help="clean expired, owner-authorized material data without a provider",
     )
     mode.add_argument(
+        "--import-only",
+        action="store_true",
+        help="process unverified legacy snapshots with approved embeddings only",
+    )
+    mode.add_argument(
         "--curation-only",
         action="store_true",
         help="process human curations; unchanged embedded text needs no provider",
@@ -128,6 +138,7 @@ if __name__ == "__main__":
                 restore_only=args.restore_only,
                 curation_only=args.curation_only,
                 purge_only=args.purge_only,
+                import_only=args.import_only,
             )
         )
     except DomainError as exc:

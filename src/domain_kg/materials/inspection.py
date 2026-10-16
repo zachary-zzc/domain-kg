@@ -9,6 +9,7 @@ from uuid import UUID
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.service import GraphService
 from domain_kg.identity.models import AccessContext, Action
+from domain_kg.imports.evidence import source_origin
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.materials.inspection_models import (
     MaterialDetail,
@@ -52,6 +53,16 @@ class MaterialInspection:
                 ErrorCode.PROJECTION_INCONSISTENT, "Material metadata ownership differs."
             )
         return MaterialSummary(
+            import_origin=next(
+                (
+                    binding.import_origin
+                    for binding in scope.current_view.projections
+                    if binding.source
+                    and binding.source.material_id == identifier
+                    and str(binding.source.version_id) == row["active_version_id"]
+                ),
+                None,
+            ),
             id=identifier,
             title=material["title"],
             revision=row["revision"],
@@ -131,9 +142,17 @@ class MaterialInspection:
         kg: UUID,
         material: UUID,
         version: UUID | None = None,
+        *,
+        include_unverified: bool = False,
     ) -> MaterialDetail:
         current = await self.queue.policy.revalidate(access, action=Action.READ)
-        filters = SearchFilters(material_ids=(material,), version_id=version)
+        filters = SearchFilters(
+            material_ids=(material,),
+            version_id=version,
+            support_statuses=("verified", "manual", "imported_unverified")
+            if include_unverified
+            else ("verified", "manual"),
+        )
         scope = await self.resolver.resolve(
             current, SearchRequest(kg_ids=(kg,), query="material metadata", filters=filters), kg
         )
@@ -185,6 +204,7 @@ class MaterialInspection:
         )
         await self.resolver.revalidate(scope)
         return MaterialDetail(
+            import_origin=source_origin(scope, source),
             material=summary,
             versions=tuple(versions),
             selected_version_id=source.version_id,

@@ -5,6 +5,7 @@ from uuid import UUID
 from domain_kg.graph.curation_models import ManualNode
 from domain_kg.graph.identity_models import IdentityWitness
 from domain_kg.graph.manual_relations import ManualRelation
+from domain_kg.imports.provenance import ImportOrigin
 from domain_kg.ingestion.models import Span
 from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.models import FrozenModel, ManualProvenance, SourceVersion
@@ -27,6 +28,7 @@ class NodeView(FrozenModel):
     identity_members: tuple[UUID, ...] = ()
     identity_mappings: tuple[IdentityWitness, ...] = ()
     requested_id: UUID | None = None
+    import_origins: tuple[ImportOrigin, ...] = ()
 
 
 class EdgeView(FrozenModel):
@@ -48,6 +50,7 @@ class EdgeView(FrozenModel):
     original_subject_id: UUID | None = None
     original_target_id: UUID | None = None
     identity_mappings: tuple[IdentityWitness, ...] = ()
+    import_origin: ImportOrigin | None = None
 
 
 class SubgraphView(FrozenModel):

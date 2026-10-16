@@ -156,7 +156,14 @@ class JobQueue:
             return Action.PURGE
         if kind == "curate":
             return Action.CURATE
-        if kind not in ("ingest", "replace", "repair", "restore_material", "reprocess_material"):
+        if kind not in (
+            "ingest",
+            "import",
+            "replace",
+            "repair",
+            "restore_material",
+            "reprocess_material",
+        ):
             raise DomainError(
                 ErrorCode.VALIDATION_ERROR, "This job kind has no configured handler."
             )
@@ -202,6 +209,10 @@ class JobQueue:
             access, command.kg_id, material, session=session
         ):
             raise inaccessible_reference()
+        if command.kind == "import":
+            from domain_kg.imports.authority import load_admitted
+
+            await load_admitted(self, access, command, material, session)
         if command.kind == "repair":
             active = await self.database.material_access.find_one(
                 {
@@ -322,6 +333,7 @@ class JobQueue:
             if kinds is not None
             else (
                 "ingest",
+                "import",
                 "replace",
                 "repair",
                 "restore_material",
@@ -333,6 +345,7 @@ class JobQueue:
         if not allowed or not set(allowed).issubset(
             {
                 "ingest",
+                "import",
                 "replace",
                 "repair",
                 "restore_material",

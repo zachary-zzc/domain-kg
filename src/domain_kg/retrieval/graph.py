@@ -5,6 +5,7 @@ from uuid import UUID, uuid5
 
 from domain_kg.graph.service import GraphService
 from domain_kg.graph.views import SubgraphView
+from domain_kg.imports.evidence import source_origin, visible_status
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.identity import evidence_identity
 from domain_kg.retrieval.models import EvidenceCandidate, GraphStep, SearchRequest, SubgraphRequest
@@ -131,6 +132,8 @@ class GraphRetrievalBranch:
                     original_subject_id=edge.original_subject_id,
                     original_target_id=edge.original_target_id,
                     identity_mappings=edge.identity_mappings,
+                    support_status=visible_status(edge.status),
+                    import_origin=edge.import_origin,
                 )
                 for start, end in (
                     (edge.subject_id, edge.target_id),
@@ -169,6 +172,7 @@ class GraphRetrievalBranch:
             candidates.append(
                 EvidenceCandidate(
                     kind="source",
+                    import_origin=source_origin(scope, chunk_row.source),
                     kg_id=scope.view.kg_id,
                     text=chunk_row.chunk.text,
                     citation_ids=(

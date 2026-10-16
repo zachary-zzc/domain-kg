@@ -261,6 +261,13 @@ class RetrievalService:
                 )
             ):
                 raise inconsistent()
+            from domain_kg.imports.evidence import source_origin
+
+            expected_origin = source_origin(scope, row.source)
+            if item.import_origin != expected_origin or item.support_status != (
+                "imported_unverified" if expected_origin else "verified"
+            ):
+                raise inconsistent()
             entities, witnesses = evidence_identity(data, row)
             if item.identity_mappings != witnesses:
                 raise inconsistent()
@@ -278,6 +285,11 @@ class RetrievalService:
                 for step in path:
                     support = supports.get(step.support_id)
                     if support is None or support.claim is None:
+                        raise inconsistent()
+                    if (
+                        step.import_origin != source_origin(scope, support.source)
+                        or step.support_status != support.claim.support.status
+                    ):
                         raise inconsistent()
                     fact = support.claim.assertion
                     mapped = data.endpoints(support)

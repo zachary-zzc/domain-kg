@@ -155,10 +155,13 @@ def register_tools(server: MCPServer[None], runtime: ServiceRuntime | None) -> N
         material_id: UUID,
         version_id: UUID | None = None,
         org_id: UUID | None = None,
+        include_unverified: bool = False,
     ) -> Annotated[CallToolResult, MaterialDetail]:
         """Inspect visible material metadata and accepted version summaries."""
         current = await access((kg_id,), Action.READ, org_id)
-        result = await services().inspection.get(current, kg_id, material_id, version_id)
+        result = await services().inspection.get(
+            current, kg_id, material_id, version_id, include_unverified=include_unverified
+        )
         return output(result, result.material.title)
 
     @tool("add_material", external=True)

@@ -6,6 +6,7 @@ from domain_kg.citations.models import Citation
 from domain_kg.errors import inaccessible_reference
 from domain_kg.graph.service import GraphService
 from domain_kg.identity.models import AccessContext
+from domain_kg.imports.evidence import source_origin
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.graph import source_citation
 from domain_kg.retrieval.models import SearchFilters, SearchRequest
@@ -23,9 +24,14 @@ class CitationService:
         *,
         material_id: UUID | None = None,
         version_id: UUID | None = None,
+        include_unverified: bool = False,
     ) -> Citation:
         filters = SearchFilters(
-            material_ids=(material_id,) if material_id else (), version_id=version_id
+            material_ids=(material_id,) if material_id else (),
+            version_id=version_id,
+            support_statuses=("verified", "manual", "imported_unverified")
+            if include_unverified
+            else ("verified", "manual"),
         )
         scope = await self.graph.resolver.resolve(
             access, SearchRequest(kg_ids=(kg,), query="citation", filters=filters), kg
@@ -42,6 +48,9 @@ class CitationService:
             ):
                 continue
             resolver_url += f"&material_id={source.material_id}&version_id={source.version_id}"
+            origin = source_origin(scope, row.source)
+            if origin is not None:
+                resolver_url += "&include_unverified=true"
             result = Citation(
                 id=citation_id,
                 kg_id=kg,
@@ -50,7 +59,8 @@ class CitationService:
                 material_id=source.material_id,
                 version_id=source.version_id,
                 chunk_id=source.id,
-                spans=source.spans,
+                spans=() if origin else source.spans,
+                import_origin=origin,
                 resolver_url=resolver_url,
                 original_url=(
                     f"/api/v1/kgs/{kg}/materials/{source.material_id}"

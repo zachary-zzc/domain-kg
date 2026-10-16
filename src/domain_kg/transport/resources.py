@@ -24,7 +24,9 @@ def register_resources(server: MCPServer[None], runtime: ServiceRuntime | None) 
             org, kg, identifier = UUID(org_id), UUID(kg_id), UUID(material_id)
             access = await verified_access(runtime, (kg,), Action.READ, org)
             assert runtime is not None
-            return (await runtime.inspection.get(access, kg, identifier)).model_dump_json()
+            return (
+                await runtime.inspection.get(access, kg, identifier, include_unverified=True)
+            ).model_dump_json()
         except DomainError as error:
             raise ResourceError(f"{error.code}: {error.message}") from None
         except ValueError:

@@ -16,9 +16,10 @@ from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.models import AssertionRecord
 from domain_kg.graph.views import EdgeView, NodeView, SubgraphView
 from domain_kg.graph.visibility import NodeMasks
+from domain_kg.imports.evidence import source_origin
 from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.jobs.queue import JobQueue
-from domain_kg.models import Namespace
+from domain_kg.models import Namespace, SourceVersion
 from domain_kg.retrieval.filters import matches_observation, matches_support
 from domain_kg.retrieval.models import SearchFilters, SubgraphRequest
 from domain_kg.revisions.models import ReadScope
@@ -428,6 +429,16 @@ async def scoped_graph_data(
                 {key: value for key, value in raw.items() if key != "_id"}
             )
     chunks = masks.blocked_chunks(rows)
+    imported_contexts = {source for source, _ in chunks if source_origin(scope, source) is not None}
+    if imported_contexts:
+        # Legacy labels may recur outside their anchor chunk, including escaped
+        # XML/JSON forms. Suppress the export context as a whole, without guessing
+        # a document span or hiding independent materials.
+        chunks |= frozenset(
+            (row.source, row.id)
+            for row in rows
+            if row.chunk is not None and row.source in imported_contexts
+        )
     visible_rows = tuple(
         row
         for row in rows
@@ -597,6 +608,27 @@ class GraphRepository:
             else (data.field(selected[0], "name") if selected else str(identifier))
         )
         return NodeView(
+            import_origins=tuple(
+                sorted(
+                    {
+                        origin
+                        for source in (
+                            *(
+                                SourceVersion(
+                                    **{
+                                        field: getattr(item, field)
+                                        for field in SourceVersion.model_fields
+                                    }
+                                )
+                                for item in selected
+                            ),
+                            *(row.source for row in supports if row.source),
+                        )
+                        if (origin := source_origin(data.scope, source)) is not None
+                    },
+                    key=lambda origin: (str(origin.material_id), str(origin.version_id)),
+                )
+            ),
             kg_id=data.scope.view.kg_id,
             id=identifier,
             name=name,
@@ -669,6 +701,7 @@ class GraphRepository:
             )
         )
         return EdgeView(
+            import_origin=source_origin(data.scope, row.source) if data else None,
             subject_id=endpoints[0],
             target_id=endpoints[1],
             assertion_id=fact.id,

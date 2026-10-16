@@ -3,6 +3,7 @@
 from typing import Literal
 from uuid import UUID
 
+from domain_kg.imports.provenance import ImportOrigin
 from domain_kg.ingestion.models import ParsedChunk
 from domain_kg.materials.models import MaterialMetadata
 from domain_kg.models import FrozenModel, NonNegative
@@ -14,6 +15,7 @@ class MaterialSummary(FrozenModel):
     revision: NonNegative
     active_version_id: UUID
     metadata: MaterialMetadata
+    import_origin: ImportOrigin | None = None
 
 
 class MaterialPage(FrozenModel):
@@ -36,3 +38,4 @@ class MaterialDetail(FrozenModel):
     versions_truncated: bool = False
     chunks: tuple[ParsedChunk, ...] = ()
     chunks_truncated: bool = False
+    import_origin: ImportOrigin | None = None
