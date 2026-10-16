@@ -16,6 +16,7 @@ from domain_kg.ingestion.resolved import ResolvedDocument
 from domain_kg.jobs.models import Checkpoint, LeasedJob, PublicationLease
 from domain_kg.jobs.queue import JobQueue, now
 from domain_kg.materials.models import BlobRef, MaterialMetadata, RestoreReadPermit
+from domain_kg.materials.restoration import restoration_permit
 from domain_kg.models import Namespace, ScopedRef, SourceVersion
 from domain_kg.providers.embeddings import EmbeddingProfile
 from domain_kg.providers.profiles import embedding_space_id
@@ -349,7 +350,14 @@ class ProjectionCoordinator:
     async def _document(self, access: AccessContext, attempt: dict[str, Any]) -> EmbeddedDocument:
         source = SourceVersion.model_validate(attempt["source"])
         checkpoint = Checkpoint.model_validate(attempt["embedded_checkpoint"])
-        data = await read_artifact(self.queue, access, checkpoint, source)
+        job = LeasedJob.model_validate(attempt["job"])
+        data = await read_artifact(
+            self.queue,
+            access,
+            checkpoint,
+            source,
+            restoration=await restoration_permit(self.queue, access, job),
+        )
         if hashlib.sha256(data).hexdigest() != attempt["batch"]["content_hash"]:
             raise inconsistent()
         document = EmbeddedDocument.model_validate_json(data)
@@ -369,7 +377,13 @@ class ProjectionCoordinator:
             version_id=job.target_id,
         )
         document = EmbeddedDocument.model_validate_json(
-            await read_artifact(self.queue, access, embedded_checkpoint, source)
+            await read_artifact(
+                self.queue,
+                access,
+                embedded_checkpoint,
+                source,
+                restoration=await restoration_permit(self.queue, access, job),
+            )
         )
         if source_of(document) != source or embedded_checkpoint.stage != "embedding":
             raise inaccessible_reference()
@@ -407,7 +421,7 @@ class ProjectionCoordinator:
             "receipts": [],
             "repair_parent_manifest_id": raw.get("repair_parent_manifest_id"),
         }
-        if job.kind == "repair":
+        if job.kind in ("repair", "restore_material"):
             parent = await self.journal.attempt(access, UUID(raw["repair_parent_manifest_id"]))
             if (
                 parent["state"] != "accepted"
@@ -570,7 +584,9 @@ class ProjectionCoordinator:
         current = await self.queue.policy.revalidate(access, action=self.queue._action(job.kind))
         source = SourceVersion.model_validate(attempt["source"])
         if not await self.queue.policy.material_visible(current, job.kg_id, source.material_id):
-            raise inaccessible_reference()
+            if job.kind != "restore_material":
+                raise inaccessible_reference()
+            await self.queue.authorize(job)
         raw_job = await self.database.jobs.find_one(
             {"org_id": str(job.org_id), "kg_id": str(job.kg_id), "id": str(job.id)}
         )
@@ -595,6 +611,13 @@ class ProjectionCoordinator:
         if verified != command.report:
             raise inaccessible_reference()
         document = await self._document(current, attempt)
+        if job.kind == "restore_material":
+            from domain_kg.materials.restoration import verify_restoration_original
+
+            permit = await restoration_permit(self.queue, current, job)
+            if permit is None:
+                raise inaccessible_reference()
+            await verify_restoration_original(self.queue, current, permit)
         stores = await self.queue.router.for_kg(current, job.kg_id)
         ns = {"org_id": str(job.org_id), "kg_id": str(job.kg_id)}
         binding = AcceptedProjection(
@@ -619,7 +642,7 @@ class ProjectionCoordinator:
                 str(batch.generation),
             ):
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "The accepted KG revision changed.")
-            if job.kind == "repair":
+            if job.kind in ("repair", "restore_material"):
                 parent_id = attempt.get("repair_parent_manifest_id")
                 parent = await self.database.projection_attempts.find_one(
                     ns
@@ -742,21 +765,26 @@ class ProjectionCoordinator:
                 created_at=material.get("metadata", {}).get("created_at", timestamp),
                 updated_at=timestamp,
             )
-            if job.kind == "repair":
+            if job.kind in ("repair", "restore_material"):
                 metadata = MaterialMetadata.model_validate(material["metadata"])
             # ACLs and membership grants have their own owner-authorized policy service.
+            material_update: dict[str, Any] = {
+                "active_version_id": str(source.version_id),
+                "metadata": metadata.model_dump(mode="json"),
+            }
+            if job.kind == "restore_material":
+                material_update.update(
+                    excluded=False, tombstoned=False, purge_after=None, restored_at=timestamp
+                )
             await self.database.material_access.update_one(
                 material_key,
                 {
-                    "$set": {
-                        "active_version_id": str(source.version_id),
-                        "metadata": metadata.model_dump(mode="json"),
-                    },
+                    "$set": material_update,
                     "$inc": {"revision": 1},
                 },
                 session=session,
             )
-            if job.kind != "repair":
+            if job.kind not in ("repair", "restore_material"):
                 await stores.authority._database.materials.update_one(
                     material_key, {"$set": {"title": proposed["title"]}}, session=session
                 )
@@ -773,6 +801,37 @@ class ProjectionCoordinator:
                 {"$set": {"state": "accepted"}},
                 session=session,
             )
+            if job.kind == "restore_material":
+                from domain_kg.materials.models import RestorationReceipt
+
+                restoration = RestorationReceipt(
+                    org_id=job.org_id,
+                    kg_id=job.kg_id,
+                    material_id=source.material_id,
+                    revision=material["revision"] + 1,
+                    state="restored",
+                    job_id=job.id,
+                )
+                changed_intent = await self.database.material_commands.update_one(
+                    ns
+                    | {
+                        "id": str(job.restore_intent_id),
+                        "operation": "restore",
+                        "state": "pending",
+                        "job_id": str(job.id),
+                        "expected_revision": material["revision"],
+                    },
+                    {
+                        "$set": {
+                            "state": "accepted",
+                            "accepted_at": timestamp,
+                            "receipt": restoration.model_dump(mode="json"),
+                        }
+                    },
+                    session=session,
+                )
+                if not changed_intent.matched_count:
+                    raise DomainError(ErrorCode.VERSION_CONFLICT, "The restoration intent changed.")
             changed = await self.database.kgs.update_one(
                 {
                     "org_id": ns["org_id"],

@@ -47,10 +47,18 @@ class JobCommand(Namespace):
         "export",
         "backup",
         "restore",
+        "restore_material",
         "purge",
     ]
     target_id: UUID
     idempotency_key: IdempotencyKey
+    restore_intent_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def restoration_intent(self) -> "JobCommand":
+        if (self.kind == "restore_material") != (self.restore_intent_id is not None):
+            raise ValueError("material restoration requires its exact durable intent")
+        return self
 
 
 class LeasedJob(JobCommand):

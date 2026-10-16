@@ -15,7 +15,13 @@ class JobRunner:
     async def _steps(self, job: LeasedJob) -> None:
         if not self.pipeline.steps:
             self.pipeline.require_configured()
-        steps = self.pipeline.repair_steps if job.kind == "repair" else self.pipeline.steps
+        steps = (
+            self.pipeline.restore_steps
+            if job.kind == "restore_material"
+            else self.pipeline.repair_steps
+            if job.kind == "repair"
+            else self.pipeline.steps
+        )
         if not steps:
             raise DomainError(
                 ErrorCode.PROVIDER_UNAVAILABLE, "This job pipeline is not configured."

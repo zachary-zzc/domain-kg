@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from pymongo.asynchronous.client_session import AsyncClientSession
 
@@ -103,7 +103,7 @@ class MaterialLifecycle:
                         {"material_id": str(command.material_id)},
                         {"material_ids": str(command.material_id)},
                     ],
-                    "kind": {"$in": ["ingest", "replace", "repair", "project"]},
+                    "kind": {"$in": ["ingest", "replace", "repair", "project", "restore_material"]},
                     "stage": {"$nin": list(TERMINAL)},
                 },
                 {
@@ -208,7 +208,10 @@ class MaterialLifecycle:
         return receipt
 
     async def _restore(self, access: AccessContext, command: RestoreMaterial) -> RestorationReceipt:
-        from domain_kg.materials.restoration import authorize_restore_read
+        from domain_kg.materials.restoration import (
+            authorize_restore_read,
+            verify_restoration_original,
+        )
         from domain_kg.revisions.publication import accepted_document, verify_document
 
         command = RestoreMaterial.model_validate(command)
@@ -276,6 +279,15 @@ class MaterialLifecycle:
         if intent["state"] == "accepted":
             await self._record(current, command.kg_id, command.material_id)
             return self._restore_receipt(current, command, intent)
+        if intent.get("job_id"):
+            return RestorationReceipt(
+                org_id=current.org_id,
+                kg_id=command.kg_id,
+                material_id=command.material_id,
+                revision=command.expected_revision,
+                state="pending",
+                job_id=UUID(intent["job_id"]),
+            )
         source = SourceVersion.model_validate(intent["source"])
         view = await PublicationJournal(self.queue).load_metadata(current, command.kg_id)
         binding = next((item for item in view.projections if item.source == source), None)
@@ -304,12 +316,40 @@ class MaterialLifecycle:
             generation=view.generation,
             visibility_revision=kg["visibility_revision"],
         )
-        document, batch, receipts = await accepted_document(
-            self.queue, current, binding, restoration=permit
-        )
-        stores = await self.materials.router.for_kg(current, command.kg_id)
-        if await verify_document(stores, document, batch) != receipts:
-            raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Retained receipts differ.")
+        try:
+            document, batch, receipts = await accepted_document(
+                self.queue, current, binding, restoration=permit
+            )
+            await verify_restoration_original(self.queue, current, permit)
+            stores = await self.materials.router.for_kg(current, command.kg_id)
+            if await verify_document(stores, document, batch) != receipts:
+                raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Retained receipts differ.")
+        except DomainError as error:
+            if error.code not in (ErrorCode.BACKEND_UNAVAILABLE, ErrorCode.PROJECTION_INCONSISTENT):
+                raise
+            from domain_kg.jobs.models import JobCommand
+
+            intent_id = UUID(intent["id"])
+            job = await self.queue.enqueue(
+                current,
+                JobCommand(
+                    org_id=current.org_id,
+                    kg_id=command.kg_id,
+                    id=uuid5(intent_id, "restore-material"),
+                    kind="restore_material",
+                    target_id=source.version_id,
+                    restore_intent_id=intent_id,
+                    idempotency_key="restore-" + str(intent_id),
+                ),
+            )
+            return RestorationReceipt(
+                org_id=current.org_id,
+                kg_id=command.kg_id,
+                material_id=command.material_id,
+                revision=command.expected_revision,
+                state="pending",
+                job_id=job.job_id,
+            )
         await authorize_restore_read(self.queue, current, source, permit)
 
         async def activate(session: AsyncClientSession) -> RestorationReceipt:

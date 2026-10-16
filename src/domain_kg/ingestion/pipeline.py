@@ -40,18 +40,22 @@ class PipelineStep:
 class Pipeline:
     steps: tuple[PipelineStep, ...] = ()
     repair_steps: tuple[PipelineStep, ...] = ()
+    restore_steps: tuple[PipelineStep, ...] = ()
 
     def __post_init__(self) -> None:
         order = [STAGES.index(step.stage) for step in self.steps]
         if order != sorted(set(order)):
             raise ValueError("pipeline stages must be unique and ordered")
-        if self.repair_steps and tuple(step.stage for step in self.repair_steps) != (
-            "embedding",
-            "projecting",
-            "verifying",
-            "publishing",
-        ):
-            raise ValueError("repair uses only immutable artifact and publication stages")
+        for steps in (self.repair_steps, self.restore_steps):
+            if steps and tuple(step.stage for step in steps) != (
+                "embedding",
+                "projecting",
+                "verifying",
+                "publishing",
+            ):
+                raise ValueError(
+                    "retained-data work uses only immutable artifact/publication stages"
+                )
 
     @property
     def configured(self) -> bool:
@@ -344,6 +348,7 @@ def publication_steps(
     resolve_step: PipelineStep,
     *,
     repair: bool = False,
+    restoration: bool = False,
 ) -> tuple[PipelineStep, ...]:
     import hashlib
 
@@ -355,11 +360,15 @@ def publication_steps(
         return hashlib.sha256((resolve_step.input_hash + "/" + stage + "-v1").encode()).hexdigest()
 
     async def current_hash(job: LeasedJob, stage: str) -> str:
-        if repair:
+        if repair or restoration:
             raw = await queue._current(job)
             return hashlib.sha256(
                 (
-                    str(job.id) + str(raw["repair_parent_manifest_id"]) + "/repair/" + stage + "-v1"
+                    str(job.id)
+                    + str(raw["repair_parent_manifest_id"])
+                    + ("/restore-material/" if restoration else "/repair/")
+                    + stage
+                    + "-v1"
                 ).encode()
             ).hexdigest()
         return hashlib.sha256(
@@ -385,12 +394,24 @@ def publication_steps(
             material_id=raw["material_id"],
             version_id=job.target_id,
         )
-        return await read_artifact(queue, access, checkpoint, source)
+        from domain_kg.materials.restoration import restoration_permit
+
+        return await read_artifact(
+            queue,
+            access,
+            checkpoint,
+            source,
+            restoration=await restoration_permit(queue, access, job),
+        )
 
     async def embed_hash(job: LeasedJob) -> str:
         return await current_hash(job, "embedding")
 
     async def embed(job: LeasedJob) -> Checkpoint:
+        if restoration:
+            from domain_kg.materials.restoration import restore_embedding_artifact
+
+            return await restore_embedding_artifact(queue, job, input_hash=await embed_hash(job))
         if repair:
             from domain_kg.revisions.repair import RepairService
 
@@ -479,4 +500,9 @@ def configured_pipeline(queue: "JobQueue", providers: "ProviderService") -> Pipe
     repair = publication_steps(
         queue, ProjectionCoordinator(queue, providers), extraction[-1], repair=True
     )
-    return Pipeline(preparation + extraction + publication, repair_steps=repair)
+    restore = publication_steps(
+        queue, ProjectionCoordinator(queue, providers), extraction[-1], restoration=True
+    )
+    return Pipeline(
+        preparation + extraction + publication, repair_steps=repair, restore_steps=restore
+    )

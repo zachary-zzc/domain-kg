@@ -116,7 +116,7 @@ class JobQueue:
 
     @classmethod
     def _active(cls, job: LeasedJob) -> dict[str, Any]:
-        return cls._scope(job) | {
+        query = cls._scope(job) | {
             "kind": job.kind,
             "target_id": str(job.target_id),
             "lease_token": str(job.lease_token),
@@ -125,10 +125,13 @@ class JobQueue:
             "lease_until": {"$gt": now()},
             "stage": {"$nin": TERMINAL},
         }
+        if job.restore_intent_id is not None:
+            query["restore_intent_id"] = str(job.restore_intent_id)
+        return query
 
     @staticmethod
     def _lease(raw: dict[str, Any]) -> LeasedJob:
-        values = {key: raw[key] for key in LeasedJob.model_fields}
+        values = {key: raw[key] for key in LeasedJob.model_fields if key in raw}
         values["lease_until"] = values["lease_until"].replace(tzinfo=UTC)
         return LeasedJob.model_validate(values)
 
@@ -146,11 +149,11 @@ class JobQueue:
 
     @staticmethod
     def _action(kind: str) -> Action:
-        if kind not in ("ingest", "replace", "repair"):
+        if kind not in ("ingest", "replace", "repair", "restore_material"):
             raise DomainError(
                 ErrorCode.VALIDATION_ERROR, "This job kind has no configured handler."
             )
-        return Action.REPLACE if kind == "replace" else Action.INGEST
+        return Action.REPLACE if kind in ("replace", "restore_material") else Action.INGEST
 
     async def _source(
         self, access: AccessContext, command: JobCommand, session: AsyncClientSession | None = None
@@ -159,7 +162,11 @@ class JobQueue:
             raise inaccessible_reference()
         key = (command.org_id, command.kg_id)
         if session is None:
-            stores = await self.router.for_kg(access, command.kg_id)
+            stores = (
+                await self.router.for_sources(access, command.kg_id)
+                if command.kind == "restore_material"
+                else await self.router.for_kg(access, command.kg_id)
+            )
             self._authorities[key] = stores.authority
         authority = self._authorities.get(key)
         if authority is None:
@@ -170,7 +177,13 @@ class JobQueue:
         raw = await authority._require("material_versions", reference, session=session)
         await authority.require_version(reference, session=session)
         material = UUID(raw["material"]["id"])
-        if not await self.policy.material_visible(access, command.kg_id, material, session=session):
+        if command.kind == "restore_material":
+            from domain_kg.materials.restoration import authorize_restore_job
+
+            await authorize_restore_job(self, access, command, material, session)
+        elif not await self.policy.material_visible(
+            access, command.kg_id, material, session=session
+        ):
             raise inaccessible_reference()
         if command.kind == "repair":
             active = await self.database.material_access.find_one(
@@ -206,7 +219,7 @@ class JobQueue:
             previous = await self.database.jobs.find_one(key, session=session)
             if previous:
                 if any(
-                    previous[field] != value
+                    previous.get(field) != value
                     for field, value in command.model_dump(mode="json").items()
                 ):
                     raise DomainError(
@@ -222,7 +235,7 @@ class JobQueue:
                 "created_at": now(),
                 "expected_active_version": None,
             }
-            if command.kind == "repair":
+            if command.kind in ("repair", "restore_material"):
                 kg = await self.database.kgs.find_one(
                     {"org_id": str(command.org_id), "id": str(command.kg_id)}, session=session
                 )
@@ -245,6 +258,23 @@ class JobQueue:
                     expected_active_version=str(command.target_id),
                     repair_parent_manifest_id=binding["binding"]["manifest_id"],
                 )
+                if command.kind == "restore_material":
+                    changed = await self.database.material_commands.update_one(
+                        {
+                            "org_id": str(command.org_id),
+                            "kg_id": str(command.kg_id),
+                            "id": str(command.restore_intent_id),
+                            "operation": "restore",
+                            "state": "pending",
+                            "$or": [{"job_id": {"$exists": False}}, {"job_id": str(command.id)}],
+                        },
+                        {"$set": {"job_id": str(command.id)}},
+                        session=session,
+                    )
+                    if not changed.matched_count:
+                        raise DomainError(
+                            ErrorCode.VERSION_CONFLICT, "The restoration intent changed."
+                        )
             await self.database.jobs.insert_one(raw, session=session)
             await self.database.outbox.insert_one(
                 self._scope(command)
@@ -266,8 +296,12 @@ class JobQueue:
     ) -> LeasedJob | None:
         if not isinstance(worker_id, str) or not worker_id or len(worker_id) > 100:
             raise ValueError("invalid worker identifier")
-        allowed = kinds if kinds is not None else ("ingest", "replace", "repair")
-        if not allowed or not set(allowed).issubset({"ingest", "replace", "repair"}):
+        allowed = (
+            kinds if kinds is not None else ("ingest", "replace", "repair", "restore_material")
+        )
+        if not allowed or not set(allowed).issubset(
+            {"ingest", "replace", "repair", "restore_material"}
+        ):
             raise ValueError("job kinds require a configured handler")
         # Expired leases at the bound become explicit terminal failures; no
         # unbounded polling or accidental fourth attempt after worker death.
@@ -671,10 +705,24 @@ class JobQueue:
             },
             session=session,
         )
-        if raw is None or not await self.policy.material_visible(
-            current, UUID(raw["kg_id"]), UUID(raw["material_id"]), session=session
-        ):
+        if raw is None:
             raise inaccessible_reference()
+        kg, material = UUID(raw["kg_id"]), UUID(raw["material_id"])
+        if not await self.policy.material_visible(current, kg, material, session=session):
+            grant = next((grant.role for grant in current.grants if grant.kg_id == kg), None)
+            actor = raw.get("actor", {})
+            same_actor = all(
+                actor.get(key) == getattr(current.principal, key)
+                for key in ("issuer", "subject", "kind")
+            )
+            if (
+                raw["kind"] != "restore_material"
+                or grant not in ("owner", "editor")
+                or (grant != "owner" and not same_actor)
+                or await self.policy._material_acl_record(current, kg, material, session=session)
+                is None
+            ):
+                raise inaccessible_reference()
         return raw
 
     async def get(self, access: AccessContext, identifier: UUID) -> JobReceipt:

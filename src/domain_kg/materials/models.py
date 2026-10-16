@@ -150,9 +150,17 @@ class RestoreReadPermit(Namespace):
     projection_manifest_id: UUID
     generation: UUID
     visibility_revision: NonNegative
+    job_id: UUID | None = None
+    job_fence: NonNegative | None = None
+    job_lease_token: UUID | None = None
 
     @model_validator(mode="after")
     def source_namespace(self) -> Self:
         if (self.source.org_id, self.source.kg_id) != (self.org_id, self.kg_id):
             raise ValueError("restoration source must share its intent namespace")
+        if (
+            len({value is None for value in (self.job_id, self.job_fence, self.job_lease_token)})
+            != 1
+        ):
+            raise ValueError("a restoration job proof requires its exact lease and fence")
         return self

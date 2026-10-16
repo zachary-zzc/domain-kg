@@ -192,8 +192,8 @@ async def test_restore_failure_preserves_fence_and_requires_current_acl(
 
     with monkeypatch.context() as patch:
         patch.setattr(publication, "verify_document", broken)
-        with pytest.raises(DomainError):
-            await lifecycle.restore(editor, command)
+        pending = await lifecycle.restore(editor, command)
+        assert pending.state == "pending" and pending.job_id is not None
     assert not await queue.policy.material_visible(editor, job.kg_id, receipt.material_id)
     # Revoking the current KG grant also revokes access to a previously accepted restore intent.
     owner = await queue.policy.resolve_access(team[2]["owner"], [job.kg_id], Action.MANAGE_GRANTS)
