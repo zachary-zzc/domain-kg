@@ -4,12 +4,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4, uuid5
 
+from pydantic import ValidationError
 from pymongo.asynchronous.client_session import AsyncClientSession
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.queue import TERMINAL, JobQueue
 from domain_kg.materials.models import (
+    BlobRef,
+    MaterialImpact,
     MaterialMetadata,
     MaterialMetadataReceipt,
     RemovalReceipt,
@@ -42,6 +45,55 @@ class MaterialLifecycle:
         if row is None:
             raise inaccessible_reference()
         return row
+
+    async def _impact(
+        self, access: AccessContext, kg: UUID, material: UUID, session: AsyncClientSession
+    ) -> MaterialImpact:
+        """Count this source's owned originals, never other supporting sources."""
+        stores = await self.materials.router.for_sources(access, kg)
+        namespace = {"org_id": str(access.org_id), "kg_id": str(kg)}
+        versions, size = 0, 0
+        try:
+            async for row in stores.authority._database.version_blobs.find(
+                namespace | {"material_id": str(material)}, session=session
+            ):
+                reference = ScopedRef(org_id=access.org_id, kg_id=kg, id=row["id"])
+                await stores.authority.require_version(reference, session=session)
+                version = await stores.authority._require(
+                    "material_versions", reference, session=session
+                )
+                blob = BlobRef.model_validate(row["blob"])
+                if version["material"]["id"] != str(material) or (
+                    blob.org_id,
+                    blob.kg_id,
+                    blob.material_id,
+                    str(blob.version_id),
+                ) != (access.org_id, kg, material, row["id"]):
+                    raise DomainError(
+                        ErrorCode.PROJECTION_INCONSISTENT, "Original ownership is inconsistent."
+                    )
+                versions += 1
+                size += blob.size_bytes
+            if versions != await stores.authority._database.material_versions.count_documents(
+                namespace | {"material.id": str(material)}, session=session
+            ):
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Original version mappings are incomplete."
+                )
+        except (ValidationError, KeyError, TypeError):
+            raise DomainError(
+                ErrorCode.PROJECTION_INCONSISTENT, "Original ownership is inconsistent."
+            ) from None
+        pending = await self.database.jobs.count_documents(
+            namespace
+            | {
+                "$or": [{"material_id": str(material)}, {"material_ids": str(material)}],
+                "kind": {"$in": ["ingest", "replace", "repair", "project", "restore_material"]},
+                "stage": {"$nin": list(TERMINAL)},
+            },
+            session=session,
+        )
+        return MaterialImpact(versions=versions, original_bytes=size, pending_jobs=pending)
 
     async def update_metadata(
         self, access: AccessContext, command: UpdateMaterialMetadata
@@ -182,6 +234,7 @@ class MaterialLifecycle:
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "The material revision changed.")
             if row.get("tombstoned") or (row.get("excluded") and command.action == "exclude"):
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "The material is already withdrawn.")
+            impact = await self._impact(current, command.kg_id, command.material_id, session)
             if command.dry_run:
                 return RemovalReceipt(
                     org_id=current.org_id,
@@ -189,6 +242,7 @@ class MaterialLifecycle:
                     material_id=command.material_id,
                     revision=row["revision"],
                     dry_run=True,
+                    impact=impact,
                 )
             timestamp = datetime.now(UTC)
             namespace = {"org_id": str(current.org_id), "kg_id": str(command.kg_id)}
@@ -242,6 +296,7 @@ class MaterialLifecycle:
                 material_id=command.material_id,
                 revision=row["revision"] + 1,
                 dry_run=False,
+                impact=impact,
             )
             await self.database.material_commands.insert_one(
                 key

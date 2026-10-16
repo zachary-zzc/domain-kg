@@ -317,9 +317,30 @@ class ProjectionCoordinator:
             ) != (source, expected_profile, schema.id, schema.revision, selected["revision"]):
                 raise inconsistent()
             return cached
-        profile, vectors = await self.providers.embeddings(
-            access, Namespace(**namespace), [body.text for body in bodies], source=source
+        from domain_kg.ingestion.delta import accepted_delta
+
+        await self.providers.authorize_source(access, source)
+        delta = await accepted_delta(self.queue, job, parsed)
+        reused = (
+            {(row.kind, row.text): list(row.vector) for row in delta.embedded.rows}
+            if delta and delta.embedded.profile == expected_profile
+            else {}
         )
+        missing = [body for body in bodies if (body.kind, body.text) not in reused]
+        profile = expected_profile
+        if missing:
+            profile, generated = await self.providers.embeddings(
+                access, Namespace(**namespace), [body.text for body in missing], source=source
+            )
+            fresh = iter(generated)
+        else:
+            fresh = iter([])
+        vectors = [
+            reused[(body.kind, body.text)] if (body.kind, body.text) in reused else next(fresh)
+            for body in bodies
+        ]
+        await self.providers.authorize_source(access, source)
+        await self.queue.authorize(job)
         if profile != expected_profile or profile.dimensions != self.queue.router.dimensions:
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Embedding generation dimensions differ.")
         document = EmbeddedDocument(

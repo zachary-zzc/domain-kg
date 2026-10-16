@@ -205,7 +205,7 @@ def extraction_steps(
     from domain_kg.ingestion.repository import SourceRepository
     from domain_kg.ingestion.resolution import ResolutionService
     from domain_kg.ingestion.resolved import ExtractionArtifact, ResolvedDocument
-    from domain_kg.models import Namespace
+    from domain_kg.models import Namespace, SourceVersion
     from domain_kg.storage.blobs import BlobStore
 
     source = SourceRepository(queue)
@@ -224,6 +224,11 @@ def extraction_steps(
         access = await queue.authorize(job)
         selected = await providers.selected(access, job.kg_id)
         schema = await schema_for_kg(queue.policy, access, job.kg_id)
+        profile, connection = providers.registry.resolve(
+            UUID(selected["profile_id"]),
+            Namespace(org_id=job.org_id, kg_id=job.kg_id),
+            restricted=False,
+        )
         return hashlib.sha256(
             (
                 extract_hash
@@ -235,6 +240,9 @@ def extraction_steps(
                 + str(selected["revision"])
                 + "/"
                 + schema.model_dump_json()
+                + "/extraction-origin-v1/"
+                + connection.endpoint
+                + profile.extraction_revision
             ).encode()
         ).hexdigest()
 
@@ -244,6 +252,8 @@ def extraction_steps(
         ).hexdigest()
 
     async def extract(job: LeasedJob) -> Checkpoint:
+        from domain_kg.ingestion.delta import accepted_delta
+
         wanted_hash = await current_extract_hash(job)
         checkpoint = await queue.load_checkpoint(job, "chunking", await chunk_step.hash_for(job))
         if checkpoint is None:
@@ -257,10 +267,30 @@ def extraction_steps(
             restricted=False,
         )
         schema = await schema_for_kg(queue.policy, access, job.kg_id)
+        delta = await accepted_delta(queue, job, document)
+        if delta and delta.embedded.resolved_checkpoint.input_hash != (
+            await current_resolve_hash(job)
+        ):
+            delta = None
+        await providers.authorize_source(
+            access,
+            SourceVersion(
+                **{field: getattr(document.blob, field) for field in SourceVersion.model_fields}
+            ),
+        )
         batches = []
         for chunk in document.chunks:
             await queue.authorize(job)
-            batches.append(await providers.extract(access, chunk, schema))
+            reused = delta.extraction(chunk) if delta else None
+            batches.append(
+                reused if reused is not None else await providers.extract(access, chunk, schema)
+            )
+        await providers.authorize_source(
+            access,
+            SourceVersion(
+                **{field: getattr(document.blob, field) for field in SourceVersion.model_fields}
+            ),
+        )
         artifact = ExtractionArtifact(
             org_id=job.org_id,
             kg_id=job.kg_id,
@@ -280,6 +310,8 @@ def extraction_steps(
         )
 
     async def resolve(job: LeasedJob) -> Checkpoint:
+        from domain_kg.ingestion.delta import accepted_delta
+
         wanted_hash = await current_resolve_hash(job)
         checkpoint = await queue.load_checkpoint(job, "extracting", await current_extract_hash(job))
         if checkpoint is None:
@@ -307,10 +339,18 @@ def extraction_steps(
         ) or await schema_for_kg(queue.policy, access, job.kg_id) != artifact.domain_schema:
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Extraction configuration changed.")
         service = ResolutionService(queue.policy, queue.router)
+        chunk_checkpoint = await queue.load_checkpoint(
+            job, "chunking", await chunk_step.hash_for(job)
+        )
+        if chunk_checkpoint is None:
+            raise DomainError(ErrorCode.REVISION_NOT_READY, "Source chunks are not ready.")
+        delta = await accepted_delta(queue, job, await source.read(job, chunk_checkpoint))
+        if delta and delta.embedded.resolved_checkpoint.input_hash != wanted_hash:
+            delta = None
         batches = []
         for batch in artifact.batches:
             await queue.authorize(job)
-            batches.append(await service.resolve_entities(access, batch))
+            batches.append(await service.resolve_entities(access, batch, predecessor=delta))
         resolved = ResolvedDocument(
             org_id=job.org_id,
             kg_id=job.kg_id,

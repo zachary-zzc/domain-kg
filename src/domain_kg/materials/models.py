@@ -113,11 +113,18 @@ class IngestReceipt(Namespace):
     job_id: UUID
 
 
+class MaterialImpact(FrozenModel):
+    versions: NonNegative = 0
+    original_bytes: NonNegative = 0
+    pending_jobs: NonNegative = 0
+
+
 class RemovalReceipt(Namespace):
     material_id: UUID
     revision: NonNegative
     dry_run: bool
     job_id: UUID | None = None
+    impact: MaterialImpact = MaterialImpact()
 
 
 class RestoreMaterial(FrozenModel):

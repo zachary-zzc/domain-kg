@@ -236,6 +236,33 @@ class ProviderService:
         finally:
             await client.close()
 
+    async def authorize_source(self, access: AccessContext, source: SourceVersion) -> None:
+        """Apply current provider clearance even when accepted artifacts avoid a call."""
+        current = await self.policy.revalidate(access)
+        if source.org_id != current.org_id or source.kg_id not in current.kg_ids:
+            raise inaccessible_reference()
+        if not await self.policy.material_visible(current, source.kg_id, source.material_id):
+            raise inaccessible_reference()
+        selected = await self.selected(current, source.kg_id)
+        material = await self.database.material_access.find_one(
+            {
+                "org_id": str(source.org_id),
+                "kg_id": str(source.kg_id),
+                "id": str(source.material_id),
+            }
+        )
+        if material is None:
+            raise inaccessible_reference()
+        configured, connection = self.registry.resolve_embedding(
+            UUID(selected["profile_id"]),
+            Namespace(org_id=source.org_id, kg_id=source.kg_id),
+            restricted=material["acl_mode"] == "restricted",
+        )
+        if configured.revision != selected["profile_revision"] or embedding_space_id(
+            configured, connection
+        ) != selected.get("embedding_space_id"):
+            raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider configuration changed.")
+
     async def extract(
         self, access: AccessContext, chunk: ParsedChunk, schema: DomainSchema
     ) -> ExtractionBatch:

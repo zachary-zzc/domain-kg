@@ -56,6 +56,10 @@ async def test_removal_fence_keeps_independent_support_and_rejects_late_publishe
     )
     dry = await lifecycle.remove(editor, remove.model_copy(update={"dry_run": True}))
     assert dry.dry_run and dry.revision == row["revision"]
+    assert dry.impact.versions == 2 and dry.impact.pending_jobs == 1
+    assert dry.impact.original_bytes == len(TEXT.encode()) + len(
+        (TEXT + "\nLate preparation.").encode()
+    )
     assert await queue.policy.material_visible(reader, job.kg_id, first.material_id)
     removed = await lifecycle.remove(editor, remove)
     assert removed.revision == row["revision"] + 1 and not removed.dry_run

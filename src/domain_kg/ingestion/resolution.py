@@ -3,7 +3,7 @@
 import hashlib
 import json
 import unicodedata
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid5
 
 from pymongo.asynchronous.client_session import AsyncClientSession
@@ -24,6 +24,9 @@ from domain_kg.models import ScopedRef
 from domain_kg.storage.blobs import BlobStore
 from domain_kg.storage.integrity import COLLECTIONS, CanonicalRecord
 from domain_kg.storage.router import KGStoreRouter, RoutedStores
+
+if TYPE_CHECKING:
+    from domain_kg.ingestion.delta import AcceptedDelta
 
 
 def fingerprint(value: Any) -> str:
@@ -112,7 +115,11 @@ class ResolutionService:
         return chunk
 
     async def resolve_entities(
-        self, access: AccessContext, batch: ExtractionBatch
+        self,
+        access: AccessContext,
+        batch: ExtractionBatch,
+        *,
+        predecessor: "AcceptedDelta | None" = None,
     ) -> ResolvedBatch:
         batch = ExtractionBatch.model_validate(batch)
         current = await self.policy.revalidate(access, action=Action.INGEST)
@@ -122,6 +129,7 @@ class ResolutionService:
         chunk = await self._chunk(current, batch, stores)
         schema = await schema_for_kg(self.policy, current, batch.kg_id)
         batch = validate_extraction(chunk, schema, batch)
+        lineage = predecessor.entity_lineage(batch, chunk) if predecessor else {}
         namespace: dict[str, Any] = {"org_id": batch.org_id, "kg_id": batch.kg_id}
         digest = fingerprint(batch.model_dump(mode="json"))
         extraction_id = uuid5(batch.version_id, digest)
@@ -146,6 +154,10 @@ class ResolutionService:
             reference = ScopedRef(
                 **namespace, id=uuid5(batch.org_id, f"{batch.kg_id}/entity/{identity}")
             )
+            if entity.identifier is None and entity.local_id in lineage:
+                reference = lineage[entity.local_id]
+                if (reference.org_id, reference.kg_id) != (batch.org_id, batch.kg_id):
+                    raise inaccessible_reference()
             local[entity.local_id] = reference
             observation_id = uuid5(
                 batch.version_id,
