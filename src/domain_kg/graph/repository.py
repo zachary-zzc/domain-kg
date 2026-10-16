@@ -10,6 +10,8 @@ from neo4j.exceptions import DriverError, Neo4jError
 from domain_kg.engine.scope import EligibilityResolver, ScopePredicates
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.identity_models import IdentityWitness, ManualIdentity
+from domain_kg.graph.identity_partition import IdentityContext, IdentityPartition
 from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.models import AssertionRecord
 from domain_kg.graph.views import EdgeView, NodeView, SubgraphView
@@ -18,7 +20,7 @@ from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.models import Namespace
 from domain_kg.retrieval.filters import matches_observation, matches_support
-from domain_kg.retrieval.models import SubgraphRequest
+from domain_kg.retrieval.models import SearchFilters, SubgraphRequest
 from domain_kg.revisions.models import ReadScope
 from domain_kg.revisions.projections import CurationEmbeddedDocument, ProjectionBody
 from domain_kg.revisions.publication import accepted_document, projection_rows, receipt_for
@@ -52,7 +54,79 @@ RETURN n.logical_id AS id
 class GraphData:
     scope: ReadScope
     rows: tuple[ProjectionBody, ...]
-    curations: tuple[ManualNode | ManualRelation, ...] = ()
+    curations: tuple[ManualNode | ManualRelation | ManualIdentity, ...] = ()
+
+    @cached_property
+    def identities(self) -> IdentityPartition | None:
+        directives = tuple(item for item in self.curations if isinstance(item, ManualIdentity))
+        if not directives:
+            return None
+        visible = {source.material_id for source in self.scope.visible_sources}
+        if any(
+            item.curation not in self.scope.visible_curations
+            or not item.public
+            and not set(item.material_ids).issubset(visible)
+            for item in directives
+        ):
+            raise inconsistent()
+        return IdentityPartition(
+            Namespace(org_id=self.scope.view.org_id, kg_id=self.scope.view.kg_id), directives
+        )
+
+    @cached_property
+    def identity_contexts(self) -> tuple[IdentityContext, ...]:
+        contexts: set[tuple[UUID, ...] | None] = {
+            (source.material_id,) for source in self.scope.visible_sources
+        }
+        contexts.update(
+            tuple(sorted(item.material_ids, key=str)) if not item.public else None
+            for item in self.curations
+        )
+        return tuple(sorted(contexts, key=str))
+
+    def entity_id(self, original: UUID, context: IdentityContext) -> UUID:
+        return self.identities.canonical(original, context) if self.identities else original
+
+    @staticmethod
+    def context(row: ProjectionBody) -> IdentityContext:
+        if row.source:
+            return row.source.material_id
+        manual = row.manual_node or row.manual_relation
+        return manual.material_ids if manual and not manual.public else None
+
+    def endpoints(self, row: ProjectionBody) -> tuple[UUID, ...]:
+        if not row.claim:
+            return ()
+        return tuple(
+            self.entity_id(item.id, self.context(row))
+            for item in (row.claim.assertion.subject, row.claim.assertion.target)
+        )
+
+    def effective_filters(self, context: IdentityContext) -> SearchFilters:
+        filters = self.scope.filters
+        if not self.identities:
+            return filters
+        return filters.model_copy(
+            update={
+                "entity_ids": tuple(self.entity_id(item, context) for item in filters.entity_ids),
+                "exclude_entity_ids": tuple(
+                    self.entity_id(item, context) for item in filters.exclude_entity_ids
+                ),
+            }
+        )
+
+    def identity_witness(self, original: UUID, context: IdentityContext) -> IdentityWitness | None:
+        if self.identities is None or not (proof := self.identities.witnesses(original, context)):
+            return None
+        owners = (context,) if isinstance(context, UUID) else (context or ())
+        return IdentityWitness(
+            org_id=self.scope.view.org_id,
+            kg_id=self.scope.view.kg_id,
+            original_id=original,
+            canonical_id=self.entity_id(original, context),
+            curations=proof,
+            material_ids=tuple(sorted(owners, key=str)),
+        )
 
     def field(self, observation: ResolvedEntity, key: str) -> Any:
         value = getattr(observation, key)
@@ -61,9 +135,9 @@ class GraphData:
         ):
             if not isinstance(manual, ManualNode):
                 continue
-            if manual.entity != observation.entity or (
-                not manual.public and observation.material_id not in manual.material_ids
-            ):
+            if self.entity_id(manual.entity.id, observation.material_id) != self.entity_id(
+                observation.entity.id, observation.material_id
+            ) or (not manual.public and observation.material_id not in manual.material_ids):
                 continue
             proposed = getattr(manual.changes, key)
             if proposed is not None:
@@ -128,7 +202,12 @@ class GraphData:
         return tuple(
             row
             for row in self.rows
-            if matches_support(row, self.scope.filters, endpoint_types=self.endpoint_types(row))
+            if matches_support(
+                row,
+                self.effective_filters(self.context(row)),
+                endpoint_types=self.endpoint_types(row),
+                endpoint_ids=self.endpoints(row),
+            )
         )
 
     @cached_property
@@ -139,16 +218,35 @@ class GraphData:
             for observation in (row.subject_observation, row.target_observation)
             if observation
         }
+        mapped_support = (
+            {
+                (row.source.material_id, row.source.version_id, endpoint)
+                for row in self.supports
+                if row.source
+                for endpoint in self.endpoints(row)
+            }
+            if self.identities
+            else set()
+        )
         return tuple(
             row.observation
             for row in self.rows
             if row.observation
             and matches_observation(
-                row, self.scope.filters, entity_type=self.field(row.observation, "entity_type")
+                row,
+                self.effective_filters(row.observation.material_id),
+                entity_type=self.field(row.observation, "entity_type"),
+                entity_id=self.entity_id(row.observation.entity.id, row.observation.material_id),
             )
             and (
                 not self.scope.filters.requires_assertion_support
                 or row.observation.id in support_observations
+                or (
+                    row.observation.material_id,
+                    row.observation.version_id,
+                    self.entity_id(row.observation.entity.id, row.observation.material_id),
+                )
+                in mapped_support
                 or any(
                     support.manual_relation
                     and support.claim
@@ -361,47 +459,95 @@ class GraphRepository:
         await self.resolver.revalidate(scope)
         return await scoped_graph_data(self.queue, scope, tuple(rows), tuple(curations))
 
-    def node(self, data: GraphData, identifier: UUID) -> NodeView | None:
+    def node(
+        self, data: GraphData, identifier: UUID, *, resolve_alias: bool = True
+    ) -> NodeView | None:
         observations = sorted(
-            (item for item in data.observations if item.entity.id == identifier),
-            key=lambda item: (str(item.material_id), str(item.version_id), str(item.id)),
+            (
+                item
+                for item in data.observations
+                if data.entity_id(item.entity.id, item.material_id) == identifier
+            ),
+            key=lambda item: (
+                item.entity.id != identifier,
+                str(item.material_id),
+                str(item.version_id),
+                str(item.id),
+            ),
         )
-        manuals = tuple(item for item in data.manual_nodes if item.entity.id == identifier)
-        supports = [
-            row
-            for row in data.supports
-            if row.claim
-            and identifier
-            in (
-                row.claim.assertion.subject.id,
-                row.claim.assertion.target.id,
-            )
-        ]
+        manuals = tuple(
+            item
+            for item in data.manual_nodes
+            if data.entity_id(item.entity.id, item.material_ids if not item.public else None)
+            == identifier
+        )
+        supports = [row for row in data.supports if row.claim and identifier in data.endpoints(row)]
         # Eligible human claims retain opaque endpoints when source observations
         # disappear. Removed sources are already excluded by the read scope.
         manual_endpoint = any(row.manual_relation for row in supports)
         if not observations and not manuals and not manual_endpoint:
+            if resolve_alias and data.identities:
+                roots = {data.entity_id(identifier, context) for context in data.identity_contexts}
+                roots.discard(identifier)
+                redirected = [
+                    node
+                    for root in sorted(roots, key=str)
+                    if (node := self.node(data, root, resolve_alias=False)) is not None
+                ]
+                if len(redirected) > 1:
+                    raise DomainError(
+                        ErrorCode.UNSUPPORTED_FILTER,
+                        "Select a source context for this identity alias.",
+                    )
+                if redirected:
+                    return redirected[0].model_copy(update={"requested_id": identifier})
             return None
         neighbors = {
-            endpoint.id
-            for row in supports
-            if row.claim
-            for endpoint in (row.claim.assertion.subject, row.claim.assertion.target)
+            endpoint for row in supports if row.claim for endpoint in data.endpoints(row)
         } - {identifier}
         # Counts cover all eligible rows; the response includes at most 50
         # observations and derives every displayed field from those same rows.
         selected = observations[:50]
         names = [item.changes.name for item in manuals if item.changes.name is not None]
+        proofs = tuple(
+            dict.fromkeys(
+                proof
+                for item in selected
+                if (proof := data.identity_witness(item.entity.id, item.material_id)) is not None
+            )
+        )
+        identity_members = (
+            tuple(
+                sorted(
+                    {
+                        origin
+                        for item in selected
+                        for origin in data.identities.members(item.entity.id, item.material_id)
+                    },
+                    key=str,
+                )
+            )
+            if data.identities
+            else ()
+        )
+        name = (
+            names[-1]
+            if names
+            else (data.field(selected[0], "name") if selected else str(identifier))
+        )
         return NodeView(
             kg_id=data.scope.view.kg_id,
             id=identifier,
-            name=names[-1]
-            if names
-            else (data.field(selected[0], "name") if selected else str(identifier)),
+            name=name,
             aliases=tuple(
                 sorted(
                     {alias for item in selected for alias in data.field(item, "aliases")}
                     | {alias for manual in manuals for alias in (manual.changes.aliases or ())}
+                    | (
+                        {item.name for item in selected if item.name != name}
+                        if data.identities
+                        else set()
+                    )
                 )
             ),
             descriptions=tuple(
@@ -435,6 +581,8 @@ class GraphRepository:
             truncation=len(observations) > 50,
             curations=manuals,
             tags=tuple(sorted({tag for manual in manuals for tag in (manual.changes.tags or ())})),
+            identity_members=identity_members,
+            identity_mappings=proofs,
         )
 
     @staticmethod
@@ -450,9 +598,18 @@ class GraphRepository:
                 description = manual.fields.description
             if manual.fields.tags is not None:
                 tags = manual.fields.tags
+        endpoints = data.endpoints(row) if data else (fact.subject.id, fact.target.id)
+        proofs = tuple(
+            dict.fromkeys(
+                proof
+                for endpoint in (fact.subject, fact.target)
+                if data
+                and (proof := data.identity_witness(endpoint.id, data.context(row))) is not None
+            )
+        )
         return EdgeView(
-            subject_id=fact.subject.id,
-            target_id=fact.target.id,
+            subject_id=endpoints[0],
+            target_id=endpoints[1],
             assertion_id=fact.id,
             support_id=support.id,
             predicate=fact.predicate,
@@ -466,6 +623,9 @@ class GraphRepository:
             description=description,
             tags=tags,
             annotations=annotations,
+            original_subject_id=fact.subject.id if data and data.identities else None,
+            original_target_id=fact.target.id if data and data.identities else None,
+            identity_mappings=proofs,
         )
 
     async def adjacent(
@@ -476,26 +636,36 @@ class GraphRepository:
         if len(seeds) > 200 or not 1 <= limit <= 401:
             raise ValueError("adjacency limits exceed the bounded traversal contract")
         binding = await self.queue.router.for_graph(data.scope.access, data.scope.view.kg_id)
-        by_id = {str(row.id): row for row in data.supports}
+        by_id = {
+            str(row.id): row
+            for row in data.supports
+            if set(data.endpoints(row)).intersection(seeds)
+        }
+        if not by_id:
+            return ()
+        raw_seeds = {
+            endpoint.id
+            for row in by_id.values()
+            if row.claim
+            for endpoint in (row.claim.assertion.subject, row.claim.assertion.target)
+            if data.entity_id(endpoint.id, data.context(row)) in seeds
+        }
+        if len(raw_seeds) > 1000:
+            raise DomainError(ErrorCode.QUOTA_EXCEEDED, "Alias adjacency exceeds its origin limit.")
         try:
             records, _, _ = await binding.driver.execute_query(
                 ADJACENCY,
                 **ScopePredicates(data.scope).graph_parameters,
-                seed_ids=[str(seed) for seed in seeds],
+                seed_ids=[str(seed) for seed in sorted(raw_seeds, key=str)],
                 support_ids=list(by_id),
                 limit=limit,
             )
         except (DriverError, Neo4jError) as error:
             raise BranchUnavailable("The graph backend is unavailable.") from error
+        if any(item["id"] not in by_id for item in records):
+            raise inconsistent()
         result = tuple(by_id[item["id"]] for item in records)
-        if any(
-            not row.claim
-            or not {
-                row.claim.assertion.subject.id,
-                row.claim.assertion.target.id,
-            }.intersection(seeds)
-            for row in result
-        ):
+        if any(not row.claim or not set(data.endpoints(row)).intersection(seeds) for row in result):
             raise inconsistent()
         return result
 

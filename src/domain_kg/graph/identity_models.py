@@ -1,11 +1,18 @@
 """Explicit human identity partitions, separate from canonical source assertions."""
 
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from domain_kg.models import FrozenModel, ManualProvenance, NonNegative, ScopedRef, UTCDateTime
+from domain_kg.models import (
+    FrozenModel,
+    ManualProvenance,
+    Namespace,
+    NonNegative,
+    ScopedRef,
+    UTCDateTime,
+)
 
 
 class IdentityGroup(FrozenModel):
@@ -59,3 +66,21 @@ class ManualIdentity(IdentityState):
     def text(self) -> str:
         # Labels remain independently sourced observations or explicit human fields.
         return ""
+
+
+class IdentityWitness(Namespace):
+    kind: Literal["manual_identity"] = "manual_identity"
+    original_id: UUID
+    canonical_id: UUID
+    curations: Annotated[tuple[ScopedRef, ...], Field(min_length=1, max_length=100)]
+    material_ids: Annotated[tuple[UUID, ...], Field(max_length=100)] = ()
+
+    @model_validator(mode="after")
+    def scoped_proof(self) -> Self:
+        if len(set(self.curations)) != len(self.curations) or any(
+            (item.org_id, item.kg_id) != (self.org_id, self.kg_id) for item in self.curations
+        ):
+            raise ValueError("identity witnesses require distinct same-KG curation references")
+        if len(set(self.material_ids)) != len(self.material_ids):
+            raise ValueError("identity witness source owners must be distinct")
+        return self

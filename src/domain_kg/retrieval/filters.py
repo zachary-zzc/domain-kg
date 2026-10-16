@@ -1,17 +1,23 @@
 """One support-filter implementation shared by graph, vector and text reads."""
 
+from uuid import UUID
+
 from domain_kg.engine.scope import EligibilityResolver as EligibilityResolver
 from domain_kg.retrieval.models import SearchFilters
 from domain_kg.revisions.projections import ProjectionBody
 
 
 def matches_support(
-    row: ProjectionBody, filters: SearchFilters, *, endpoint_types: tuple[str, ...] | None = None
+    row: ProjectionBody,
+    filters: SearchFilters,
+    *,
+    endpoint_types: tuple[str, ...] | None = None,
+    endpoint_ids: tuple[UUID, ...] | None = None,
 ) -> bool:
     if not row.claim:
         return False
     fact, support = row.claim.assertion, row.claim.support
-    endpoints = {fact.subject.id, fact.target.id}
+    endpoints = set(endpoint_ids) if endpoint_ids is not None else {fact.subject.id, fact.target.id}
     if endpoints.intersection(filters.exclude_entity_ids):
         return False
     if filters.entity_ids and not endpoints.intersection(filters.entity_ids):
@@ -36,11 +42,15 @@ def matches_support(
 
 
 def matches_observation(
-    row: ProjectionBody, filters: SearchFilters, *, entity_type: str | None = None
+    row: ProjectionBody,
+    filters: SearchFilters,
+    *,
+    entity_type: str | None = None,
+    entity_id: UUID | None = None,
 ) -> bool:
     item = row.observation
     return bool(
         item
-        and item.entity.id not in filters.exclude_entity_ids
+        and (entity_id or item.entity.id) not in filters.exclude_entity_ids
         and (not filters.entity_types or (entity_type or item.entity_type) in filters.entity_types)
     )

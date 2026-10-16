@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.identity_models import IdentityWitness
 from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.ingestion.models import Span
 from domain_kg.ingestion.resolved import ResolvedEntity
@@ -23,6 +24,9 @@ class NodeView(FrozenModel):
     truncation: bool = False
     curations: tuple[ManualNode, ...] = ()
     tags: tuple[str, ...] = ()
+    identity_members: tuple[UUID, ...] = ()
+    identity_mappings: tuple[IdentityWitness, ...] = ()
+    requested_id: UUID | None = None
 
 
 class EdgeView(FrozenModel):
@@ -41,6 +45,9 @@ class EdgeView(FrozenModel):
     description: str | None = None
     annotations: tuple[ManualRelation, ...] = ()
     tags: tuple[str, ...] = ()
+    original_subject_id: UUID | None = None
+    original_target_id: UUID | None = None
+    identity_mappings: tuple[IdentityWitness, ...] = ()
 
 
 class SubgraphView(FrozenModel):
