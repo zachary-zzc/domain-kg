@@ -219,3 +219,54 @@ async def test_retained_version_does_not_restore_prior_material_grants(publishin
         await service.lexical.retrieve(scope, request)
     reader = await queue.policy.resolve_access(team[2]["reader"], [job.kg_id], Action.SEARCH)
     assert (await service.search(reader, request)).results == ()
+
+
+async def test_retained_source_keeps_current_source_scoped_human_corrections(publishing):
+    from test_curation import alpha_id, publish_curation
+
+    from domain_kg.graph.service import GraphService
+    from domain_kg.revisions.models import NodeChanges, NodeUpdate
+    from domain_kg.revisions.service import RevisionService
+
+    _, editor, queue, coordinator, _, _ = publishing
+    old, job, checkpoint = await prepare(publishing)
+    await coordinator.publish(editor, await ready(publishing, job, checkpoint))
+    alpha = await alpha_id(queue, editor, job.kg_id)
+    correction = await RevisionService(queue, coordinator.providers).update_node(
+        editor,
+        NodeUpdate(
+            kg_id=job.kg_id,
+            entity_id=alpha,
+            expected_revision=0,
+            source_ids=(old.material_id,),
+            changes=NodeChanges(name="Reviewed Alpha"),
+            reason="Persistent human terminology",
+            idempotency_key="retained-current-correction",
+        ),
+    )
+    await publish_curation(queue, coordinator, editor, correction)
+    current, successor, checkpoint = await prepare(
+        publishing,
+        command=ReplaceMaterial(
+            kg_id=job.kg_id,
+            material_id=old.material_id,
+            expected_active_version=old.version_id,
+            title="Successor",
+            inline_text=TEXT,
+            idempotency_key="retained-after-correction",
+        ),
+    )
+    await coordinator.publish(editor, await ready(publishing, successor, checkpoint))
+    filters = SearchFilters(material_ids=(old.material_id,), version_id=old.version_id)
+    node = await GraphService(queue).get_node(editor, job.kg_id, alpha, filters)
+    assert node.name == "Reviewed Alpha"
+    assert {item.version_id for item in node.observations} == {old.version_id}
+    assert current.version_id != old.version_id
+    response = await RetrievalService(queue, coordinator.providers).search(
+        editor,
+        SearchRequest(
+            kg_ids=editor.kg_ids, query="Reviewed Alpha", mode="lexical", filters=filters
+        ),
+    )
+    assert any(item.curation_revision_id == correction.revision_id for item in response.results)
+    assert response.kg_revisions[job.kg_id] == 3

@@ -93,6 +93,13 @@ class ReadScope(FrozenModel):
     def current_view(self) -> PublishedView:
         return self.fence_view or self.view
 
+    @property
+    def projections(self) -> tuple[AcceptedProjection, ...]:
+        # An explicit retained source does not roll human corrections back.
+        return tuple(binding for binding in self.view.projections if binding.source) + tuple(
+            binding for binding in self.current_view.projections if binding.curation
+        )
+
     @model_validator(mode="after")
     def accepted_and_authorized(self) -> Self:
         if self.access.org_id != self.view.org_id or self.view.kg_id not in self.access.kg_ids:
@@ -100,11 +107,12 @@ class ReadScope(FrozenModel):
         if self.fence_view and (
             (self.fence_view.org_id, self.fence_view.kg_id) != (self.view.org_id, self.view.kg_id)
             or self.view.revision > self.fence_view.revision
+            or self.view.generation != self.fence_view.generation
         ):
             raise ValueError("retained view must have a current publication fence")
         if any(source not in self.view.sources for source in self.visible_sources):
             raise ValueError("visible sources must belong to the accepted view")
-        if any(curation not in self.view.curations for curation in self.visible_curations):
+        if any(curation not in self.current_view.curations for curation in self.visible_curations):
             raise ValueError("visible curations must belong to the accepted view")
         return self
 

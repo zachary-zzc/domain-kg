@@ -138,7 +138,7 @@ class GraphRepository:
                 ErrorCode.QUOTA_EXCEEDED, "This read exceeds the accepted-source budget."
             )
         binding = await self.queue.router.for_graph(scope.access, scope.view.kg_id)
-        for accepted in scope.view.projections:
+        for accepted in scope.projections:
             if (
                 accepted.source not in scope.visible_sources
                 and accepted.curation not in scope.visible_curations

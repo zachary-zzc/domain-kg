@@ -95,7 +95,7 @@ class EligibilityResolver:
                 visible.append(source)
         curations = []
         visible_materials = {str(source.material_id) for source in visible}
-        for curation in view.curations:
+        for curation in (fence_view or view).curations:
             row = await self.policy.database.curation_access.find_one(
                 {
                     "org_id": str(current.org_id),
@@ -192,7 +192,7 @@ class ScopePredicates:
                     "manifest_id": str(binding.manifest_id),
                     "manifest_hash": binding.content_hash,
                 }
-                for binding in self.scope.view.projections
+                for binding in self.scope.projections
                 if (
                     binding.source in self.scope.visible_sources
                     if binding.source
@@ -207,7 +207,7 @@ class ScopePredicates:
             return models.FieldCondition(key=key, match=models.MatchValue(value=str(value)))
 
         alternatives = []
-        for binding in self.scope.view.projections:
+        for binding in self.scope.projections:
             ownership = []
             if binding.source is not None:
                 if binding.source not in self.scope.visible_sources:

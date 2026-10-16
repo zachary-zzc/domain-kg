@@ -123,7 +123,7 @@ class SealedEvidence:
         payloads: list[dict[str, Any]] = []
         spaces = []
         curations: list[ManualNode] = []
-        for accepted in scope.view.projections:
+        for accepted in scope.projections:
             if (
                 accepted.source not in scope.visible_sources
                 and accepted.curation not in scope.visible_curations

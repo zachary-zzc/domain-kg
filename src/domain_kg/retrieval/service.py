@@ -210,7 +210,7 @@ class RetrievalService:
             return
         rows: list[ProjectionBody] = []
         curations: list[ManualNode] = []
-        for binding in scope.view.projections:
+        for binding in scope.projections:
             if (
                 binding.source not in scope.visible_sources
                 and binding.curation not in scope.visible_curations
