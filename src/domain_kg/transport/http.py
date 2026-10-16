@@ -17,6 +17,7 @@ from domain_kg.imports.models import ImportPlan
 from domain_kg.imports.requests import ImportRequest
 from domain_kg.jobs.models import JobReceipt
 from domain_kg.materials.inspection_models import MaterialDetail, MaterialPage
+from domain_kg.materials.management import ManagedMaterialPage, ManagementState
 from domain_kg.materials.models import (
     MaterialMetadataReceipt,
     RemovalReceipt,
@@ -45,6 +46,10 @@ from domain_kg.transport.runtime import ServiceRuntime
 class MaterialQuery(SearchFilters):
     limit: Annotated[int, Field(ge=1, le=100)] = 25
     cursor: str | None = None
+
+
+class ManagementQuery(HTTPPageRequest):
+    state: ManagementState = "removed"
 
 
 class HistoryQuery(HTTPPageRequest):
@@ -190,6 +195,17 @@ def service_router(runtime: ServiceRuntime) -> APIRouter:
             kg_id,
             PageRequest(limit=query.limit, cursor=query.cursor),
             SearchFilters.model_validate(query.model_dump(exclude={"limit", "cursor"})),
+        )
+
+    @router.get("/kgs/{kg_id}/materials/management")
+    async def management(
+        request: Request, kg_id: UUID, query: Annotated[ManagementQuery, Query()]
+    ) -> ManagedMaterialPage:
+        return await runtime.management.list(
+            await access(request, (kg_id,), Action.REPLACE),
+            kg_id,
+            query.state,
+            PageRequest(limit=query.limit, cursor=query.cursor),
         )
 
     @router.get("/kgs/{kg_id}/materials/{material_id}")

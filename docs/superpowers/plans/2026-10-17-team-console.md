@@ -45,10 +45,10 @@ Files: add `console/workspace.py`, `console/templates/kg.html`, `materials.html`
 
 Interfaces: routes under `/admin/kgs/{kg_id}` call `runtime.inspection`, `runtime.search`, `runtime.citations`, `runtime.queue` and `runtime.lifecycle`. `JobInspection.list(access: AccessContext, kg: UUID, page: PageRequest) -> JobPage` uses opaque principal/policy/visibility/view-bound cursors and verifies each job through the shared queue before disclosing it.
 
-- [ ] Add tests for reader search/citations, inaccessible sources, pending job visibility and expired cursors before implementation.
-- [ ] Implement KG selector, material list/detail with accepted/retained state, honest unverified labels, bounded fast/deep search and evidence links. Use safe allowlisted modes/filters; never display object keys or provider credentials.
-- [ ] Add editor forms for inline text or uploaded files, replacement, metadata, exclude/delete and restore. File transfer reuses the existing checksum-verified raw upload API; expected revisions and idempotency keys are hidden typed command fields. Redirect accepted mutations to their real job/receipt view.
-- [ ] Verify the focused serial console tests and commit this usable read/lifecycle milestone.
+- [x] Add tests for reader search/citations, inaccessible sources, pending job visibility and expired cursors before implementation.
+- [x] Implement KG selector, material list/detail with accepted/retained state, honest unverified labels, bounded fast/deep search and evidence links. Use safe allowlisted modes/filters; never display object keys or provider credentials.
+- [x] Add editor forms for inline text or uploaded files, replacement, metadata, exclude/delete and restore. File transfer reuses the existing checksum-verified raw upload API; expected revisions and idempotency keys are hidden typed command fields. Redirect accepted mutations to their real job/receipt view.
+- [x] Verify the focused serial console tests and commit this usable read/lifecycle milestone.
 
 ### Step 3: Team and permission management
 

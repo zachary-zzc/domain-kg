@@ -50,3 +50,13 @@ metadata-only changes avoid model calls. Forged actor fields are rejected before
 job admission. The source form flow passed its dedicated 63.02-second check and
 a four-case source/workspace/job regression in 79.09 seconds. The JavaScript
 syntax check passed; the full browser acceptance remains separate.
+
+Editors also have explicit pending/removed material metadata views. These views
+check current KG role and material ACL, validate canonical ownership, exclude
+purged records, and return no original text or graph evidence. Their cursors pin
+the current actor, state filter and accepted visibility/view. The shared JSON
+management endpoint enforces the same permissions. Restoration uses the existing
+lifecycle service: a retained ready source can reopen immediately; an unpublished
+source stays hidden while its reconstruction job verifies and publishes.
+The five-case management/restoration/workspace gate passed in 110.02 seconds;
+the dedicated browser/JSON parity and reconstruction check passed in 51.93 seconds.

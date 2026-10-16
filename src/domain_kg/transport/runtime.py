@@ -14,6 +14,7 @@ from domain_kg.jobs.inspection import JobInspection
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.materials.inspection import MaterialInspection
 from domain_kg.materials.lifecycle import MaterialLifecycle
+from domain_kg.materials.management import MaterialManagement
 from domain_kg.materials.service import MaterialService
 from domain_kg.operations.projections import ProjectionManagement
 from domain_kg.providers.service import ProviderService
@@ -34,6 +35,7 @@ class ServiceRuntime:
         self.queue = JobQueue(self.policy, catalog.router)
         self.job_inspection = JobInspection(self.queue)
         self.inspection = MaterialInspection(self.queue)
+        self.management = MaterialManagement(self.queue)
         self.citations = CitationService(self.queue)
         self.lifecycle = MaterialLifecycle(materials, self.queue)
         self.graph = GraphService(self.queue)
