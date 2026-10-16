@@ -1,0 +1,11 @@
+{
+  "payload_indexes": {
+    "org_id": "keyword",
+    "kg_id": "keyword",
+    "source_version_id": "keyword",
+    "generation": "keyword",
+    "attempt_id": "keyword"
+  },
+  "distance": "Cosine",
+  "vector_size": "approved_embedding_profile_dimensions"
+}

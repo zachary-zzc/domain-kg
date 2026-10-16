@@ -18,6 +18,11 @@ TASK_FILES = {
         "tests/integration/test_storage_smoke.py",
         "tests/integration/test_lightrag_scope_probe.py",
     ],
+    2: [
+        "tests/unit/test_smoke_budget.py",
+        "tests/unit/test_contracts.py",
+        "tests/integration/test_namespace_constraints.py",
+    ],
 }
 
 
