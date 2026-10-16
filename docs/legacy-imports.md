@@ -77,3 +77,13 @@ accepted job. Forged plans cannot reserve the valid command key. Native material
 submission remains unchanged. This component is private: ordinary workers still
 exclude import jobs, and no public execute route is available until the dedicated
 import pipeline is ready.
+
+The prepared-row builder verifies the exact export checksum and retains its raw
+UTF-8 text (including a BOM, when present) as export context. Original document
+claim spans remain empty. Observation/support IDs include material and version,
+while semantic assertion IDs include polarity and remain stable across versions
+from the same declared origin. GraphML and portable snapshots preserve explicit
+positive, negative and uncertain polarity; the CSV contract implies positive.
+A decoded name absent literally from raw XML/JSON context produces an explicit
+unlocated-record warning, without a fabricated quotation. Earlier experimental
+private plans predating polarity support must be recreated rather than reused.

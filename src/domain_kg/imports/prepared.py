@@ -16,6 +16,7 @@ class PreparedImport(SourceVersion):
     domain_schema: DomainSchema
     chunk_checkpoint: Checkpoint
     rows: Annotated[tuple[ProjectionBody, ...], Field(max_length=10000)]
+    warnings: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def unverified_source_rows(self) -> Self:

@@ -22,6 +22,7 @@ from domain_kg.imports.legacy_models import (
     LegacyEntity,
     LegacyGraph,
     LegacyRelation,
+    Polarity,
 )
 from domain_kg.imports.lightrag import snapshot_records
 from domain_kg.models import Namespace
@@ -43,6 +44,18 @@ def invalid() -> DomainError:
     return DomainError(
         ErrorCode.VALIDATION_ERROR, "The legacy graph format or ownership is invalid."
     )
+
+
+def polarity(value: str) -> Polarity:
+    match value.strip():
+        case "positive":
+            return "positive"
+        case "negative":
+            return "negative"
+        case "uncertain":
+            return "uncertain"
+        case _:
+            raise invalid()
 
 
 def stable(namespace: Namespace, *parts: str) -> UUID:
@@ -158,6 +171,7 @@ def graphml_records(body: bytes) -> tuple[tuple[ImportNode, ...], tuple[ImportEd
                 source=element.get("source", ""),
                 target=element.get("target", ""),
                 predicate=fields.get("relation", ""),
+                polarity=polarity(fields.get("polarity", "positive")),
                 source_ids=tuple(sources),
             )
         )
@@ -207,12 +221,19 @@ def parse_legacy(namespace: Namespace, format: str, body: bytes, *, origin: str)
                     id=stable(namespace, origin, "support", source, edge.id),
                     legacy_id=edge.id,
                     assertion_id=stable(
-                        namespace, origin, "assertion", edge.source, edge.predicate, edge.target
+                        namespace,
+                        origin,
+                        "assertion",
+                        edge.source,
+                        edge.predicate,
+                        edge.target,
+                        edge.polarity,
                     ),
                     subject_id=entities[(source, edge.source)].entity_id,
                     target_id=entities[(source, edge.target)].entity_id,
                     source_id=source,
                     predicate=edge.predicate,
+                    polarity=edge.polarity,
                 )
                 existing = relations.get((source, edge.id))
                 if existing is not None and existing != relation:

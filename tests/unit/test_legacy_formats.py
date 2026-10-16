@@ -154,3 +154,37 @@ def test_source_fanout_is_bounded_before_building_all_projections(namespace):
     with pytest.raises(DomainError) as oversized:
         parse_legacy(namespace, "lightrag", json.dumps(snapshot).encode(), origin="fanout")
     assert oversized.value.code == ErrorCode.QUOTA_EXCEEDED
+
+
+def test_opposite_snapshot_polarities_keep_distinct_assertion_identities(namespace):
+    snapshot = {
+        "format_version": 1,
+        "engine_version": "1.5.7",
+        "consistent": True,
+        "documents": [{"id": "a.pdf", "sha256": "a" * 64}],
+        "nodes": [{"id": "a", "name": "Alpha"}, {"id": "b", "name": "Beta"}],
+        "edges": [
+            {
+                "id": polarity,
+                "source": "a",
+                "target": "b",
+                "predicate": "uses",
+                "source_ids": ["a.pdf"],
+                "polarity": polarity,
+            }
+            for polarity in ("positive", "negative")
+        ],
+    }
+    graph = parse_legacy(namespace, "lightrag", json.dumps(snapshot).encode(), origin="polarity")
+    assert {relation.polarity for relation in graph.relations} == {"positive", "negative"}
+    assert len({relation.assertion_id for relation in graph.relations}) == 2
+
+
+def test_graphml_keeps_explicit_negative_polarity(namespace):
+    body = b"""<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+    <key id="p" for="edge" attr.name="polarity"/><key id="r" for="edge" attr.name="relation"/>
+    <graph edgedefault="directed"><node id="Alpha"/><node id="Beta"/>
+    <edge source="Alpha" target="Beta"><data key="r">uses</data>
+    <data key="p">negative</data></edge></graph></graphml>"""
+    graph = parse_legacy(namespace, "graphml", body, origin="polarity")
+    assert graph.relations[0].polarity == "negative"

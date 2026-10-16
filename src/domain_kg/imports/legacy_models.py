@@ -8,6 +8,7 @@ from pydantic import Field
 from domain_kg.models import SHA256, FrozenModel, Namespace, PreservedText
 
 LegacyID = Annotated[PreservedText, Field(min_length=1, max_length=1000)]
+Polarity = Literal["positive", "negative", "uncertain"]
 
 
 class LegacyEntity(FrozenModel):
@@ -27,6 +28,7 @@ class LegacyRelation(FrozenModel):
     target_id: UUID
     source_id: LegacyID
     predicate: Annotated[str, Field(min_length=1, max_length=200)]
+    polarity: Polarity = "positive"
     status: Literal["imported_unverified"] = "imported_unverified"
 
 
@@ -54,4 +56,5 @@ class ImportEdge(FrozenModel):
     source: LegacyID
     target: LegacyID
     predicate: Annotated[str, Field(min_length=1, max_length=200)]
+    polarity: Polarity = "positive"
     source_ids: Annotated[tuple[LegacyID, ...], Field(min_length=1, max_length=100)]
