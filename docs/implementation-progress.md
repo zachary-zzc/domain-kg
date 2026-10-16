@@ -5,8 +5,9 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | Task | Status | Verification |
 | --- | --- | --- |
 | 1: LightRAG and NoSQL compatibility spike | Complete | 17 tests pass against the real local stores; lint and mypy pass. Kernel RAM/swap limits verified. |
-| 2: Domain contracts and namespace integrity | Next | Contract and real-store namespace checks must pass before identity work. |
-| 3–19 | Pending | Follow the plan's dependency order. |
+| 2: Domain contracts and namespace integrity | Complete | 47 smoke tests pass; full regression 59 tests; lint and strict mypy pass. |
+| 3: OIDC identity and organization accounts | Next | Implement and test external verification; a configured development IdP login is required for completion. |
+| 4–19 | Pending | Follow the plan's dependency order. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
@@ -32,3 +33,7 @@ The runner stops services it started after the test; `--keep-services` keeps the
 Task 1's final real-store smoke passed all 17 tests in 7.86 seconds. Three Qdrant SDK warnings identify intentional HTTP use on loopback; shared deployment TLS remains a later release requirement. The kernel reported the exact configured limits, zero swap allowance, no OOM kills, and no container restarts.
 
 The retry fixed an unsupported Neo4j Community metrics setting, macOS system-proxy routing of local S3 traffic, and a SeaweedFS disk-volume-slot limit. The S3 probe bypasses system proxies for loopback while retaining the SDK's default checksum validation. Four bounded 64 MiB volume slots permit the internal volume and bucket collections without increasing RAM. Source decisions and verification limits are in [decision 0001](decisions/0001-runtime-and-lightrag.md).
+
+Task 2 adds transport-independent typed contracts, immutable accepted/read scopes, honest source/manual provenance, and exact-attempt publication receipt validation. Scoped canonical inserts check every reference against its organization and KG. Mongo validators and compound indexes enforce shape and uniqueness; reconciliation checks canonical references and graph/vector mappings in both directions. These are integrity primitives; current policy enforcement follows in Task 4 and publication coordination in Task 10.
+
+Reproduce the Task 2 laptop gate with `python3 scripts/smoke.py --task 2`. Its fixtures contain only small synthetic records and three-dimensional vectors. Source text preserves whitespace so citation offsets remain exact. A publication cannot be inferred from a staging write.
