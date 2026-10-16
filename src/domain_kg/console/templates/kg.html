@@ -1,0 +1,2 @@
+{% extends "base.html" %}
+{% block content %}<nav class="tabs" aria-label="Knowledge graph"><a href="/admin/kgs/{{ kg.id }}/materials">Materials</a><a href="/admin/kgs/{{ kg.id }}/search">Search</a><a href="/admin/kgs/{{ kg.id }}/jobs">Jobs</a></nav><section class="card"><h2>Publication</h2><p><span class="badge">{{ kg.state }}</span> Revision {{ kg.published_revision }}</p><p>Only accepted evidence contributes to search. Pending changes remain separate until their checks finish.</p></section>{% endblock %}

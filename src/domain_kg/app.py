@@ -8,7 +8,8 @@ from urllib.parse import urlsplit
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
@@ -21,6 +22,9 @@ from pymongo.errors import PyMongoError
 from domain_kg.catalog.backends import BackendRegistry, approved_from_settings
 from domain_kg.catalog.routes import catalog_router
 from domain_kg.catalog.service import CatalogService
+from domain_kg.console.rendering import ROOT as CONSOLE_ROOT
+from domain_kg.console.rendering import error_page
+from domain_kg.console.routes import console_router
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.policy import Policy
 from domain_kg.identity.repository import IdentityRepository
@@ -155,7 +159,7 @@ def create_app(
     app.state.services = services
 
     @app.exception_handler(DomainError)
-    async def domain_error_handler(request: Request, error: DomainError) -> JSONResponse:
+    async def domain_error_handler(request: Request, error: DomainError) -> Response:
         status = {
             ErrorCode.UNAUTHENTICATED: 401,
             ErrorCode.FORBIDDEN: 403,
@@ -171,6 +175,8 @@ def create_app(
             ErrorCode.UNSUPPORTED_FORMAT: 415,
             ErrorCode.EVIDENCE_VALIDATION_FAILED: 422,
         }.get(error.code, 503)
+        if request.url.path == "/admin" or request.url.path.startswith("/admin/"):
+            return error_page(error, status)
         headers = {"Cache-Control": "no-store"}
         if status == 401:
             headers["WWW-Authenticate"] = (
@@ -188,13 +194,13 @@ def create_app(
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error(request: Request, error: RequestValidationError) -> JSONResponse:
+    async def validation_error(request: Request, error: RequestValidationError) -> Response:
         return await domain_error_handler(
             request, DomainError(ErrorCode.VALIDATION_ERROR, "The request fields are invalid.")
         )
 
     @app.exception_handler(PyMongoError)
-    async def authority_error(request: Request, error: PyMongoError) -> JSONResponse:
+    async def authority_error(request: Request, error: PyMongoError) -> Response:
         return await domain_error_handler(
             request,
             DomainError(
@@ -203,7 +209,7 @@ def create_app(
         )
 
     @app.exception_handler(httpx.HTTPError)
-    async def provider_error(request: Request, error: httpx.HTTPError) -> JSONResponse:
+    async def provider_error(request: Request, error: httpx.HTTPError) -> Response:
         return await domain_error_handler(
             request,
             DomainError(
@@ -221,11 +227,17 @@ def create_app(
             app.include_router(material_router(identity, materials))
         if services is not None:
             app.include_router(service_router(services))
+            app.include_router(console_router(services))
+            app.mount(
+                "/admin/static",
+                StaticFiles(directory=CONSOLE_ROOT / "static"),
+                name="console-static",
+            )
 
     @app.middleware("http")
     async def private_identity_responses(request: Request, call_next: Any) -> Any:
         response = await call_next(request)
-        if request.url.path.startswith(("/api/v1/", "/auth/")):
+        if request.url.path.startswith(("/api/v1/", "/auth/", "/admin")):
             response.headers["Cache-Control"] = "no-store"
         return response
 
