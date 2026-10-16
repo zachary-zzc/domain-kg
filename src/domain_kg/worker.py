@@ -28,10 +28,19 @@ async def serve(
     worker_id: str,
     repair_only: bool = False,
     restore_only: bool = False,
+    curation_only: bool = False,
 ) -> None:
     runner.pipeline.require_configured()
     while True:
-        kinds = ("restore_material",) if restore_only else ("repair",) if repair_only else None
+        kinds = (
+            ("curate",)
+            if curation_only
+            else ("restore_material",)
+            if restore_only
+            else ("repair",)
+            if repair_only
+            else None
+        )
         job = await queue.claim(worker_id, kinds=kinds)
         if job is not None:
             await runner.run_job(job)
@@ -41,7 +50,13 @@ async def serve(
             await asyncio.sleep(1)
 
 
-async def main(*, once: bool, repair_only: bool = False, restore_only: bool = False) -> None:
+async def main(
+    *,
+    once: bool,
+    repair_only: bool = False,
+    restore_only: bool = False,
+    curation_only: bool = False,
+) -> None:
     settings = Settings()
     client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
         settings.mongo_uri.get_secret_value(), maxPoolSize=4, serverSelectionTimeoutMS=5000
@@ -52,7 +67,7 @@ async def main(*, once: bool, repair_only: bool = False, restore_only: bool = Fa
     try:
         queue = JobQueue(policy, router)
         approved_providers = ProviderRegistry.from_file(settings.provider_config)
-        if not approved_providers.profiles and not (repair_only or restore_only):
+        if not approved_providers.profiles and not (repair_only or restore_only or curation_only):
             raise DomainError(
                 ErrorCode.PROVIDER_UNAVAILABLE,
                 "Configure approved provider profiles before starting a worker.",
@@ -68,6 +83,7 @@ async def main(*, once: bool, repair_only: bool = False, restore_only: bool = Fa
             worker_id=f"local-{uuid4()}",
             repair_only=repair_only,
             restore_only=restore_only,
+            curation_only=curation_only,
         )
     finally:
         await router.close()
@@ -86,10 +102,20 @@ if __name__ == "__main__":
         action="store_true",
         help="restore retained material projections without a provider",
     )
+    mode.add_argument(
+        "--curation-only",
+        action="store_true",
+        help="process human curations; unchanged embedded text needs no provider",
+    )
     args = parser.parse_args()
     try:
         asyncio.run(
-            main(once=args.once, repair_only=args.repair_only, restore_only=args.restore_only)
+            main(
+                once=args.once,
+                repair_only=args.repair_only,
+                restore_only=args.restore_only,
+                curation_only=args.curation_only,
+            )
         )
     except DomainError as exc:
         print(f"{exc.code}: {exc.message}", file=sys.stderr)

@@ -7,6 +7,7 @@ from uuid import UUID, uuid5
 
 from pydantic import Field, model_validator
 
+from domain_kg.graph.curation_models import ManualNode
 from domain_kg.ingestion.models import ParsedChunk
 from domain_kg.ingestion.resolved import ResolvedAssertion, ResolvedEntity
 from domain_kg.jobs.models import Checkpoint
@@ -39,6 +40,7 @@ class ProjectionBody(Namespace):
     target_observation: ResolvedEntity | None = None
     manual_text: PreservedText | None = None
     provenance: ManualProvenance | None = None
+    manual_node: ManualNode | None = None
 
     @model_validator(mode="after")
     def scoped_evidence(self) -> Self:
@@ -78,8 +80,16 @@ class ProjectionBody(Namespace):
                 or self.id != self.curation.id
             ):
                 raise ValueError("manual projections require durable curation provenance")
+            if self.manual_node and (
+                self.manual_node.curation != self.curation
+                or self.manual_node.provenance != self.provenance
+                or self.manual_node.text != self.manual_text
+            ):
+                raise ValueError("manual display fields must match their curation")
         elif self.source is None or self.curation is not None:
             raise ValueError("generated projections require independent source ownership")
+        if self.manual_node and self.kind != "curation":
+            raise ValueError("manual fields cannot become source observations")
         if self.chunk and self.chunk.id != self.id:
             raise ValueError("chunk identity differs")
         if self.observation and self.observation.id != self.id:
@@ -146,6 +156,10 @@ class ProjectionRow(ProjectionBody):
         profile: EmbeddingProfile,
     ) -> dict[str, Any]:
         value = self.model_dump(mode="json", exclude={"vector"})
+        # Existing accepted source payloads predate manual node fields. Omitted
+        # optional extensions must keep their sealed backend body/checksum stable.
+        if self.manual_node is None:
+            value.pop("manual_node", None)
         payload = {
             "org_id": str(self.org_id),
             "kg_id": str(self.kg_id),
@@ -174,6 +188,8 @@ class ProjectionRow(ProjectionBody):
             payload["curation_revision_id"] = str(self.curation.id)
         if self.observation:
             payload["entity_id"] = str(self.observation.entity.id)
+        if self.manual_node:
+            payload["entity_id"] = str(self.manual_node.entity.id)
         if self.assertion:
             fact, support = self.assertion.assertion, self.assertion.support
             payload.update(
@@ -225,6 +241,40 @@ class EmbeddedDocument(SourceVersion):
                 raise ValueError("projection row source differs")
             normalized_vector(list(row.vector), self.profile.dimensions)
         return self
+
+
+class CurationEmbeddedDocument(Namespace):
+    curation: ScopedRef
+    directive: ManualNode
+    profile: EmbeddingProfile
+    profile_selection_revision: int
+    schema_id: UUID
+    schema_revision: int
+    rows: Annotated[tuple[ProjectionRow, ...], Field(max_length=1)]
+    warnings: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def sealed_curation(self) -> Self:
+        if (self.curation.org_id, self.curation.kg_id) != (self.org_id, self.kg_id) or (
+            self.directive.curation != self.curation
+        ):
+            raise ValueError("manual document requires its canonical curation owner")
+        if (self.profile.org_id, self.profile.kg_id) != (self.org_id, self.kg_id):
+            raise ValueError("manual embedding profile namespace differs")
+        if bool(self.rows) != bool(self.directive.text):
+            raise ValueError("only embedded manual fields require projection rows")
+        for row in self.rows:
+            if (
+                row.source is not None
+                or row.curation != self.curation
+                or row.manual_node != self.directive
+            ):
+                raise ValueError("manual rows cannot invent source ownership")
+            normalized_vector(list(row.vector), self.profile.dimensions)
+        return self
+
+
+ProjectionDocument = EmbeddedDocument | CurationEmbeddedDocument
 
 
 class AcceptedProjection(Namespace):

@@ -48,3 +48,16 @@ Retained reads currently require the selected generation to remain the current
 routed generation. An older generation returns an explicit readiness error until
 its routing/rebuild is available; the service does not search another collection
 or embedding space as a substitute.
+
+The material lifecycle domain service commits exclusion or deletion as an immediate
+visibility fence. Removal previews count only the material's owned versions,
+original bytes and dependent pending jobs after checking the complete source owner
+chain. Exclusion is reversible indefinitely; deletion has a 30-day live retention
+window. Restoration verifies the original checksum and accepted graph/vector
+readiness before clearing that fence. Missing projections create a durable
+provider-free restoration job that publishes a fresh immutable attempt. An original
+lost after a preparation checkpoint still blocks final restoration.
+
+These lifecycle domain behaviors are implemented and locally tested. Complete
+transport exposure, never-published-source reprocessing and retained physical purge
+are still in progress; their plan gates have not been marked complete.

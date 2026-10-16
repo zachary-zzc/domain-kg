@@ -109,6 +109,9 @@ class JobQueue:
         await self.database.job_artifacts.create_index(
             [("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True
         )
+        await self.database.operation_artifacts.create_index(
+            [("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True
+        )
 
     @staticmethod
     def _scope(job: JobCommand) -> dict[str, str]:
@@ -149,6 +152,8 @@ class JobQueue:
 
     @staticmethod
     def _action(kind: str) -> Action:
+        if kind == "curate":
+            return Action.CURATE
         if kind not in ("ingest", "replace", "repair", "restore_material"):
             raise DomainError(
                 ErrorCode.VALIDATION_ERROR, "This job kind has no configured handler."
@@ -297,10 +302,12 @@ class JobQueue:
         if not isinstance(worker_id, str) or not worker_id or len(worker_id) > 100:
             raise ValueError("invalid worker identifier")
         allowed = (
-            kinds if kinds is not None else ("ingest", "replace", "repair", "restore_material")
+            kinds
+            if kinds is not None
+            else ("ingest", "replace", "repair", "restore_material", "curate")
         )
         if not allowed or not set(allowed).issubset(
-            {"ingest", "replace", "repair", "restore_material"}
+            {"ingest", "replace", "repair", "restore_material", "curate"}
         ):
             raise ValueError("job kinds require a configured handler")
         # Expired leases at the bound become explicit terminal failures; no
@@ -381,6 +388,21 @@ class JobQueue:
             org_id=job.org_id,
             session=session,
         )
+        if job.kind == "curate":
+            from domain_kg.graph.curation import authorize_curation
+
+            record = await authorize_curation(
+                self,
+                access,
+                job.target_id,
+                kg_id=job.kg_id,
+                write=True,
+                preparing=True,
+                session=session,
+            )
+            if record["job_id"] != str(job.id) or record["actor"] != raw["actor"]:
+                raise inaccessible_reference()
+            return access
         material = await self._source(access, job, session)
         if str(material) != raw["material_id"]:
             raise inaccessible_reference()
@@ -436,6 +458,10 @@ class JobQueue:
     ) -> Checkpoint:
         stage = TypeAdapter(PreparationStage).validate_python(stage)
         input_hash = TypeAdapter(SHA256).validate_python(input_hash)
+        if job.kind == "curate":
+            from domain_kg.jobs.operations import store_operation_artifact
+
+            return await store_operation_artifact(self, job, stage, input_hash, data)
         access = await self.authorize(job)
         raw = await self._current(job)
         stores = await self.router.for_kg(access, job.kg_id)
@@ -542,7 +568,20 @@ class JobQueue:
 
         async def save(session: AsyncClientSession) -> None:
             await self._current(job, session)
-            await self.artifact_blob(job, checkpoint, session)
+            if job.kind == "curate":
+                from domain_kg.jobs.operations import read_operation_artifact
+
+                access = await self.authorize(job, session)
+                await read_operation_artifact(
+                    self,
+                    access,
+                    ScopedRef(org_id=job.org_id, kg_id=job.kg_id, id=job.target_id),
+                    checkpoint,
+                    job=job,
+                    session=session,
+                )
+            else:
+                await self.artifact_blob(job, checkpoint, session)
             existing = await self.database.job_checkpoints.find_one(key, session=session)
             if existing:
                 if {field: existing[field] for field in value} != value:
@@ -583,6 +622,18 @@ class JobQueue:
         if raw is None:
             return None
         checkpoint = Checkpoint.model_validate({k: v for k, v in raw.items() if k != "_id"})
+        if job.kind == "curate":
+            from domain_kg.jobs.operations import read_operation_artifact
+
+            access = await self.authorize(job)
+            await read_operation_artifact(
+                self,
+                access,
+                ScopedRef(org_id=job.org_id, kg_id=job.kg_id, id=job.target_id),
+                checkpoint,
+                job=job,
+            )
+            return checkpoint
         blob = await self.artifact_blob(job, checkpoint)
         access = await self.authorize(job)
         stores = await self.router.for_kg(access, job.kg_id)
@@ -678,7 +729,18 @@ class JobQueue:
             self._action(job.kind),
             org_id=job.org_id,
         )
-        if not await self.policy.material_visible(access, job.kg_id, UUID(raw["material_id"])):
+        if job.kind == "curate":
+            from domain_kg.graph.curation import authorize_curation
+
+            record = await authorize_curation(self, access, job.target_id, kg_id=job.kg_id)
+            if (
+                record["state"] != "accepted"
+                or record.get("accepted_manifest_id") != raw.get("accepted_manifest_id")
+                or record["job_id"] != raw["id"]
+                or record["actor"] != raw["actor"]
+            ):
+                raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Curation acceptance differs.")
+        elif not await self.policy.material_visible(access, job.kg_id, UUID(raw["material_id"])):
             raise inaccessible_reference()
         manifest = await self.database.publication_manifests.find_one(
             {
@@ -714,6 +776,17 @@ class JobQueue:
         )
         if raw is None:
             raise inaccessible_reference()
+        if raw["kind"] == "curate":
+            from domain_kg.graph.curation import authorize_curation
+
+            record = await authorize_curation(
+                self, current, UUID(raw["target_id"]), kg_id=UUID(raw["kg_id"]), session=session
+            )
+            if record["job_id"] != raw["id"] or record["actor"] != raw["actor"]:
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Curation job ownership differs."
+                )
+            return raw
         kg, material = UUID(raw["kg_id"]), UUID(raw["material_id"])
         if not await self.policy.material_visible(current, kg, material, session=session):
             grant = next((grant.role for grant in current.grants if grant.kg_id == kg), None)

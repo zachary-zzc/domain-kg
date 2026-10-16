@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
+from domain_kg.graph.curation_models import NodeChanges as NodeChanges
 from domain_kg.identity.models import AccessContext
 from domain_kg.materials.models import MaterialMetadata
 from domain_kg.models import (
@@ -183,22 +184,6 @@ class RevisionReceipt(Namespace):
             raise ValueError("pending revisions require a job, not a publication claim")
         if self.state == "published" and self.published_revision is None:
             raise ValueError("published revisions require the accepted KG revision")
-        return self
-
-
-class NodeChanges(FrozenModel):
-    name: Annotated[str, Field(min_length=1, max_length=1000)] | None = None
-    entity_type: Annotated[str, Field(min_length=1, max_length=200)] | None = None
-    description: Annotated[str, Field(max_length=8000)] | None = None
-    aliases: tuple[str, ...] | None = None
-    tags: tuple[str, ...] | None = None
-
-    @model_validator(mode="after")
-    def nonempty_change(self) -> Self:
-        if not self.model_fields_set or all(
-            getattr(self, key) is None for key in self.model_fields_set
-        ):
-            raise ValueError("at least one typed change is required")
         return self
 
 

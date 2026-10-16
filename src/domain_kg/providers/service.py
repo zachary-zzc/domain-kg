@@ -19,6 +19,7 @@ from domain_kg.providers.profiles import ProviderRegistry, embedding_space_id
 from domain_kg.storage.router import KGStoreRouter
 
 if TYPE_CHECKING:
+    from domain_kg.jobs.models import LeasedJob
     from domain_kg.providers.embeddings import EmbeddingProfile
 
 
@@ -154,10 +155,13 @@ class ProviderService:
         texts: list[str],
         *,
         source: SourceVersion | None = None,
+        curation: "LeasedJob | None" = None,
     ) -> tuple["EmbeddingProfile", list[list[float]]]:
         from domain_kg.providers.embeddings import EmbeddingClient, EmbeddingProfile
 
         selected = await self.selected(access, namespace.kg_id)
+        if source is not None and curation is not None:
+            raise inaccessible_reference()
 
         async def authorize() -> None:
             current = await self.policy.revalidate(access)
@@ -166,7 +170,40 @@ class ProviderService:
             if await self.selected(current, namespace.kg_id) != selected:
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider selection changed.")
             restricted = False
-            if source is not None:
+            if curation is not None:
+                from domain_kg.jobs.queue import JobQueue
+
+                if curation.kind != "curate" or (curation.org_id, curation.kg_id) != (
+                    namespace.org_id,
+                    namespace.kg_id,
+                ):
+                    raise inaccessible_reference()
+                queue = JobQueue(self.policy, self.router)
+                actor = await queue.authorize(curation)
+                if actor.principal != current.principal:
+                    raise inaccessible_reference()
+                record = await self.database.curation_revisions.find_one(
+                    {
+                        "org_id": str(namespace.org_id),
+                        "kg_id": str(namespace.kg_id),
+                        "id": str(curation.target_id),
+                        "job_id": str(curation.id),
+                    }
+                )
+                if record is None:
+                    raise inaccessible_reference()
+                for material_id in record["material_ids"]:
+                    material = await self.database.material_access.find_one(
+                        {
+                            "org_id": str(namespace.org_id),
+                            "kg_id": str(namespace.kg_id),
+                            "id": material_id,
+                        }
+                    )
+                    if material is None:
+                        raise inaccessible_reference()
+                    restricted |= material["acl_mode"] == "restricted"
+            elif source is not None:
                 if (source.org_id, source.kg_id) != (namespace.org_id, namespace.kg_id):
                     raise inaccessible_reference()
                 if not await self.policy.material_visible(
@@ -232,7 +269,9 @@ class ProviderService:
             transport=self.transport,
         )
         try:
-            return profile, await client.embed(texts, profile, query=source is None)
+            return profile, await client.embed(
+                texts, profile, query=source is None and curation is None
+            )
         finally:
             await client.close()
 

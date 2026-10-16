@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from domain_kg.graph.curation_models import ManualNode
 from domain_kg.ingestion.models import Span
 from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.models import FrozenModel, SourceVersion
@@ -19,6 +20,8 @@ class NodeView(FrozenModel):
     support_count: int
     neighbor_count: int
     truncation: bool = False
+    curations: tuple[ManualNode, ...] = ()
+    tags: tuple[str, ...] = ()
 
 
 class EdgeView(FrozenModel):

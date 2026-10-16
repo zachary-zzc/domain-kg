@@ -88,7 +88,9 @@ class MaterialLifecycle:
             namespace
             | {
                 "$or": [{"material_id": str(material)}, {"material_ids": str(material)}],
-                "kind": {"$in": ["ingest", "replace", "repair", "project", "restore_material"]},
+                "kind": {
+                    "$in": ["ingest", "replace", "repair", "project", "restore_material", "curate"]
+                },
                 "stage": {"$nin": list(TERMINAL)},
             },
             session=session,
@@ -276,7 +278,16 @@ class MaterialLifecycle:
                         {"material_id": str(command.material_id)},
                         {"material_ids": str(command.material_id)},
                     ],
-                    "kind": {"$in": ["ingest", "replace", "repair", "project", "restore_material"]},
+                    "kind": {
+                        "$in": [
+                            "ingest",
+                            "replace",
+                            "repair",
+                            "project",
+                            "restore_material",
+                            "curate",
+                        ]
+                    },
                     "stage": {"$nin": list(TERMINAL)},
                 },
                 {

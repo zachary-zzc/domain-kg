@@ -8,13 +8,14 @@ from neo4j.exceptions import DriverError, Neo4jError
 
 from domain_kg.engine.scope import EligibilityResolver, ScopePredicates
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
+from domain_kg.graph.curation_models import ManualNode
 from domain_kg.graph.views import EdgeView, NodeView, SubgraphView
 from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.filters import matches_observation, matches_support
 from domain_kg.retrieval.models import SubgraphRequest
 from domain_kg.revisions.models import ReadScope
-from domain_kg.revisions.projections import ProjectionBody
+from domain_kg.revisions.projections import CurationEmbeddedDocument, ProjectionBody
 from domain_kg.revisions.publication import accepted_document, projection_rows, receipt_for
 from domain_kg.storage.neo4j import GraphProjection, inconsistent
 
@@ -46,10 +47,38 @@ RETURN n.logical_id AS id
 class GraphData:
     scope: ReadScope
     rows: tuple[ProjectionBody, ...]
+    curations: tuple[ManualNode, ...] = ()
+
+    def field(self, observation: ResolvedEntity, key: str) -> Any:
+        value = getattr(observation, key)
+        for manual in sorted(
+            self.curations, key=lambda item: (item.created_at, str(item.curation.id))
+        ):
+            if manual.entity != observation.entity or (
+                not manual.public and observation.material_id not in manual.material_ids
+            ):
+                continue
+            proposed = getattr(manual.changes, key)
+            if proposed is not None:
+                value = proposed
+        return value
 
     @property
     def supports(self) -> tuple[ProjectionBody, ...]:
-        return tuple(row for row in self.rows if matches_support(row, self.scope.filters))
+        return tuple(
+            row
+            for row in self.rows
+            if matches_support(
+                row,
+                self.scope.filters,
+                endpoint_types=(
+                    self.field(row.subject_observation, "entity_type"),
+                    self.field(row.target_observation, "entity_type"),
+                )
+                if row.subject_observation and row.target_observation
+                else None,
+            )
+        )
 
     @property
     def observations(self) -> tuple[ResolvedEntity, ...]:
@@ -63,12 +92,37 @@ class GraphData:
             row.observation
             for row in self.rows
             if row.observation
-            and matches_observation(row, self.scope.filters)
+            and matches_observation(
+                row, self.scope.filters, entity_type=self.field(row.observation, "entity_type")
+            )
             and (
                 not self.scope.filters.requires_assertion_support
                 or row.observation.id in support_observations
             )
         )
+
+    @property
+    def manual_nodes(self) -> tuple[ManualNode, ...]:
+        result = []
+        for manual in self.curations:
+            if not any(value is not None for value in manual.changes.model_dump().values()):
+                continue
+            if manual.entity.id in self.scope.filters.exclude_entity_ids or (
+                self.scope.filters.entity_ids
+                and manual.entity.id not in self.scope.filters.entity_ids
+            ):
+                continue
+            if self.scope.filters.requires_assertion_support:
+                observations = [item for item in self.observations if item.entity == manual.entity]
+                if not observations or (
+                    not manual.public
+                    and not set(manual.material_ids).issubset(
+                        {item.material_id for item in observations}
+                    )
+                ):
+                    continue
+            result.append(manual)
+        return tuple(sorted(result, key=lambda item: (item.created_at, str(item.curation.id))))
 
 
 class GraphRepository:
@@ -78,6 +132,7 @@ class GraphRepository:
     async def open(self, scope: ReadScope) -> GraphData:
         await self.resolver.revalidate(scope)
         rows: list[ProjectionBody] = []
+        curations: list[ManualNode] = []
         if len(scope.visible_sources) + len(scope.visible_curations) > 1000:
             raise DomainError(
                 ErrorCode.QUOTA_EXCEEDED, "This read exceeds the accepted-source budget."
@@ -105,6 +160,8 @@ class GraphRepository:
                     ProjectionBody.model_validate(row.model_dump(exclude={"vector"}))
                     for row in document.rows
                 )
+                if isinstance(document, CurationEmbeddedDocument):
+                    curations.append(document.directive)
                 if len(rows) > 20000:
                     raise DomainError(
                         ErrorCode.QUOTA_EXCEEDED, "This read exceeds the sealed-row budget."
@@ -134,14 +191,15 @@ class GraphRepository:
                     raise
                 raise BranchUnavailable("The graph backend is unavailable.") from error
         await self.resolver.revalidate(scope)
-        return GraphData(scope, tuple(rows))
+        return GraphData(scope, tuple(rows), tuple(curations))
 
     def node(self, data: GraphData, identifier: UUID) -> NodeView | None:
         observations = sorted(
             (item for item in data.observations if item.entity.id == identifier),
             key=lambda item: (str(item.material_id), str(item.version_id), str(item.id)),
         )
-        if not observations:
+        manuals = tuple(item for item in data.manual_nodes if item.entity.id == identifier)
+        if not observations and not manuals:
             return None
         supports = [
             row
@@ -162,18 +220,50 @@ class GraphRepository:
         # Counts cover all eligible rows; the response includes at most 50
         # observations and derives every displayed field from those same rows.
         selected = observations[:50]
+        names = [item.changes.name for item in manuals if item.changes.name is not None]
         return NodeView(
             kg_id=data.scope.view.kg_id,
             id=identifier,
-            name=selected[0].name,
-            aliases=tuple(sorted({alias for item in selected for alias in item.aliases})),
-            descriptions=tuple(sorted({item.description for item in selected})),
-            entity_types=tuple(sorted({item.entity_type for item in selected})),
+            name=names[-1]
+            if names
+            else (data.field(selected[0], "name") if selected else str(identifier)),
+            aliases=tuple(
+                sorted(
+                    {alias for item in selected for alias in data.field(item, "aliases")}
+                    | {alias for manual in manuals for alias in (manual.changes.aliases or ())}
+                )
+            ),
+            descriptions=tuple(
+                sorted(
+                    {
+                        data.field(item, "description")
+                        for item in selected
+                        if data.field(item, "description")
+                    }
+                    | {
+                        manual.changes.description
+                        for manual in manuals
+                        if manual.changes.description
+                    }
+                )
+            ),
+            entity_types=tuple(
+                sorted(
+                    {data.field(item, "entity_type") for item in selected}
+                    | {
+                        manual.changes.entity_type
+                        for manual in manuals
+                        if manual.changes.entity_type
+                    }
+                )
+            ),
             observations=tuple(selected),
             observation_count=len(observations),
             support_count=len(supports),
             neighbor_count=len(neighbors),
             truncation=len(observations) > 50,
+            curations=manuals,
+            tags=tuple(sorted({tag for manual in manuals for tag in (manual.changes.tags or ())})),
         )
 
     @staticmethod

@@ -34,6 +34,7 @@ from domain_kg.revisions.projections import (
     AcceptedProjection,
     EmbeddedDocument,
     ProjectionBody,
+    ProjectionDocument,
     ProjectionRow,
 )
 from domain_kg.storage.neo4j import GraphProjection, inconsistent
@@ -47,7 +48,7 @@ def source_of(document: SourceVersion | BlobRef) -> SourceVersion:
     )
 
 
-def projection_rows(document: EmbeddedDocument, batch: RevisionBatch) -> list[dict[str, Any]]:
+def projection_rows(document: ProjectionDocument, batch: RevisionBatch) -> list[dict[str, Any]]:
     return [
         row.payload(
             attempt=batch.attempt_id,
@@ -77,7 +78,7 @@ def receipt_for(
 
 
 async def verify_document(
-    stores: RoutedStores, document: EmbeddedDocument, batch: RevisionBatch
+    stores: RoutedStores, document: ProjectionDocument, batch: RevisionBatch
 ) -> tuple[ProjectionReceipt, ...]:
     rows = projection_rows(document, batch)
     receipts = tuple(receipt_for(batch, name, rows) for name in ("graph", "vector", "lexical"))
@@ -128,7 +129,7 @@ async def accepted_document(
     binding: AcceptedProjection,
     *,
     restoration: RestoreReadPermit | None = None,
-) -> tuple[EmbeddedDocument, RevisionBatch, tuple[ProjectionReceipt, ...]]:
+) -> tuple[ProjectionDocument, RevisionBatch, tuple[ProjectionReceipt, ...]]:
     """Authenticate the sealed source independently of derived-backend availability."""
     try:
         return await _accepted_document(queue, access, binding, restoration=restoration)
@@ -146,12 +147,10 @@ async def _accepted_document(
     binding: AcceptedProjection,
     *,
     restoration: RestoreReadPermit | None = None,
-) -> tuple[EmbeddedDocument, RevisionBatch, tuple[ProjectionReceipt, ...]]:
+) -> tuple[ProjectionDocument, RevisionBatch, tuple[ProjectionReceipt, ...]]:
     journal = PublicationJournal(queue)
     attempt = await journal.attempt(access, binding.manifest_id)
     batch = RevisionBatch.model_validate(attempt["batch"])
-    if binding.source is None:
-        raise inconsistent()  # Curation projection producers are installed by the curation task.
     if attempt["state"] != "accepted":
         raise inconsistent()
     if (
@@ -170,6 +169,20 @@ async def _accepted_document(
         binding.content_hash,
     ):
         raise inconsistent()
+    if binding.source is None:
+        from domain_kg.revisions.curation_publication import curation_document
+
+        if (
+            binding.curation is None
+            or restoration is not None
+            or (ScopedRef.model_validate(attempt.get("curation")) != binding.curation)
+        ):
+            raise inconsistent()
+        return (
+            await curation_document(queue, access, attempt),
+            batch,
+            tuple(ProjectionReceipt.model_validate(item) for item in attempt["receipts"]),
+        )
     checkpoint = Checkpoint.model_validate(attempt["embedded_checkpoint"])
     body = await read_artifact(queue, access, checkpoint, binding.source, restoration=restoration)
     if hashlib.sha256(body).hexdigest() != batch.content_hash:
@@ -368,7 +381,11 @@ class ProjectionCoordinator:
             job, "embedding", input_hash, document.model_dump_json().encode()
         )
 
-    async def _document(self, access: AccessContext, attempt: dict[str, Any]) -> EmbeddedDocument:
+    async def _document(self, access: AccessContext, attempt: dict[str, Any]) -> ProjectionDocument:
+        if attempt.get("curation"):
+            from domain_kg.revisions.curation_publication import curation_document
+
+            return await curation_document(self.queue, access, attempt, leased=True)
         source = SourceVersion.model_validate(attempt["source"])
         checkpoint = Checkpoint.model_validate(attempt["embedded_checkpoint"])
         job = LeasedJob.model_validate(attempt["job"])
@@ -387,6 +404,12 @@ class ProjectionCoordinator:
         return document
 
     async def prepare(self, job: LeasedJob, embedded_checkpoint: Checkpoint) -> RevisionBatch:
+        if job.kind == "curate":
+            from domain_kg.revisions.curation_publication import CurationCoordinator
+
+            return await CurationCoordinator(self.queue, self.providers).prepare(
+                job, embedded_checkpoint
+            )
         await self.journal.initialize()
         access = await self.queue.authorize(job)
         await self.queue.artifact_blob(job, embedded_checkpoint)
@@ -559,6 +582,11 @@ class ProjectionCoordinator:
 
     async def publish(self, access: AccessContext, command: PublishRevision) -> RevisionReceipt:
         command = PublishRevision.model_validate(command)
+        candidate = await self.journal.attempt(access, command.report.batch.manifest_id)
+        if candidate.get("curation"):
+            from domain_kg.revisions.curation_publication import CurationCoordinator
+
+            return await CurationCoordinator(self.queue, self.providers).publish(access, command)
         try:
             return await self._publish(access, command)
         except DomainError as error:
@@ -632,6 +660,8 @@ class ProjectionCoordinator:
         if verified != command.report:
             raise inaccessible_reference()
         document = await self._document(current, attempt)
+        if not isinstance(document, EmbeddedDocument):
+            raise inconsistent()
         if job.kind == "restore_material":
             from domain_kg.materials.restoration import verify_restoration_original
 

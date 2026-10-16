@@ -5,16 +5,39 @@ from typing import Any, Literal
 
 from domain_kg.engine.scope import EligibilityResolver
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
+from domain_kg.graph.curation_models import ManualNode
 from domain_kg.graph.repository import GraphData
 from domain_kg.graph.service import AcceptedMetadata
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.graph import source_citation
 from domain_kg.retrieval.models import EvidenceCandidate
 from domain_kg.revisions.models import ReadScope
-from domain_kg.revisions.projections import ProjectionBody
+from domain_kg.revisions.projections import CurationEmbeddedDocument, ProjectionBody
 from domain_kg.revisions.publication import accepted_document, projection_rows, receipt_for
 from domain_kg.storage.neo4j import GraphProjection, inconsistent
 from domain_kg.storage.qdrant import VectorProjection
+
+
+def manual_candidate(
+    row: ProjectionBody, method: Literal["vector", "lexical", "graph"], score: float, rank: int
+) -> EvidenceCandidate:
+    from uuid import uuid5
+
+    manual = row.manual_node
+    if manual is None or row.curation is None or manual.curation != row.curation:
+        raise inconsistent()
+    return EvidenceCandidate(
+        kind="manual",
+        kg_id=row.kg_id,
+        text=row.text,
+        material_id=manual.material_ids[0] if len(manual.material_ids) == 1 else None,
+        curation_revision_id=manual.curation.id,
+        provenance=manual.provenance,
+        citation_ids=(uuid5(row.org_id, f"{row.kg_id}/curation/citation/{manual.curation.id}"),),
+        entity_ids=(manual.entity.id,),
+        score=score,
+        method_ranks={method: rank},
+    )
 
 
 @dataclass(frozen=True)
@@ -37,15 +60,25 @@ class EvidenceData:
             if row.chunk
             and (not self.graph.scope.filters.requires_assertion_support or row.id in eligible)
         }
+        if not self.graph.scope.filters.requires_assertion_support:
+            bodies.update(
+                {
+                    str(row.id): row
+                    for row in self.graph.rows
+                    if row.manual_node and row.manual_node in self.graph.manual_nodes
+                }
+            )
         return {
             payload["projection_id"]: bodies[payload["logical_id"]]
             for payload in self.payloads
-            if payload["kind"] == "chunk" and payload["logical_id"] in bodies
+            if payload["kind"] in ("chunk", "curation") and payload["logical_id"] in bodies
         }
 
     def candidate(
         self, row: ProjectionBody, method: Literal["vector", "lexical"], score: float, rank: int
     ) -> EvidenceCandidate:
+        if row.manual_node:
+            return manual_candidate(row, method, score, rank)
         if row.chunk is None or row.source is None:
             raise inconsistent()
         observations = [item for item in self.graph.observations if item.chunk_id == row.id]
@@ -89,6 +122,7 @@ class SealedEvidence:
         bodies: list[ProjectionBody] = []
         payloads: list[dict[str, Any]] = []
         spaces = []
+        curations: list[ManualNode] = []
         for accepted in scope.view.projections:
             if (
                 accepted.source not in scope.visible_sources
@@ -146,6 +180,8 @@ class SealedEvidence:
                 ProjectionBody.model_validate(row.model_dump(exclude={"vector"}))
                 for row in document.rows
             )
+            if isinstance(document, CurationEmbeddedDocument):
+                curations.append(document.directive)
             payloads.extend(expected)
             if document.rows:
                 spaces.append(document.profile.space_id)
@@ -154,4 +190,6 @@ class SealedEvidence:
                     ErrorCode.QUOTA_EXCEEDED, "This read exceeds the sealed-row budget."
                 )
         await self.resolver.revalidate(scope)
-        return EvidenceData(GraphData(scope, tuple(bodies)), tuple(payloads), tuple(spaces))
+        return EvidenceData(
+            GraphData(scope, tuple(bodies), tuple(curations)), tuple(payloads), tuple(spaces)
+        )

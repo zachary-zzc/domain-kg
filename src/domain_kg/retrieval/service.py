@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from domain_kg.engine.scope import EligibilityResolver
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode, inaccessible_reference
+from domain_kg.graph.curation_models import ManualNode
 from domain_kg.graph.repository import GraphData
 from domain_kg.graph.service import AcceptedMetadata
 from domain_kg.identity.models import AccessContext, Action
@@ -28,7 +29,7 @@ from domain_kg.retrieval.models import (
 )
 from domain_kg.retrieval.vector import VectorRetrievalBranch
 from domain_kg.revisions.models import ReadScope
-from domain_kg.revisions.projections import ProjectionBody
+from domain_kg.revisions.projections import CurationEmbeddedDocument, ProjectionBody
 from domain_kg.revisions.publication import accepted_document
 from domain_kg.storage.neo4j import inconsistent
 
@@ -208,6 +209,7 @@ class RetrievalService:
         if not items:
             return
         rows: list[ProjectionBody] = []
+        curations: list[ManualNode] = []
         for binding in scope.view.projections:
             if (
                 binding.source not in scope.visible_sources
@@ -219,10 +221,31 @@ class RetrievalService:
                 ProjectionBody.model_validate(row.model_dump(exclude={"vector"}))
                 for row in document.rows
             )
-        data = GraphData(scope, tuple(rows))
+            if isinstance(document, CurationEmbeddedDocument):
+                curations.append(document.directive)
+        data = GraphData(scope, tuple(rows), tuple(curations))
+        manuals = {
+            row.curation.id: row
+            for row in rows
+            if row.curation and row.manual_node in data.manual_nodes
+        }
         chunks = {row.id: row for row in rows if row.chunk}
         supports = {row.id: row for row in data.supports if row.assertion}
         for item in items:
+            if item.kind == "manual":
+                from domain_kg.retrieval.evidence import manual_candidate
+
+                manual = (
+                    manuals.get(item.curation_revision_id) if item.curation_revision_id else None
+                )
+                if manual is None or scope.filters.requires_assertion_support:
+                    raise inconsistent()
+                expected = manual_candidate(manual, "vector", item.score, 1)
+                if item.model_dump(exclude={"score", "method_ranks"}) != expected.model_dump(
+                    exclude={"score", "method_ranks"}
+                ):
+                    raise inconsistent()
+                continue
             row = chunks.get(item.chunk_id) if item.chunk_id else None
             if row is None or row.source is None or row.chunk is None:
                 raise inconsistent()

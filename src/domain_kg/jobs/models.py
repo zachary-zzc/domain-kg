@@ -48,6 +48,7 @@ class JobCommand(Namespace):
         "backup",
         "restore",
         "restore_material",
+        "curate",
         "purge",
     ]
     target_id: UUID

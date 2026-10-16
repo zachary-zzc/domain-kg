@@ -17,7 +17,8 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | 11: Scoped graph inspection and traversal | Complete locally | 13 smoke checks; regular regression 176 passed, one physical skip; two additional reproduced integrity failures fixed and verified. |
 | 12: Filtered vector and lexical retrieval | Complete locally | 22 smoke checks; regular regression 184 passed, one physical skip; current metadata/support filters, scoped native adapter and embedding-space fences. |
 | 13: Federated fast/deep search | Complete locally | 34 smoke checks; regular regression 202 passed, one physical skip; native mix, two-KG fusion, partial failure rules and model-specific source windows verified. |
-| 14–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
+| 14: Persistent edits and material changes | In progress | Removal/restoration, metadata and delta reuse, and retained-version substeps pass local checks. Initial source-scoped node curation smoke passes; remaining curation/lifecycle cases are still in progress. |
+| 15–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
@@ -144,3 +145,19 @@ regression. The user explicitly approved the three previously named abandoned
 fixture buckets; only those three were deleted and their absence verified.
 
 Task 13 uses source-bound immutable scopes for all retrieval, explicit branch coverage, and rank fusion across approved embedding spaces. Optional query-model output can select literal terms or reorder at most 50 existing candidates; it cannot rewrite evidence. Full chunks, citations, annotations and graph steps are authenticated against accepted artifacts before reranking. The final smoke passed 34 checks in 226.14 seconds, and the regular regression passed 202 tests with one separately run physical drill skipped. Ruff and strict mypy pass 79 files. The approved native embedding model passed six tiny real requests and four bilingual comparisons at sampled peak RSS 965,410,816 bytes; it stopped after the smoke and the chat background model was restored. The private profile remains disabled for corpus access, and the chat model has not passed extraction quality. See [federation](federated-search.md), [source windows](model-windows.md), and [model configuration](model-proposal.md).
+
+Task 14 has verified immediate source withdrawal, readiness-gated restoration and
+provider-free restoration jobs; metadata edits avoid model/derived writes. Source
+replacement reuses authenticated same-material windows and exact compatible vectors
+while rebinding evidence to the new version. A 17-check lifecycle/race regression
+passed in 261.58 seconds. Retained-version retrieval passed eight further checks in
+208.81 seconds, including all search modes and current grant/removal fences. See
+[incremental changes](incremental-changes.md).
+
+Initial human node curation now passes a two-case, real-store smoke in 156.42
+seconds: durable jobs publish isolated graph/vector attempts, preserve original
+observations, return manual provenance, and keep an A-scoped correction out of B's
+filtered fields and retrieval. Forty-four contract/projection unit checks pass,
+including old source-payload compatibility. Further curation variants, relationship
+edits, rollback, merge/split, suppression, full reprocessing restoration and retained
+physical purge remain unfinished. Task 14's plan boxes therefore remain unchecked.

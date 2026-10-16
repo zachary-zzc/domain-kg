@@ -41,12 +41,13 @@ class Pipeline:
     steps: tuple[PipelineStep, ...] = ()
     repair_steps: tuple[PipelineStep, ...] = ()
     restore_steps: tuple[PipelineStep, ...] = ()
+    curation_steps: tuple[PipelineStep, ...] = ()
 
     def __post_init__(self) -> None:
         order = [STAGES.index(step.stage) for step in self.steps]
         if order != sorted(set(order)):
             raise ValueError("pipeline stages must be unique and ordered")
-        for steps in (self.repair_steps, self.restore_steps):
+        for steps in (self.repair_steps, self.restore_steps, self.curation_steps):
             if steps and tuple(step.stage for step in steps) != (
                 "embedding",
                 "projecting",
@@ -389,6 +390,7 @@ def publication_steps(
     *,
     repair: bool = False,
     restoration: bool = False,
+    curation: bool = False,
 ) -> tuple[PipelineStep, ...]:
     import hashlib
 
@@ -400,6 +402,10 @@ def publication_steps(
         return hashlib.sha256((resolve_step.input_hash + "/" + stage + "-v1").encode()).hexdigest()
 
     async def current_hash(job: LeasedJob, stage: str) -> str:
+        if curation:
+            from domain_kg.revisions.curation_publication import CurationCoordinator
+
+            return await CurationCoordinator(queue, coordinator.providers).input_hash(job, stage)
         if repair or restoration:
             raw = await queue._current(job)
             return hashlib.sha256(
@@ -427,6 +433,17 @@ def publication_steps(
 
     async def data(job: LeasedJob, checkpoint: Checkpoint) -> bytes:
         access = await queue.authorize(job)
+        if curation:
+            from domain_kg.jobs.operations import read_operation_artifact
+            from domain_kg.models import ScopedRef
+
+            return await read_operation_artifact(
+                queue,
+                access,
+                ScopedRef(org_id=job.org_id, kg_id=job.kg_id, id=job.target_id),
+                checkpoint,
+                job=job,
+            )
         raw = await queue._current(job)
         source = SourceVersion(
             org_id=job.org_id,
@@ -448,6 +465,12 @@ def publication_steps(
         return await current_hash(job, "embedding")
 
     async def embed(job: LeasedJob) -> Checkpoint:
+        if curation:
+            from domain_kg.revisions.curation_publication import CurationCoordinator
+
+            return await CurationCoordinator(queue, coordinator.providers).embed(
+                job, await embed_hash(job)
+            )
         if restoration:
             from domain_kg.materials.restoration import restore_embedding_artifact
 
@@ -543,6 +566,12 @@ def configured_pipeline(queue: "JobQueue", providers: "ProviderService") -> Pipe
     restore = publication_steps(
         queue, ProjectionCoordinator(queue, providers), extraction[-1], restoration=True
     )
+    curation = publication_steps(
+        queue, ProjectionCoordinator(queue, providers), extraction[-1], curation=True
+    )
     return Pipeline(
-        preparation + extraction + publication, repair_steps=repair, restore_steps=restore
+        preparation + extraction + publication,
+        repair_steps=repair,
+        restore_steps=restore,
+        curation_steps=curation,
     )

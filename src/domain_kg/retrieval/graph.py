@@ -63,6 +63,12 @@ class GraphRetrievalBranch:
                 key=str,
             )
         )
+        manual_seeds = {
+            manual.entity.id
+            for manual in data.manual_nodes
+            if any(term.casefold() in manual.text.casefold() for term in (keywords or (query,)))
+        }
+        all_seeds = tuple(sorted(set(all_seeds) | manual_seeds, key=str))
         seeds = all_seeds[: request.max_nodes]
         if not seeds:
             await self.resolver.revalidate(scope)
@@ -154,6 +160,24 @@ class GraphRetrievalBranch:
                 )
             )
         await self.resolver.revalidate(scope)
+        if not scope.filters.requires_assertion_support:
+            from domain_kg.retrieval.evidence import manual_candidate
+
+            node_ids = {node.id for node in graph.nodes}
+            first_rank = len(candidates)
+            candidates.extend(
+                manual_candidate(row, "graph", 0.0, first_rank + index)
+                for index, row in enumerate(
+                    (
+                        row
+                        for row in data.rows
+                        if row.manual_node
+                        and row.manual_node in data.manual_nodes
+                        and row.manual_node.entity.id in node_ids
+                    ),
+                    1,
+                )
+            )
         return GraphRecall(
             candidates[:50],
             graph,

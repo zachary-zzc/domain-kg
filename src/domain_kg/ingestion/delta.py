@@ -197,6 +197,8 @@ async def _accepted_delta(
     from domain_kg.revisions.publication import accepted_document, source_of
 
     embedded, _, _ = await accepted_document(queue, access, sources[0])
+    if not isinstance(embedded, EmbeddedDocument):
+        raise inconsistent()
     source = source_of(embedded)
     parsed = ParsedDocument.model_validate_json(
         await read_artifact(queue, access, embedded.chunk_checkpoint, source)

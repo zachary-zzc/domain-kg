@@ -21,7 +21,10 @@ class BoundedNativeGraph:
                     "entity_name": str(node.id),
                     "entity_type": ";".join(node.entity_types),
                     "description": "\n".join(node.descriptions),
-                    "source_id": "<SEP>".join(str(item.chunk_id) for item in node.observations),
+                    "source_id": "<SEP>".join(
+                        [str(item.chunk_id) for item in node.observations]
+                        + [f"curation:{item.curation.id}" for item in node.curations]
+                    ),
                 }
                 for node in graph.nodes
             }
@@ -89,6 +92,10 @@ class RecallIndex:
         return [dict(item) for item in self.rows[:top_k]]
 
 
+def candidate_native_id(item: EvidenceCandidate) -> str:
+    return f"curation:{item.curation_revision_id}" if item.kind == "manual" else str(item.chunk_id)
+
+
 async def native_mix(
     graph: SubgraphView | None, vectors: list[EvidenceCandidate]
 ) -> dict[str, Any]:
@@ -104,10 +111,14 @@ async def native_mix(
         key,
         [
             {
-                "id": str(item.chunk_id),
+                "id": candidate_native_id(item),
                 "content": item.text,
                 "distance": item.score,
-                "file_path": f"kg:{item.kg_id}/version:{item.version_id}/chunk:{item.chunk_id}",
+                "file_path": (
+                    f"kg:{item.kg_id}/curation:{item.curation_revision_id}"
+                    if item.kind == "manual"
+                    else f"kg:{item.kg_id}/version:{item.version_id}/chunk:{item.chunk_id}"
+                ),
             }
             for item in vectors
         ],
@@ -131,7 +142,7 @@ async def native_mix(
     if (
         {item["entity_name"] for item in result["final_entities"]} != set(adapter.nodes)
         or {item["chunk_id"] for item in result["vector_chunks"]}
-        != {str(item.chunk_id) for item in vectors}
+        != {candidate_native_id(item) for item in vectors}
         or {
             tuple(sorted(item.get("src_tgt", (item.get("src_id"), item.get("tgt_id")))))
             for item in result["final_relations"]

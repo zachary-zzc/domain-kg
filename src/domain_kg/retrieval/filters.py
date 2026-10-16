@@ -5,7 +5,9 @@ from domain_kg.retrieval.models import SearchFilters
 from domain_kg.revisions.projections import ProjectionBody
 
 
-def matches_support(row: ProjectionBody, filters: SearchFilters) -> bool:
+def matches_support(
+    row: ProjectionBody, filters: SearchFilters, *, endpoint_types: tuple[str, str] | None = None
+) -> bool:
     if not row.assertion or not row.subject_observation or not row.target_observation:
         return False
     fact, support = row.assertion.assertion, row.assertion.support
@@ -14,10 +16,11 @@ def matches_support(row: ProjectionBody, filters: SearchFilters) -> bool:
         return False
     if filters.entity_ids and not endpoints.intersection(filters.entity_ids):
         return False
-    if filters.entity_types and not {
+    types = endpoint_types or (
         row.subject_observation.entity_type,
         row.target_observation.entity_type,
-    }.intersection(filters.entity_types):
+    )
+    if filters.entity_types and not set(types).intersection(filters.entity_types):
         return False
     return (
         support.status in filters.support_statuses
@@ -29,10 +32,12 @@ def matches_support(row: ProjectionBody, filters: SearchFilters) -> bool:
     )
 
 
-def matches_observation(row: ProjectionBody, filters: SearchFilters) -> bool:
+def matches_observation(
+    row: ProjectionBody, filters: SearchFilters, *, entity_type: str | None = None
+) -> bool:
     item = row.observation
     return bool(
         item
         and item.entity.id not in filters.exclude_entity_ids
-        and (not filters.entity_types or item.entity_type in filters.entity_types)
+        and (not filters.entity_types or (entity_type or item.entity_type) in filters.entity_types)
     )

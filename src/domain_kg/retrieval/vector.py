@@ -50,7 +50,7 @@ class VectorRetrievalBranch:
                 models.FieldCondition(
                     key="embedding_space_id", match=models.MatchValue(value=space)
                 ),
-                models.FieldCondition(key="kind", match=models.MatchValue(value="chunk")),
+                models.FieldCondition(key="kind", match=models.MatchAny(any=["chunk", "curation"])),
             ]
         )
         try:
