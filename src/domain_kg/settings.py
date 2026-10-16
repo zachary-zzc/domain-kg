@@ -1,6 +1,6 @@
 """Server-owned configuration; these fields are never MCP tool arguments."""
 
-from pydantic import AnyHttpUrl, SecretStr
+from pydantic import AnyHttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,7 +8,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DOMAIN_KG_", env_file=".env", extra="ignore")
 
     public_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:8000")
-    oidc_issuer: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:18080/realms/domain-kg")
+    oidc_issuer: str = "http://127.0.0.1:18080/realms/domain-kg"
+    oidc_client_id: str = ""
+    oidc_client_secret: SecretStr = SecretStr("")
+    mongo_database: str = "domain_kg"
     mongo_uri: SecretStr = SecretStr(
         "mongodb://127.0.0.1:27027/?replicaSet=rs0&directConnection=true"
     )
@@ -20,3 +23,12 @@ class Settings(BaseSettings):
     s3_endpoint: str = "http://127.0.0.1:29000"
     s3_access_key: str = "domain-kg-dev"
     s3_secret_key: SecretStr = SecretStr("")
+
+    @field_validator("oidc_issuer")
+    @classmethod
+    def valid_issuer(cls, value: str) -> str:
+        # Preserve the exact issuer identifier; URL normalization can change iss.
+        AnyHttpUrl(value)
+        from domain_kg.identity.oidc import _safe_endpoint
+
+        return _safe_endpoint(value)

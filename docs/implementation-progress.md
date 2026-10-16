@@ -6,7 +6,7 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | --- | --- | --- |
 | 1: LightRAG and NoSQL compatibility spike | Complete | 17 tests pass against the real local stores; lint and mypy pass. Kernel RAM/swap limits verified. |
 | 2: Domain contracts and namespace integrity | Complete | 47 smoke tests pass; full regression 59 tests; lint and strict mypy pass. |
-| 3: OIDC identity and organization accounts | Next | Implement and test external verification; a configured development IdP login is required for completion. |
+| 3: OIDC identity and organization accounts | Local checks pass; external gate pending | 19 smoke tests pass, including signed issuer fixtures and real MongoDB transactions. A real development IdP login is still required. |
 | 4–19 | Pending | Follow the plan's dependency order. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
@@ -37,3 +37,7 @@ The retry fixed an unsupported Neo4j Community metrics setting, macOS system-pro
 Task 2 adds transport-independent typed contracts, immutable accepted/read scopes, honest source/manual provenance, and exact-attempt publication receipt validation. Scoped canonical inserts check every reference against its organization and KG. Mongo validators and compound indexes enforce shape and uniqueness; reconciliation checks canonical references and graph/vector mappings in both directions. These are integrity primitives; current policy enforcement follows in Task 4 and publication coordination in Task 10.
 
 Reproduce the Task 2 laptop gate with `python3 scripts/smoke.py --task 2`. Its fixtures contain only small synthetic records and three-dimensional vectors. Source text preserves whitespace so citation offsets remain exact. A publication cannot be inferred from a staging write.
+
+Task 3 implements external JWT verification and JWKS refresh, protected-resource discovery, exact issuer/subject identity, admission/suspension, transactional last-admin protection, groups, bounded service identities, and browser sessions with PKCE/nonce/state/CSRF checks. Identity cursors bind the actor, organization and policy revision. The official MCP client successfully used the real verifier with an isolated signed fixture; suspending that member immediately denied the same token.
+
+The complete current suite passed 73 tests in 14.53 seconds; Ruff and strict mypy pass. Four Qdrant loopback-HTTP warnings remain the same documented development limitation. Docker limits remain 1.476 GB with swap disabled, no OOM kills and no restarts. [Development identity instructions](identity-development.md) describe the remaining real-provider login gate. No development issuer/client has been supplied, so Task 3 is not marked complete and Tasks 4–19 remain pending. The test-only issuer is never enabled in the application runtime. Smoke containers are stopped after the local checks to release RAM; the runner restarts them when needed.

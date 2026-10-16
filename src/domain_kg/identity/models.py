@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from domain_kg.models import FrozenModel, NonNegative
+from domain_kg.models import FrozenModel, NonNegative, PreservedText
 
 
 class Action(StrEnum):
@@ -28,8 +28,8 @@ class Action(StrEnum):
 
 
 class Principal(FrozenModel):
-    issuer: Annotated[str, Field(min_length=1)]
-    subject: Annotated[str, Field(min_length=1)]
+    issuer: Annotated[PreservedText, Field(min_length=1)]
+    subject: Annotated[PreservedText, Field(min_length=1)]
     scopes: frozenset[str] = frozenset()
     kind: Literal["human", "service"] = "human"
 
@@ -49,3 +49,23 @@ class AccessContext(FrozenModel):
     action: Action = Action.READ
     organization_admin: bool = False
     platform_operator: bool = False
+
+
+class Member(FrozenModel):
+    id: UUID
+    org_id: UUID
+    issuer: PreservedText
+    subject: PreservedText
+    role: Literal["admin", "member"]
+    kind: Literal["human", "service"] = "human"
+    suspended: bool = False
+    revision: NonNegative = 0
+    kg_ids: tuple[UUID, ...] = ()
+    scopes: frozenset[str] = frozenset()
+
+
+class Group(FrozenModel):
+    id: UUID
+    org_id: UUID
+    name: Annotated[str, Field(min_length=1, max_length=200)]
+    member_ids: tuple[UUID, ...] = ()

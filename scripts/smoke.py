@@ -23,6 +23,11 @@ TASK_FILES = {
         "tests/unit/test_contracts.py",
         "tests/integration/test_namespace_constraints.py",
     ],
+    3: [
+        "tests/unit/test_smoke_budget.py",
+        "tests/integration/test_identity.py",
+        "tests/protocol/test_auth_discovery.py",
+    ],
 }
 
 
