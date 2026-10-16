@@ -205,6 +205,17 @@ class JobQueue:
             from domain_kg.materials.restoration import authorize_restore_job
 
             await authorize_restore_job(self, access, command, material, session)
+            if command.kind == "reprocess_material":
+                from domain_kg.materials.reprocessing import unpublished_source
+
+                selected = await unpublished_source(
+                    self,
+                    access,
+                    ScopedRef(org_id=command.org_id, kg_id=command.kg_id, id=material),
+                    session,
+                )
+                if selected.version_id != command.target_id:
+                    raise inaccessible_reference()
         elif not await self.policy.material_visible(
             access, command.kg_id, material, session=session
         ):

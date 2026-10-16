@@ -185,5 +185,10 @@ and immutable unverified provenance across retrieval, graph views, material
 inspection and citations. Default retrieval excludes the whole imported source.
 Explicit curator commands can suppress imported targets; all raw export context
 is then fenced. Five serial real-store checks passed in 192.89 seconds and
-159 unit/protocol checks passed. Public admission, format/recovery coverage and
-upstream compatibility comparisons remain before Task 16 completion.
+159 unit/protocol checks passed. Signed HTTP plan/execute admission passed 13 checks. The recovery, stable-ID
+mapping, independent support, curation and native helper comparison passed nine
+checks in 279.27 seconds; exact-source import/native purge passed two more in
+62.06 seconds. Native replacement performs fresh validated extraction; unpublished
+imports reconstruct as unverified under the current restoring actor. The final
+combined Task 16 laptop command remains before its checkboxes are updated.
+See [legacy imports](legacy-imports.md) and [the compatibility decision](decisions/0002-lightrag-compatibility.md).

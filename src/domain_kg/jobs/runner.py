@@ -20,9 +20,24 @@ class JobRunner:
             return
         if not self.pipeline.steps:
             self.pipeline.require_configured()
+        importing = job.kind == "import"
+        if job.kind == "reprocess_material":
+            await self.queue.authorize(job)
+            raw = await self.queue._current(job)
+            importing = (
+                await self.queue.database.import_source_origins.find_one(
+                    {
+                        "org_id": str(job.org_id),
+                        "kg_id": str(job.kg_id),
+                        "material_id": raw["material_id"],
+                        "version_id": str(job.target_id),
+                    }
+                )
+                is not None
+            )
         steps = (
             self.pipeline.import_steps
-            if job.kind == "import"
+            if importing
             else self.pipeline.curation_steps
             if job.kind == "curate"
             else self.pipeline.restore_steps

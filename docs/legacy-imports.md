@@ -85,7 +85,7 @@ unlocated-record warning, without a fabricated quotation. Earlier experimental
 private plans predating polarity support must be recreated rather than reused.
 
 The dedicated import pipeline validates and decodes the sealed export, persists
-version-owned observations/supports and old/new entity mappings, then uses only
+version-owned observations/supports and old/new entity/relation mappings, then uses only
 the selected approved embedding provider. It never invokes extraction or creates
 a fake provider extraction artifact. Existing isolated projection staging,
 readiness verification and MongoDB publication fencing remain authoritative.
@@ -118,3 +118,26 @@ The selected approved profile must allow restricted material and match the KG's
 embedding dimension/revision before job admission. Configure the worker separately;
 admission does not claim a running worker or an accepted publication. The signed
 HTTP/admission regression passed 13 real-store tests in 31.88 seconds.
+
+Recovery keeps the same import trust boundary. Retained repair/restoration clones
+sealed embedded data without model calls. An import removed before its first
+publication is reconstructed with the dedicated decoding/embedding pipeline under
+the restoring actor's current permissions and a live restore permit. It cannot
+be processed as a native extraction job or lose its unverified marker. Replacing
+an import with an actual source uses fresh source-span extraction; imported
+prepared rows are never reused as a provider extraction artifact.
+
+Stable origin-qualified canonical identities retain explicit owner curation across
+a second import. Removing one material preserves another material's observations
+and support. Legacy relation mappings point separately to the canonical assertion
+and each version/source-owned support. The combined real-store recovery, mapping,
+curation and upstream helper comparison passed nine tests in 279.27 seconds;
+162 unit/protocol tests and the 31-test offline Task 16 smoke also passed.
+
+Expired owner-authorized purge removes source-owned entity/relation mappings and
+the decoded export graph from the sealed plan. Hashes, receipt identity and the
+minimal origin ledger remain to reconcile retained manifests; purged originals
+cannot be restored. The import cleanup and independent native source/curation
+regression passed two checks in 62.06 seconds. Run the combined bounded gate with
+`python3 scripts/smoke.py --task 16 --keep-services`; Task 16 completion remains
+subject to that full command.

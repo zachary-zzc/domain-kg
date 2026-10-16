@@ -8,7 +8,6 @@ and durable mappings are implemented by their later plan tasks.
 import asyncio
 from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
-from importlib.metadata import version
 from typing import Any
 from uuid import UUID
 
@@ -36,8 +35,9 @@ class LightRAGBoundary:
     """Only extracts source-bound observations; does not use global summaries."""
 
     def __init__(self) -> None:
-        if version("lightrag-hku") != "1.5.7":
-            raise RuntimeError("LightRAG compatibility probe requires the locked release")
+        from domain_kg.engine.capabilities import checked_capabilities
+
+        self.capabilities = checked_capabilities()
 
     async def extract(
         self,

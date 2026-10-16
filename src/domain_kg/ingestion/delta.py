@@ -199,6 +199,10 @@ async def _accepted_delta(
     embedded, _, _ = await accepted_document(queue, access, sources[0])
     if not isinstance(embedded, EmbeddedDocument):
         raise inconsistent()
+    if embedded.import_origin is not None:
+        # Legacy decoding is not a document extraction artifact. A real source
+        # replacement must run span validation and resolution from its own bytes.
+        return None
     source = source_of(embedded)
     parsed = ParsedDocument.model_validate_json(
         await read_artifact(queue, access, embedded.chunk_checkpoint, source)

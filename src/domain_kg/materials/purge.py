@@ -774,8 +774,24 @@ class PurgeService:
             await self._idle(current, job.kg_id, job.target_id, own_job=job.id, session=session)
             authority = stores.authority._database
             source_key = ns | {"material_id": str(job.target_id), "version_id": {"$in": versions}}
-            for name in ("source_blocks", "source_chunks", "observations"):
+            for name in (
+                "source_blocks",
+                "source_chunks",
+                "observations",
+                "import_id_mappings",
+                "import_assertion_mappings",
+            ):
                 await authority[name].delete_many(source_key, session=session)
+            await self.database.import_plans.update_many(
+                ns
+                | {
+                    "source.material_id": str(job.target_id),
+                    "source.version_id": {"$in": versions},
+                    "state": "admitted",
+                },
+                {"$unset": {"graph": ""}, "$set": {"state": "purged", "purged_at": now()}},
+                session=session,
+            )
             await authority.engine_names.delete_many(
                 ns | {"version_id": {"$in": versions}}, session=session
             )

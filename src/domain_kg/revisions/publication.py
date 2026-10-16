@@ -772,7 +772,7 @@ class ProjectionCoordinator:
             if version is None or material is None:
                 raise inaccessible_reference()
             if (
-                job.kind in ("ingest", "reprocess_material")
+                job.kind in ("ingest", "import", "reprocess_material")
                 and material.get("active_version_id") is not None
             ):
                 raise DomainError(

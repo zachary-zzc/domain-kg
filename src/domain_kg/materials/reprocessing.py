@@ -45,11 +45,20 @@ async def unpublished_source(
         ScopedRef(org_id=material.org_id, kg_id=material.kg_id, id=source.version_id),
         session=session,
     )
-    origin = await queue.database.jobs.find_one(
-        namespace
-        | {"kind": "ingest", "material_id": str(material.id), "target_id": str(source.version_id)},
-        session=session,
+    origins = (
+        await queue.database.jobs.find(
+            namespace
+            | {
+                "kind": {"$in": ["ingest", "import"]},
+                "material_id": str(material.id),
+                "target_id": str(source.version_id),
+            },
+            session=session,
+        )
+        .limit(2)
+        .to_list()
     )
+    origin = origins[0] if len(origins) == 1 else None
     command = await queue.database.material_commands.find_one(
         namespace | {"id": origin.get("command_id") if origin else None, "state": "accepted"},
         session=session,
@@ -74,4 +83,12 @@ async def unpublished_source(
         raise DomainError(
             ErrorCode.PROJECTION_INCONSISTENT, "The initial original ownership differs."
         )
+    if origin["kind"] == "import":
+        from domain_kg.imports.authority import load_registered
+
+        await load_registered(queue, access, source, origin, session)
+    else:
+        from domain_kg.imports.provenance import check_import_origin
+
+        await check_import_origin(queue.database, source, None, session=session)
     return source

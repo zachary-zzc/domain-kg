@@ -8,7 +8,7 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.models import EntityRecord
-from domain_kg.identity.models import AccessContext, Action
+from domain_kg.identity.models import AccessContext
 from domain_kg.imports.authority import AdmittedImport, load_admitted
 from domain_kg.imports.build import build_import, snapshot_document
 from domain_kg.imports.legacy import MAX_BYTES, parse_legacy
@@ -18,6 +18,7 @@ from domain_kg.ingestion.pipeline import PipelineStep, publication_steps
 from domain_kg.ingestion.repository import SourceRepository
 from domain_kg.jobs.models import Checkpoint, LeasedJob, PreparationStage
 from domain_kg.jobs.queue import JobQueue
+from domain_kg.materials.restoration import reprocessing_permit
 from domain_kg.models import Namespace, ScopedRef
 from domain_kg.providers.embeddings import EmbeddingProfile
 from domain_kg.providers.service import ProviderService
@@ -142,7 +143,13 @@ class ImportWorker:
                 **{field: getattr(source, field) for field in SourceVersion.model_fields}
             )
             graph = LegacyGraph.model_validate_json(
-                await read_artifact(self.queue, access, graph_checkpoint, owner)
+                await read_artifact(
+                    self.queue,
+                    access,
+                    graph_checkpoint,
+                    owner,
+                    restoration=await reprocessing_permit(self.queue, access, job),
+                )
             )
             chunk_checkpoint = await self.required(job, "chunking")
             document = await self.sources.read(job, chunk_checkpoint)
@@ -166,7 +173,7 @@ class ImportWorker:
             raise inaccessible_reference()
         stores = await self.queue.router.for_kg(access, job.kg_id)
         database = stores.authority._database
-        for name in ("observations", "import_id_mappings"):
+        for name in ("observations", "import_id_mappings", "import_assertion_mappings"):
             await database[name].create_index([("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True)
             await database[name].create_index([("org_id", 1), ("kg_id", 1), ("version_id", 1)])
 
@@ -199,7 +206,7 @@ class ImportWorker:
 
         async def commit(session: AsyncClientSession) -> None:
             current = await self.queue.authorize(job, session)
-            await self.queue.transactions.fence(current, Action.INGEST, session)
+            await self.queue.transactions.fence(current, self.queue._action(job.kind), session)
             await load_admitted(self.queue, current, job, prepared.material_id, session)
             await stores.authority.require_version(
                 ScopedRef(org_id=job.org_id, kg_id=job.kg_id, id=job.target_id), session=session
@@ -245,6 +252,31 @@ class ImportWorker:
                     },
                     session,
                 )
+            for relation in admitted.graph.relations:
+                identifier = owned_id(
+                    admitted.origin, "support", relation.source_id, relation.legacy_id
+                )
+                await immutable(
+                    "import_assertion_mappings",
+                    {
+                        "org_id": str(job.org_id),
+                        "kg_id": str(job.kg_id),
+                        "id": str(identifier),
+                        "material_id": str(prepared.material_id),
+                        "version_id": str(job.target_id),
+                        "plan_id": str(admitted.origin.plan_id),
+                        "origin": admitted.origin.origin,
+                        "legacy_source_id": relation.source_id,
+                        "legacy_id": relation.legacy_id,
+                        "assertion": ScopedRef(
+                            org_id=job.org_id, kg_id=job.kg_id, id=relation.assertion_id
+                        ).model_dump(mode="json"),
+                        "support": ScopedRef(
+                            org_id=job.org_id, kg_id=job.kg_id, id=identifier
+                        ).model_dump(mode="json"),
+                    },
+                    session,
+                )
 
         await self.queue.transactions.transaction(commit)
 
@@ -256,7 +288,13 @@ class ImportWorker:
             **{field: getattr(admitted.origin, field) for field in SourceVersion.model_fields}
         )
         prepared = PreparedImport.model_validate_json(
-            await read_artifact(self.queue, access, resolved, source)
+            await read_artifact(
+                self.queue,
+                access,
+                resolved,
+                source,
+                restoration=await reprocessing_permit(self.queue, access, job),
+            )
         )
         if (
             prepared.import_origin != admitted.origin
@@ -264,12 +302,14 @@ class ImportWorker:
         ):
             raise inaccessible_reference()
         selected, expected = await self.profile(access, admitted)
-        await self.providers.authorize_source(access, source)
+        permit = await reprocessing_permit(self.queue, access, job)
+        await self.providers.authorize_source(access, source, restoration=permit)
         profile, vectors = await self.providers.embeddings(
             access,
             Namespace(org_id=job.org_id, kg_id=job.kg_id),
             [row.text for row in prepared.rows],
             source=source,
+            restoration=permit,
         )
         if profile != expected or await self.providers.selected(access, job.kg_id) != selected:
             raise DomainError(ErrorCode.VERSION_CONFLICT, "The import embedding selection changed.")
