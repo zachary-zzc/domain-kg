@@ -10,6 +10,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import AccessContext, Member, Principal
+from domain_kg.revisions.models import ReadScope
 from domain_kg.transport.runtime import ServiceRuntime
 
 ROOT = Path(__file__).parent
@@ -71,6 +72,8 @@ async def page(
     access: AccessContext,
     template: str,
     context: dict[str, Any],
+    *,
+    scope: ReadScope | None = None,
 ) -> HTMLResponse:
     response = html(
         template,
@@ -79,6 +82,8 @@ async def page(
             "csrf": session.csrf,
             "can_team": session.member.role == "admin",
             "can_operator": access.platform_operator,
+            "can_edit": any(grant.role in ("owner", "editor") for grant in access.grants),
+            "can_owner": any(grant.role == "owner" for grant in access.grants),
         }
         | context,
     )
@@ -87,6 +92,8 @@ async def page(
         raise DomainError(ErrorCode.POLICY_CHANGED, "The browser session changed.")
     await runtime.identity.repository.require_member(principal, session.member.org_id)
     await runtime.policy.revalidate(access)
+    if scope is not None:
+        await runtime.graph.resolver.revalidate(scope)
     return response
 
 

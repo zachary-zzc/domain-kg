@@ -1,9 +1,9 @@
 # Administration console in progress
 
 The session-bound shell at `/admin` uses the configured external OIDC login.
-It currently lists authorized KGs and their coarse publication state. The
-material, search, job, team and operations screens are the next implementation
-steps; navigation is being connected as those services are verified. No local
+It lists authorized KGs, accepted/retained materials, scoped search results and
+source/manual citations. Job, team, curation and operations screens are the next
+implementation steps. Navigation is connected as those services are verified. No local
 password or alternative identity provider is bundled.
 
 Current session membership and KG policy are checked before catalog access and
@@ -24,3 +24,11 @@ The shell and existing signed HTTP/MCP regression passed four real-store checks
 in 26.43 seconds. The full unit/protocol suite passed 173 tests, including 11
 console form cases; Ruff and strict mypy passed. Representative browser flows and
 external OIDC acceptance remain later gates.
+
+Material and search screens pin the shared accepted read scope before service
+reads and revalidate it after HTML rendering, alongside the current session and
+policy. Explicit unverified opt-in retains its provenance labels. Reader removal
+forms are hidden and forged submissions receive the same denial as the JSON API.
+The read/navigation/permission case and withdrawal-after-search race passed two
+real-store checks in 34.92 seconds. Editor upload/replacement/restoration workflows
+and the complete browser acceptance gate remain in progress.
