@@ -12,6 +12,7 @@ from domain_kg.models import (
     Namespace,
     NonNegative,
     PreservedText,
+    SourceVersion,
     UTCDateTime,
 )
 
@@ -117,3 +118,41 @@ class RemovalReceipt(Namespace):
     revision: NonNegative
     dry_run: bool
     job_id: UUID | None = None
+
+
+class RestoreMaterial(FrozenModel):
+    kg_id: UUID
+    material_id: UUID
+    expected_revision: NonNegative
+    idempotency_key: IdempotencyKey
+
+
+class RestorationReceipt(Namespace):
+    material_id: UUID
+    revision: NonNegative
+    state: Literal["restored", "pending"]
+    job_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def pending_requires_work(self) -> Self:
+        if self.state == "pending" and self.job_id is None:
+            raise ValueError("pending restoration requires a durable job")
+        return self
+
+
+class RestoreReadPermit(Namespace):
+    """Internal pending-command proof; never exposed as a transport argument."""
+
+    command_id: UUID
+    source: SourceVersion
+    expected_revision: NonNegative
+    view_manifest_id: UUID
+    projection_manifest_id: UUID
+    generation: UUID
+    visibility_revision: NonNegative
+
+    @model_validator(mode="after")
+    def source_namespace(self) -> Self:
+        if (self.source.org_id, self.source.kg_id) != (self.org_id, self.kg_id):
+            raise ValueError("restoration source must share its intent namespace")
+        return self

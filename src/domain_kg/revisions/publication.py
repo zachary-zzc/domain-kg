@@ -15,7 +15,7 @@ from domain_kg.ingestion.models import ParsedDocument
 from domain_kg.ingestion.resolved import ResolvedDocument
 from domain_kg.jobs.models import Checkpoint, LeasedJob, PublicationLease
 from domain_kg.jobs.queue import JobQueue, now
-from domain_kg.materials.models import BlobRef, MaterialMetadata
+from domain_kg.materials.models import BlobRef, MaterialMetadata, RestoreReadPermit
 from domain_kg.models import Namespace, ScopedRef, SourceVersion
 from domain_kg.providers.embeddings import EmbeddingProfile
 from domain_kg.providers.profiles import embedding_space_id
@@ -122,11 +122,15 @@ async def _verify_accepted(
 
 
 async def accepted_document(
-    queue: JobQueue, access: AccessContext, binding: AcceptedProjection
+    queue: JobQueue,
+    access: AccessContext,
+    binding: AcceptedProjection,
+    *,
+    restoration: RestoreReadPermit | None = None,
 ) -> tuple[EmbeddedDocument, RevisionBatch, tuple[ProjectionReceipt, ...]]:
     """Authenticate the sealed source independently of derived-backend availability."""
     try:
-        return await _accepted_document(queue, access, binding)
+        return await _accepted_document(queue, access, binding, restoration=restoration)
     except (ValidationError, KeyError, TypeError):
         raise inconsistent() from None
     except DomainError as error:
@@ -136,7 +140,11 @@ async def accepted_document(
 
 
 async def _accepted_document(
-    queue: JobQueue, access: AccessContext, binding: AcceptedProjection
+    queue: JobQueue,
+    access: AccessContext,
+    binding: AcceptedProjection,
+    *,
+    restoration: RestoreReadPermit | None = None,
 ) -> tuple[EmbeddedDocument, RevisionBatch, tuple[ProjectionReceipt, ...]]:
     journal = PublicationJournal(queue)
     attempt = await journal.attempt(access, binding.manifest_id)
@@ -162,7 +170,7 @@ async def _accepted_document(
     ):
         raise inconsistent()
     checkpoint = Checkpoint.model_validate(attempt["embedded_checkpoint"])
-    body = await read_artifact(queue, access, checkpoint, binding.source)
+    body = await read_artifact(queue, access, checkpoint, binding.source, restoration=restoration)
     if hashlib.sha256(body).hexdigest() != batch.content_hash:
         raise inconsistent()
     document = EmbeddedDocument.model_validate_json(body)

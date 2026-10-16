@@ -9,6 +9,7 @@ from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.identity.models import AccessContext
 from domain_kg.jobs.models import Checkpoint, JobArtifact
 from domain_kg.jobs.queue import JobQueue
+from domain_kg.materials.models import RestoreReadPermit
 from domain_kg.models import ScopedRef, SourceVersion
 from domain_kg.revisions.models import ProjectionReceipt, PublishedView
 from domain_kg.revisions.projections import AcceptedProjection
@@ -20,6 +21,8 @@ async def read_artifact(
     access: AccessContext,
     checkpoint: Checkpoint,
     source: SourceVersion,
+    *,
+    restoration: RestoreReadPermit | None = None,
 ) -> bytes:
     """Read immutable artifacts under current permission, independent of the original actor."""
     await queue.policy.revalidate(access)
@@ -28,8 +31,16 @@ async def read_artifact(
         source.kg_id,
     ) or source.org_id != access.org_id:
         raise inaccessible_reference()
-    if not await queue.policy.material_visible(access, source.kg_id, source.material_id):
-        raise inaccessible_reference()
+
+    async def authorize() -> None:
+        if restoration is not None:
+            from domain_kg.materials.restoration import authorize_restore_read
+
+            await authorize_restore_read(queue, access, source, restoration)
+        elif not await queue.policy.material_visible(access, source.kg_id, source.material_id):
+            raise inaccessible_reference()
+
+    await authorize()
     raw = await queue.database.job_artifacts.find_one(
         {
             "org_id": str(source.org_id),
@@ -77,8 +88,7 @@ async def read_artifact(
     async for part in BlobStore(stores.blobs).open(artifact.blob):
         data.extend(part)
     await queue.policy.revalidate(access)
-    if not await queue.policy.material_visible(access, source.kg_id, source.material_id):
-        raise inaccessible_reference()
+    await authorize()
     return bytes(data)
 
 
