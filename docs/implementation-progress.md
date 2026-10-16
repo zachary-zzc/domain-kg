@@ -9,7 +9,8 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | 3: OIDC identity and organization accounts | Local checks pass; external gate pending | 19 smoke tests pass, including signed issuer fixtures and real MongoDB transactions. A real development IdP login is still required. |
 | 4: Shared policy and scoped repositories | Complete locally | 18 smoke tests pass; full suite 81 tests; real MongoDB, Neo4j and Qdrant scope checks. |
 | 5: Catalog and registered storage profiles | Complete locally | 14 smoke tests pass, including three KGs across independent physical graph/vector deployments run serially. |
-| 6–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
+| 6: Original files and material submission | Complete locally | 15 smoke tests pass; full regular suite 100 passed, one physical drill skipped; lint/mypy pass. |
+| 7–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
@@ -28,7 +29,7 @@ Docker storage was emptied at the user's explicit request: images, containers, v
 python3 scripts/smoke.py --task 1
 ```
 
-The four services have hard limits of MongoDB 448 MiB, Neo4j 640 MiB, Qdrant 192 MiB, and S3 128 MiB: 1,408 MiB (1.476 GB) combined, below the user's 1.5 GB RAM cap. Swap is disabled. The runner rejects unbounded RAM, swap allowance, or an over-budget total, and verifies the running Docker limits before tests. CPU limits total 2.5 cores; image pulls run serially.
+The four services have hard limits of MongoDB 576 MiB, Neo4j 512 MiB, Qdrant 192 MiB, and S3 128 MiB: 1,408 MiB (1.476 GB) combined, below the user's 1.5 GB RAM cap. Swap is disabled. The runner rejects unbounded RAM, swap allowance, or an over-budget total, and verifies the running Docker limits before tests. CPU limits total 2.5 cores; image pulls run serially.
 
 The runner stops services it started after the test; `--keep-services` keeps them running for inspection. It retains volumes and never prunes images during ordinary smoke runs. Existing running services are left running. Credentials live in ignored `.env`, generated with restrictive file permissions.
 
@@ -51,3 +52,24 @@ The smoke stack remains capped at 1.476 GB with swap disabled. Repeated disposab
 Task 5 adds approved connection references, operator registration, bounded driver pools, namespace provisioning, explicit owner appointment, permission-filtered KG lists, lifecycle controls, redacted health, and mounted catalog HTTP routes. Concurrent KG creation replays one accepted reservation; profile/backend detachment is serialized with placement claims. Inventory and catalog cursors enforce limits and bind current policy.
 
 The regular full suite passed 89 tests in 45.87 seconds with the physical drill intentionally skipped. The final Task 5 smoke explicitly ran that drill: all 14 checks passed in 83.90 seconds, and the primary stack was restored. Its 17 warnings identify loopback HTTP and the intentionally offline primary compatibility check. All operations kept four containers totalling 1.476 GB. [Storage-profile details](decisions/0003-storage-profiles.md) record the server-approved replica-set databases and independent graph/vector endpoints. No real operator invitation was issued.
+
+Task 6 preserves immutable original bytes with bounded streaming/multipart S3,
+SHA-256 and MIME/length validation, exact uploader ownership, quota reservations,
+24-hour expiration, and current-authorized attachment downloads. Material/source
+versions, ACLs, jobs, outbox, quota conversion and idempotent receipts commit in
+one Mongo replica-set transaction, including across selected logical databases.
+Replacement stages a new version without changing the accepted source. The
+original-file receipt does not claim graph publication. See [material API and
+verification](materials.md).
+
+Task 6 smoke passed 15 checks in 31.21 seconds. The final regular suite passed
+100 tests in 57.29 seconds, with the physical drill skipped; Ruff and strict mypy
+passed 38 source files. Reproduced failures led to sequential multipart uploads,
+upload leases, stable millisecond receipts, fixture-owned projection cleanup,
+and direct approved Qdrant connections that ignore ambient proxies. A targeted
+proxy regression passed after failing with an unreachable proxy. The total RAM
+cap is unchanged: Mongo now has 576 MiB and Neo4j 512 MiB (heap128/pagecache32),
+Qdrant192 and S3128. Mongo primary readiness is checked from host Python; its
+periodic Node shell health process was removed. Earlier OOM failures and limits
+are recorded in [resource notes](development-resources.md); the final smoke and
+regular suite pass with the corrected configuration.
