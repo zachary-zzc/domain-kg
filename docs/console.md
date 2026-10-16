@@ -72,3 +72,15 @@ The team/identity/grant regression passed 20 real-store checks in 26.47 seconds,
 including malformed input, service suspension, last-admin/owner safeguards and
 revisioned grants. The unit/protocol suite passed 174 tests; Ruff and strict mypy
 passed.
+
+Node inspection now follows source/version and unverified filters, with bounded
+visible neighborhoods and support-qualified relationship links. Editors load the
+current revision for an exact source scope, or an owner explicitly selects a
+public override. Typed node/relation fields submit immutable pending revisions;
+accepted fields remain unchanged until publication. History renders escaped
+before/after values and provenance, distinguishes pending from accepted work,
+and lets owners append compensating rollback commands under current authority.
+The five-case curation/scope/read-fence/competing-publication gate passed in
+221.99 seconds. The unit/protocol suite passed 174 cases in 6.54 seconds, and
+Ruff/strict mypy passed. Docker hard limits remained 1.476 GB with swap disabled.
+Identity/visibility previews and the operator console are still being added.
