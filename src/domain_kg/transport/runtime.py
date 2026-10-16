@@ -9,6 +9,7 @@ from domain_kg.identity.grants import GrantManagement
 from domain_kg.identity.material_grants import MaterialGrantManagement
 from domain_kg.identity.models import AccessContext, Action, Principal
 from domain_kg.identity.routes import IdentityRuntime
+from domain_kg.imports.service import Importer
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.materials.inspection import MaterialInspection
 from domain_kg.materials.lifecycle import MaterialLifecycle
@@ -39,10 +40,12 @@ class ServiceRuntime:
         self.grants = GrantManagement(self.policy)
         self.material_grants = MaterialGrantManagement(self.policy)
         self.projections = ProjectionManagement(self.queue)
+        self.imports = Importer(materials, providers)
 
     async def initialize(self) -> None:
         await self.queue.initialize()
         await self.revisions.initialize()
+        await self.imports.initialize()
 
     async def access(
         self,

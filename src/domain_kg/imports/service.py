@@ -3,8 +3,8 @@
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
-from typing import Any
-from uuid import uuid5
+from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid5
 
 from pydantic import ValidationError
 from pymongo.asynchronous.client_session import AsyncClientSession
@@ -21,11 +21,46 @@ from domain_kg.materials.service import MaterialService
 from domain_kg.models import Namespace, SourceVersion
 from domain_kg.storage.blobs import BlobStore
 
+if TYPE_CHECKING:
+    from domain_kg.providers.service import ProviderService
+
 
 class Importer:
-    def __init__(self, materials: MaterialService) -> None:
+    def __init__(
+        self, materials: MaterialService, providers: "ProviderService | None" = None
+    ) -> None:
         self.materials, self.policy = materials, materials.policy
         self.database, self.transactions = materials.database, materials.repository
+        self.providers = providers
+
+    async def execute(self, access: AccessContext, plan: ImportPlan) -> JobReceipt:
+        """Admit a sealed import only when its embedding pipeline is configured."""
+        from domain_kg.ingestion.pipeline import configured_pipeline
+        from domain_kg.jobs.queue import JobQueue
+
+        plan = ImportPlan.model_validate(plan)
+        current = await self.policy.revalidate(access, action=Action.INGEST)
+        if plan.org_id != current.org_id or plan.kg_id not in current.kg_ids:
+            raise inaccessible_reference()
+        if self.providers is None:
+            raise DomainError(
+                ErrorCode.PROVIDER_UNAVAILABLE, "Configure approved import embeddings."
+            )
+        selected = await self.providers.selected(current, plan.kg_id)
+        profile, _ = self.providers.registry.resolve_embedding(
+            UUID(selected["profile_id"]),
+            Namespace(org_id=current.org_id, kg_id=plan.kg_id),
+            restricted=True,
+        )
+        if (
+            selected["profile_revision"] != profile.revision
+            or profile.embedding_dimensions != self.materials.router.dimensions
+        ):
+            raise DomainError(ErrorCode.VERSION_CONFLICT, "The import embedding selection changed.")
+        configured_pipeline(
+            JobQueue(self.policy, self.materials.router), self.providers
+        ).require_configured()
+        return await self._admit(current, plan)
 
     async def initialize(self) -> None:
         await self.database.import_source_origins.create_index(

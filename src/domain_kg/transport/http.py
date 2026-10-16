@@ -3,7 +3,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import Field
 
 from domain_kg.citations.models import Citation
@@ -13,6 +13,8 @@ from domain_kg.identity.grant_models import GrantPage, MemberRoleChange, PolicyR
 from domain_kg.identity.material_grants import MaterialACLChange, MaterialACLView
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.routes import HTTPPageRequest
+from domain_kg.imports.models import ImportPlan
+from domain_kg.imports.requests import ImportRequest
 from domain_kg.jobs.models import JobReceipt
 from domain_kg.materials.inspection_models import MaterialDetail, MaterialPage
 from domain_kg.materials.models import (
@@ -77,6 +79,20 @@ def service_router(runtime: ServiceRuntime) -> APIRouter:
     async def search(request: Request, command: SearchRequest) -> SearchResponse:
         current = await access(request, command.kg_ids, Action.SEARCH)
         return await runtime.search.search(current, command)
+
+    @router.post("/kgs/{kg_id}/imports")
+    async def import_kg(
+        request: Request, response: Response, kg_id: UUID, command: ImportRequest
+    ) -> ImportPlan | JobReceipt:
+        source = command.source if command.operation == "plan" else command.plan.source
+        matching((kg_id, source.kg_id))
+        current = await access(request, (kg_id,), Action.INGEST, mutate=True)
+        if command.operation == "plan":
+            return await runtime.imports.plan(current, command.source)
+        matching((kg_id, command.plan.kg_id))
+        receipt = await runtime.imports.execute(current, command.plan)
+        response.status_code = 202
+        return receipt
 
     @router.get("/citations/{citation_id}")
     async def citation(

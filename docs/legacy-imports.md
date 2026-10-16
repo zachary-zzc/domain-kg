@@ -3,8 +3,8 @@
 The offline decoder accepts a CSV triple export, directed GraphML, or a portable
 LightRAG 1.5.7 snapshot envelope. It consumes bytes supplied by the service, never
 opens a caller-selected path, connects to a legacy gateway or runs database text.
-The decoder and durable planning service do not admit or publish imports; jobs,
-source reconciliation and verified graph/vector publication are subsequent work.
+Planning does not publish; explicit execution admits a durable job and the
+dedicated worker publishes only after graph/vector readiness checks.
 
 Inputs are at most 2 MiB, 1,000 nodes, 1,000 relations after source expansion and
 2,000 source-owned observations. Parsing rejects malformed fields, duplicate or
@@ -54,8 +54,7 @@ counts, hashes, warnings and revision pins, without private export text or keys.
 An optional opaque import `origin` preserves old/new identity mappings across
 changed exports from the same legacy system. Without one, the exact upload hash
 provides an isolated origin. Neither an origin nor an export establishes a grant.
-Planning alone creates no job or accepted publication binding and is not yet a
-public transport operation.
+Planning alone creates no job or accepted publication binding.
 
 Accepted import provenance is a source-qualified immutable marker copied into the
 embedded document, projection attempt and accepted binding, and reconciled with
@@ -73,8 +72,7 @@ MongoDB material transaction. It validates the exact sealed plan and current
 policy/schema/publication again, and verifies plan/job/source/provenance references
 before returning a receipt. Concurrent and original-read-racing calls observe one
 accepted job. Forged plans cannot reserve the valid command key. Native material
-submission remains unchanged. Public import execution is being added separately
-from this verified worker milestone.
+submission remains unchanged. Public execution checks approved embedding configuration before admission.
 
 The prepared-row builder verifies the exact export checksum and retains its raw
 UTF-8 text (including a BOM, when present) as export context. Original document
@@ -107,3 +105,16 @@ The worker's five-case serial database smoke passed in 192.89 seconds, covering
 all five retrieval modes, explicit provenance, suppression, native visibility,
 inspection, projection failure/retry and revocation. Unit/protocol checks passed
 159 tests in 4.89 seconds; Ruff and strict mypy passed. Task 16 remains in progress.
+
+HTTP `POST /api/v1/kgs/{kg_id}/imports` accepts a discriminated command:
+`{"operation":"plan","source":{"kg_id":"…","upload_id":"…","format":"csv",
+"idempotency_key":"…"}}` returns the complete sealed plan (200).
+`{"operation":"execute","plan":<that complete plan>}` returns a durable
+`JobReceipt` (202). Current OIDC ingest permission and the selected organization
+apply to both operations. The plan's actor/source/revision seals are checked
+again at execution; modifying the response cannot change the admitted intent.
+No API call accepts legacy grants, model endpoints, credentials or server paths.
+The selected approved profile must allow restricted material and match the KG's
+embedding dimension/revision before job admission. Configure the worker separately;
+admission does not claim a running worker or an accepted publication. The signed
+HTTP/admission regression passed 13 real-store tests in 31.88 seconds.
