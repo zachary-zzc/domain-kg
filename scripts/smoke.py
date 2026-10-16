@@ -1,6 +1,7 @@
 """Run small laptop checks; never prune Docker data or resize its VM."""
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -9,8 +10,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICES = ["mongo", "neo4j", "qdrant", "object-store"]
+MEMORY_BUDGET_BYTES = 1_500_000_000
 TASK_FILES = {
     1: [
+        "tests/unit/test_smoke_budget.py",
         "tests/protocol/test_transport_smoke.py",
         "tests/integration/test_storage_smoke.py",
         "tests/integration/test_lightrag_scope_probe.py",
@@ -39,6 +42,42 @@ def check_docker_space() -> None:
             )
 
 
+def validate_memory_limits(limits: list[tuple[int, int]]) -> int:
+    if any(memory <= 0 or swap != memory for memory, swap in limits):
+        raise RuntimeError("Every smoke service needs a hard RAM limit and disabled swap.")
+    total = sum(memory for memory, _ in limits)
+    if total > MEMORY_BUDGET_BYTES:
+        raise RuntimeError(f"Smoke memory limits total {total} bytes, above the 1.5 GB budget.")
+    return total
+
+
+def check_memory_budget(*, running: bool = False) -> None:
+    if running:
+        ids = subprocess.check_output(
+            ["docker", "compose", "ps", "--quiet"], cwd=ROOT, text=True
+        ).split()
+        if len(ids) != len(SERVICES):
+            raise RuntimeError("The smoke stack requires all four services running.")
+        containers = json.loads(subprocess.check_output(["docker", "inspect", *ids], text=True))
+        limits = [(c["HostConfig"]["Memory"], c["HostConfig"]["MemorySwap"]) for c in containers]
+    else:
+        config = json.loads(
+            subprocess.check_output(
+                ["docker", "compose", "config", "--format", "json"], cwd=ROOT, text=True
+            )
+        )
+        limits = [
+            (
+                int(config["services"][s].get("mem_limit", 0)),
+                int(config["services"][s].get("memswap_limit", -1)),
+            )
+            for s in SERVICES
+        ]
+    total = validate_memory_limits(limits)
+    label = "Running" if running else "Configured"
+    print(f"{label} hard RAM limits: {total / 1_000_000_000:.3f} GB; swap disabled.")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task", type=int, choices=list(TASK_FILES), default=1)
@@ -53,6 +92,7 @@ def main() -> int:
     args = parser.parse_args()
     env = dict(os.environ)
     env.setdefault("UV_CACHE_DIR", str(ROOT / ".cache" / "uv"))
+    env.setdefault("COMPOSE_PARALLEL_LIMIT", "1")
     if args.offline:
         if not (ROOT / ".venv").is_dir():
             parser.error("Run uv sync --locked first to prepare the pinned environment.")
@@ -78,6 +118,7 @@ def main() -> int:
 
     check_docker_space()
     run([sys.executable, "scripts/dev_env.py"], env)
+    check_memory_budget()
     run(["uv", "sync", "--locked"], env)
     previous = set(
         subprocess.check_output(
@@ -87,7 +128,7 @@ def main() -> int:
         ).split()
     )
     started = [name for name in SERVICES if name not in previous]
-    print("Smoke limit: 2.25 GiB RAM / 2.5 CPU cores, tiny synthetic data, no local models.")
+    print("Smoke budget: at most 1.5 GB RAM / 2.5 CPU cores; tiny synthetic fixtures.")
     try:
         run(
             [
@@ -102,6 +143,7 @@ def main() -> int:
             ],
             env,
         )
+        check_memory_budget(running=True)
         run(["uv", "run", "--locked", "--no-sync", "pytest", *TASK_FILES[args.task], "-q"], env)
     finally:
         if started and not args.keep_services:

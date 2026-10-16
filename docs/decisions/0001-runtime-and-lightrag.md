@@ -1,6 +1,6 @@
 # Task 1: runtime and LightRAG compatibility
 
-Status: implementation in progress; the real-store verification gate is blocked by local Docker disk capacity. Reviewed on 16 October 2026. This spike does not establish production readiness or complete the task.
+Status: implementation in progress; Docker storage was cleared at the user's request and the real-store gate is being retried under the revised 1.5 GB RAM cap. Reviewed on 16 October 2026. This spike does not establish production readiness or complete the task.
 
 ## Locked runtime
 
@@ -41,9 +41,9 @@ No upstream source patch is carried. The maintained extension boundary is extrac
 
 ## Laptop checks and blocker
 
-The laptop has 16 GiB RAM. Four local smoke services are capped at 2.25 GiB combined RAM and 2.5 CPU cores, bind published ports to loopback, and use only generated private credentials and synthetic fixtures. OCR, local model downloads, large-corpus evaluation, and load generation are excluded. Tiny correctness checks do not establish the acceptance document's performance targets.
+The laptop has 16 GiB RAM. The user reduced the initial 2.25 GiB service budget to a hard 1.5 GB maximum. Limits now total 1,408 MiB (1.476 GB): MongoDB 448 MiB, Neo4j 640 MiB, Qdrant 192 MiB, and S3 128 MiB. Swap is disabled. The smoke runner checks both Compose and running Docker limits and rejects an over-budget configuration. CPU limits total 2.5 cores, image pulls are serial, published ports bind to loopback, and inputs use generated private credentials and synthetic fixtures. OCR, local model downloads, large-corpus evaluation, and load generation are excluded. Tiny correctness checks do not establish the acceptance document's performance targets.
 
-Observed results:
+Initial results before Docker cleanup:
 
 - `uv sync --locked`: succeeded.
 - `python3 scripts/smoke.py --offline`: lint passed, strict mypy passed, six tests passed and six real-store tests were deselected explicitly.
@@ -53,4 +53,4 @@ Observed results:
 - `python3 scripts/smoke.py --task 1`: exits nonzero before pulling when the Colima disk has less than 4 GiB free. It never prunes images or resizes the VM.
 - Complete current suite, `uv run --no-sync pytest -q --maxfail=1`: two passed, one real Neo4j fixture connection error because the service is absent. Full suite is not green.
 
-The real MongoDB transaction, source-linked Neo4j/full-text, Qdrant filtering/concurrency, S3 round-trip, and server-backed LightRAG flush gates remain unverified. Keep all Task 1 checkboxes unchecked and do not advance to dependent Task 2. Once Docker has space, run `python3 scripts/smoke.py --task 1`; diagnose any server integration failures before changing completion status.
+After explicit authorization to empty Docker storage, cleanup reached zero images, containers, volumes, and build cache, with about 57 GiB free. Five new memory-budget guards passed after being observed failing first; the lightweight suite now has eleven passing checks. The real MongoDB transaction, source-linked Neo4j/full-text, Qdrant filtering/concurrency, S3 round-trip, and server-backed LightRAG flush gates remain unverified until the retry finishes. Keep all Task 1 checkboxes unchecked and do not advance to dependent Task 2. Run `python3 scripts/smoke.py --task 1` and diagnose any server integration failures before changing completion status.

@@ -1,13 +1,16 @@
 name: domain-kg-dev
 
 # Laptop-only smoke stack. Ports bind to loopback; data stays in named volumes.
-# Memory limits total 2.25 GiB; no local models, OCR workers, or load generation.
+# Hard memory limits total 1,408 MiB (~1.48 GB), below the 1.5 GB budget.
+# Swap is disabled for these containers.
+# No local models, OCR workers, or load generation.
 services:
   mongo:
     image: mongo:8.0.34@sha256:6657bf2413fefc5be649390318f5b4cd7328e982722f8ce2ac6dfa6f0a42cb03
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
     ports: ["127.0.0.1:27027:27017"]
-    mem_limit: 768m
+    mem_limit: 448m
+    memswap_limit: 448m
     cpus: 0.75
     volumes: ["mongo-data:/data/db"]
     healthcheck:
@@ -27,10 +30,12 @@ services:
       NEO4J_AUTH: neo4j/${DOMAIN_KG_NEO4J_PASSWORD:?Run scripts/dev_env.py first}
       NEO4J_server_memory_heap_initial__size: 256m
       NEO4J_server_memory_heap_max__size: 256m
-      NEO4J_server_memory_pagecache_size: 128m
+      NEO4J_server_memory_pagecache_size: 64m
       NEO4J_server_bolt_thread__pool__max__size: 8
       NEO4J_server_metrics_enabled: "false"
-    mem_limit: 1g
+      JAVA_TOOL_OPTIONS: -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=64m
+    mem_limit: 640m
+    memswap_limit: 640m
     cpus: 1.0
     volumes: ["neo4j-data:/data"]
     healthcheck:
@@ -47,7 +52,8 @@ services:
       QDRANT__SERVICE__MAX_WORKERS: "1"
       QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS: "1"
       QDRANT__TELEMETRY_DISABLED: "true"
-    mem_limit: 256m
+    mem_limit: 192m
+    memswap_limit: 192m
     cpus: 0.5
     volumes: ["qdrant-data:/qdrant/storage"]
 
@@ -58,8 +64,10 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: domain-kg-dev
       AWS_SECRET_ACCESS_KEY: ${DOMAIN_KG_S3_SECRET_KEY:?Run scripts/dev_env.py first}
-      GOMEMLIMIT: 180MiB
-    mem_limit: 256m
+      GOMEMLIMIT: 96MiB
+      GOMAXPROCS: "1"
+    mem_limit: 128m
+    memswap_limit: 128m
     cpus: 0.25
     volumes: ["object-data:/data"]
 
