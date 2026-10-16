@@ -129,6 +129,8 @@ class ExtractedEntity(FrozenModel):
     name: Annotated[str, Field(min_length=1, max_length=1000)]
     entity_type: Annotated[str, Field(min_length=1, max_length=200)]
     description: Annotated[str, Field(max_length=8000)] = ""
+    aliases: Annotated[tuple[str, ...], Field(max_length=30)] = ()
+    identifier: Annotated[str, Field(max_length=512)] | None = None
     spans: Annotated[tuple[Span, ...], Field(min_length=1)]
 
 
@@ -137,7 +139,20 @@ class ExtractedAssertion(FrozenModel):
     target: str
     predicate: str
     confidence: Annotated[float, Field(ge=0, le=1)]
+    polarity: Literal["positive", "negative", "uncertain"] = "positive"
+    qualifiers: Annotated[tuple["ExtractedQualifier", ...], Field(max_length=10)] = ()
     spans: Annotated[tuple[Span, ...], Field(min_length=1)]
+
+
+class ExtractedQualifier(FrozenModel):
+    name: Literal["condition", "time", "location"]
+    value: Annotated[str, Field(min_length=1, max_length=1000)]
+    spans: Annotated[tuple[Span, ...], Field(min_length=1, max_length=20)]
+
+
+class ExtractionContent(FrozenModel):
+    entities: Annotated[tuple[ExtractedEntity, ...], Field(max_length=50)]
+    assertions: Annotated[tuple[ExtractedAssertion, ...], Field(max_length=100)]
 
 
 class ExtractionBatch(SourceVersion):

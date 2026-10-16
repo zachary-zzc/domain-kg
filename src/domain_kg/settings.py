@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     oidc_client_secret: SecretStr = SecretStr("")
     mongo_database: str = "domain_kg"
     backend_config: Path | None = None
+    provider_config: Path | None = None
     mongo_uri: SecretStr = SecretStr(
         "mongodb://127.0.0.1:27027/?replicaSet=rs0&directConnection=true"
     )

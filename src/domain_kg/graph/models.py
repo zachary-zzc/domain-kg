@@ -44,6 +44,8 @@ class AssertionRecord(ScopedRef):
     subject: ScopedRef
     target: ScopedRef
     predicate: Annotated[str, Field(min_length=1, max_length=200)]
+    polarity: Literal["positive", "negative", "uncertain"] = "positive"
+    qualifiers: tuple[tuple[str, str], ...] = ()
 
 
 class SupportRecord(ScopedRef):
@@ -53,6 +55,7 @@ class SupportRecord(ScopedRef):
     spans: tuple[Span, ...] = ()
     curation: ScopedRef | None = None
     provenance: ManualProvenance | None = None
+    confidence: Annotated[float, Field(ge=0, le=1)] | None = None
 
     @model_validator(mode="after")
     def supported_provenance(self) -> Self:
