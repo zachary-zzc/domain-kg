@@ -16,6 +16,7 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 from pymongo.asynchronous.database import AsyncDatabase
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
+from domain_kg.identity.invariants import assert_active_owners
 from domain_kg.identity.models import Group, Member, Principal
 from domain_kg.identity.schema import install_identity_schema
 from domain_kg.models import FrozenModel, IdempotencyKey, PageRequest
@@ -123,6 +124,7 @@ class IdentityRepository:
                 result: dict[str, Any] = existing["result"]
                 return result
             result = await apply(session)
+            await assert_active_owners(self.database, str(actor.org_id), session)
             # This shared write makes concurrent policy transactions conflict and retry.
             await self.database.organizations.update_one(
                 {"_id": str(actor.org_id)}, {"$inc": {"policy_revision": 1}}, session=session

@@ -11,6 +11,10 @@ services:
     ports: ["127.0.0.1:27027:27017"]
     mem_limit: 448m
     memswap_limit: 448m
+    ulimits:
+      nofile:
+        soft: 64000
+        hard: 64000
     cpus: 0.75
     volumes: ["mongo-data:/data/db"]
     healthcheck:

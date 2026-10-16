@@ -61,7 +61,9 @@ class SessionStore:
         if csrf is not None and not secrets.compare_digest(record["csrf_hash"], token_hash(csrf)):
             raise DomainError(ErrorCode.FORBIDDEN, "The CSRF token is invalid.")
         principal = Principal(
-            issuer=record["issuer"], subject=record["subject"], scopes=frozenset({"domain_kg:read"})
+            issuer=record["issuer"],
+            subject=record["subject"],
+            scopes=frozenset({"domain_kg:read", "domain_kg:write", "domain_kg:admin"}),
         )
         await self._identities.require_member(principal, UUID(record["org_id"]))
         return principal

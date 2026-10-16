@@ -51,3 +51,44 @@ async def vectors(settings: Settings) -> AsyncIterator[AsyncQdrantClient]:
         yield client
     finally:
         await client.close()
+
+
+@pytest.fixture
+async def team(mongo_db):
+    from domain_kg.identity.models import Principal
+    from domain_kg.identity.policy import Policy
+    from domain_kg.identity.repository import IdentityRepository
+
+    identities = IdentityRepository(mongo_db)
+    await identities.initialize()
+    principals = {
+        name: Principal(
+            issuer="https://idp.example",
+            subject=name,
+            scopes={"domain_kg:read", "domain_kg:write", "domain_kg:admin"},
+        )
+        for name in ("owner", "editor", "reader", "denied")
+    }
+    org, owner = await identities.bootstrap_organization(principals["owner"], "Team")
+    members = {"owner": owner}
+    for name in ("editor", "reader", "denied"):
+        members[name] = await identities.admit(
+            owner, principals[name], role="member", idempotency_key=name
+        )
+    kg = uuid4()
+    await mongo_db.kgs.insert_one(
+        {"id": str(kg), "org_id": str(org), "state": "ready", "visibility_revision": 0}
+    )
+    for name in ("owner", "editor", "reader"):
+        await mongo_db.kg_grants.insert_one(
+            {
+                "org_id": str(org),
+                "kg_id": str(kg),
+                "subject_kind": "member",
+                "subject_id": str(members[name].id),
+                "role": name,
+            }
+        )
+    policy = Policy(mongo_db)
+    await policy.initialize()
+    return identities, policy, principals, members, org, kg
