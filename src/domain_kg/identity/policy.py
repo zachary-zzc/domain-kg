@@ -226,9 +226,29 @@ class Policy:
         include_excluded: bool = False,
         session: AsyncClientSession | None = None,
     ) -> bool:
+        raw = await self._material_acl_record(access, kg_id, material_id, session=session)
+        return bool(
+            raw is not None
+            and not raw.get("tombstoned", False)
+            and (include_excluded or not raw.get("excluded", False))
+        )
+
+    async def _material_acl_record(
+        self,
+        access: AccessContext,
+        kg_id: UUID,
+        material_id: UUID,
+        *,
+        session: AsyncClientSession | None = None,
+    ) -> dict[str, Any] | None:
+        """Internal current ACL check, also used by narrowly authorized lifecycle commands.
+
+        This does not grant read visibility to excluded/tombstoned content. Serving
+        reads must continue to use material_visible and its immediate fences.
+        """
         current = await self.revalidate(access, session=session)
         if kg_id not in current.kg_ids:
-            return False
+            return None
         raw = await self.database.material_access.find_one(
             {
                 "org_id": str(current.org_id),
@@ -237,16 +257,12 @@ class Policy:
             },
             session=session,
         )
-        if (
-            raw is None
-            or raw.get("tombstoned", False)
-            or (raw.get("excluded", False) and not include_excluded)
-        ):
-            return False
+        if raw is None:
+            return None
         if raw["acl_mode"] == "kg" or any(
             grant.kg_id == kg_id and grant.role == "owner" for grant in current.grants
         ):
-            return True
+            return raw
         member = await self.database.members.find_one(
             {
                 "org_id": str(current.org_id),
@@ -256,12 +272,13 @@ class Policy:
             },
             session=session,
         )
-        return member is not None and (
+        allowed = member is not None and (
             member["id"] in raw.get("member_ids", [])
             or bool(
                 set(raw.get("group_ids", [])).intersection(str(group) for group in current.groups)
             )
         )
+        return raw if allowed else None
 
     async def _mutation(
         self,
