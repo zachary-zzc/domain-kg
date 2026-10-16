@@ -56,9 +56,9 @@ Files: add `console/team.py`, `console/templates/team.html`, `grants.html`, `mat
 
 Interfaces: identity repository admission/group methods, `GrantManagement.list/set`, `MaterialGrantManagement.get/set`; no form establishes the current actor or organization.
 
-- [ ] Add tests: organization admin admits a member; owner grants a group; non-admin/non-owner forged form posts are denied; concurrent revision and last-owner protections remain enforced.
-- [ ] Implement membership/group/service-identity screens and KG/material grant forms. OIDC issuer/subject fields identify the member being admitted, not the caller. Only show actions the resolved current role allows.
-- [ ] Run the focused serial tests, existing grant regressions, Ruff and mypy; commit.
+- [x] Add tests: organization admin admits a member; owner grants a group; non-admin/non-owner forged form posts are denied; concurrent revision and last-owner protections remain enforced.
+- [x] Implement membership/group/service-identity screens and KG/material grant forms. OIDC issuer/subject fields identify the member being admitted, not the caller. Only show actions the resolved current role allows.
+- [x] Run the focused serial tests, existing grant regressions, Ruff and mypy; commit.
 
 ### Step 4: Curation, history and operations
 

@@ -60,3 +60,15 @@ lifecycle service: a retained ready source can reopen immediately; an unpublishe
 source stays hidden while its reconstruction job verifies and publishes.
 The five-case management/restoration/workspace gate passed in 110.02 seconds;
 the dedicated browser/JSON parity and reconstruction check passed in 51.93 seconds.
+
+Organization administrators can admit external human/service identities, manage
+groups and membership, change organization roles and suspend accounts. No
+credentials or invitations are generated. KG owners manage role grants and
+material ACLs with current policy revisions; material ACLs still narrow KG
+membership. Owner forms use validated subject identifiers and do not bypass the
+administrator-only organization directory. All actors and organizations come
+from the current server-side session.
+The team/identity/grant regression passed 20 real-store checks in 26.47 seconds,
+including malformed input, service suspension, last-admin/owner safeguards and
+revisioned grants. The unit/protocol suite passed 174 tests; Ruff and strict mypy
+passed.

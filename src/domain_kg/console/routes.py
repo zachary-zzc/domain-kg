@@ -6,10 +6,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from domain_kg.console.forms import decode_form
+from domain_kg.console.grants import grant_router
 from domain_kg.console.jobs import job_router
 from domain_kg.console.material_commands import material_command_router
 from domain_kg.console.material_management import management_router
 from domain_kg.console.rendering import browser_session, html, page
+from domain_kg.console.team import team_router
 from domain_kg.console.workspace import workspace_router
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import Action
@@ -19,6 +21,8 @@ from domain_kg.transport.runtime import ServiceRuntime
 
 def console_router(runtime: ServiceRuntime) -> APIRouter:
     router = APIRouter(prefix="/admin")
+    router.include_router(team_router(runtime))
+    router.include_router(grant_router(runtime))
     router.include_router(job_router(runtime))
     router.include_router(material_command_router(runtime))
     router.include_router(management_router(runtime))

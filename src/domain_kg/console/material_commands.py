@@ -35,7 +35,7 @@ META_FIELDS = {"title", "tags", "author", "source", "language"}
 
 def invalid_form() -> DomainError:
     return DomainError(
-        ErrorCode.VALIDATION_ERROR, "Check the source input, title and revision fields."
+        ErrorCode.VALIDATION_ERROR, "The form fields or revision are invalid."
     )
 
 
