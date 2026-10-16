@@ -1,6 +1,6 @@
 # Implementation progress
 
-Updated 16 October 2026. Execution is native in this chat, following the current NoSQL design and the task dependency order. Each completed task requires a laptop smoke test; expensive OCR, model training, load tests, and large-corpus benchmarks are outside this run. The user separately approved a bounded native small-LLM smoke; its measured memory is separate from the Docker database ceiling.
+Updated 17 October 2026. Execution is native in this chat, following the current NoSQL design and the task dependency order. Each completed task requires a laptop smoke test; expensive OCR, model training, load tests, and large-corpus benchmarks are outside this run. The user separately approved a bounded native small-LLM smoke; its measured memory is separate from the Docker database ceiling.
 
 | Task | Status | Verification |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | 11: Scoped graph inspection and traversal | Complete locally | 13 smoke checks; regular regression 176 passed, one physical skip; two additional reproduced integrity failures fixed and verified. |
 | 12: Filtered vector and lexical retrieval | Complete locally | 22 smoke checks; regular regression 184 passed, one physical skip; current metadata/support filters, scoped native adapter and embedding-space fences. |
 | 13: Federated fast/deep search | Complete locally | 34 smoke checks; regular regression 202 passed, one physical skip; native mix, two-KG fusion, partial failure rules and model-specific source windows verified. |
-| 14: Persistent edits and material changes | In progress | Material lifecycle, delta reuse, node/relation curation, visibility, history and retained cleanup pass local checks. Reversible merge/split remains in progress. |
+| 14: Persistent edits and material changes | Final combined verification pending | Lifecycle, delta reuse, curation, reversible identity, history and cleanup pass local checks. Dedicated identity regression: 11 checks; 128 unit checks; one transient Qdrant disconnect in the combined smoke passed a fresh rerun. |
 | 15–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
@@ -170,6 +170,8 @@ hidden until verified publication. The combined restoration/replacement regressi
 passed 18 checks in 358.74 seconds. Retained cleanup passed five recovery checks in
 87.58 seconds and two source/curation checks in 90.80 seconds. It preserves B's
 support, retained reads and human corrections, and independently public claims.
-Merge/split remains unfinished, so Task 14's plan boxes remain unchecked. See
+Reversible merge/split now passes its dedicated 11-check real-store regression. The combined laptop smoke passed 60 checks and hit one transient Qdrant disconnect; that case passed a fresh 67.43-second rerun. No container OOM or restart occurred. Task 14's final combined-command gate remains open. See
 [curation](curation.md), [material changes](incremental-changes.md), and
 [retained cleanup](material-purge.md).
+
+The identity milestone preserves original assertions/spans, applies source-qualified effective IDs consistently to all search modes, records typed human history, and appends owner-only compensating controls. Suppression retains original group members through compensation and re-ingestion. Ruff, strict mypy (105 source files), and 128 unit checks pass. See [identity curation](identity-curation.md).

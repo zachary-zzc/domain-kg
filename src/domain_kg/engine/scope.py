@@ -117,7 +117,7 @@ class EligibilityResolver:
             elif (
                 not targets
                 and row.get("public", False)
-                and request.filters.allows_sourceless_manual
+                and (request.filters.allows_sourceless_manual or row.get("kind") == "identity")
             ):
                 curations.append(curation)
         scope = ReadScope(

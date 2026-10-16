@@ -108,3 +108,102 @@ def test_joint_human_claim_requires_identity_scope_covering_all_owners():
     joint = ManualIdentity.model_validate(a_only.model_dump() | {"material_ids": (a, b)})
     assert IdentityPartition(ns, (a_only,)).canonical(beta, (a, b)) == beta
     assert IdentityPartition(ns, (joint,)).canonical(beta, (a, b)) == alpha
+
+
+def test_authority_sequence_preserves_causal_identity_order_despite_clock_skew():
+    ns, alpha, beta, _, a, _ = fixture()
+    merge = mapping(
+        ns,
+        alpha,
+        (IdentityGroup(canonical_id=alpha, member_ids=(alpha, beta)),),
+        material=a,
+        order=10,
+    )
+    merge = ManualIdentity.model_validate(merge.model_dump() | {"sequence": 1})
+    split = mapping(
+        ns,
+        alpha,
+        (
+            IdentityGroup(canonical_id=alpha, member_ids=(alpha,)),
+            IdentityGroup(canonical_id=beta, member_ids=(beta,)),
+        ),
+        material=a,
+    )
+    split = ManualIdentity.model_validate(split.model_dump() | {"sequence": 2})
+    assert split.created_at < merge.created_at
+    assert IdentityPartition(ns, (split, merge)).canonical(beta, a) == beta
+
+
+def control(original, *, enabled=False, order=2, **changes):
+    value = original.model_dump() | {
+        "curation": original.curation.model_copy(update={"id": uuid4()}),
+        "groups": (),
+        "retracts": original.curation,
+        "enabled": enabled,
+        "created_at": original.created_at + timedelta(seconds=order),
+        "revision": order + 1,
+    }
+    return ManualIdentity.model_validate(value | changes)
+
+
+def test_retraction_restores_different_source_contexts_without_stale_snapshot_replay():
+    ns, alpha, beta, gamma, a, b = fixture()
+    prior = mapping(
+        ns, alpha, (IdentityGroup(canonical_id=alpha, member_ids=(alpha, beta)),), material=a
+    )
+    joint = ManualIdentity.model_validate(
+        mapping(
+            ns,
+            alpha,
+            (IdentityGroup(canonical_id=alpha, member_ids=(alpha, beta, gamma)),),
+            material=a,
+            order=1,
+        ).model_dump()
+        | {"material_ids": (a, b)}
+    )
+    retracted = control(joint)
+    partitions = IdentityPartition(ns, (prior, joint, retracted))
+    assert partitions.canonical(beta, a) == alpha
+    assert partitions.canonical(beta, b) == beta
+    assert partitions.canonical(gamma, a) == gamma
+    assert partitions.canonical(beta, (a, b)) == beta
+
+
+def test_retracting_earlier_mapping_preserves_later_explicit_group():
+    ns, alpha, beta, gamma, a, _ = fixture()
+    original = mapping(
+        ns, alpha, (IdentityGroup(canonical_id=alpha, member_ids=(alpha, beta)),), material=a
+    )
+    later = mapping(
+        ns,
+        gamma,
+        (IdentityGroup(canonical_id=gamma, member_ids=(alpha, beta, gamma)),),
+        material=a,
+        order=1,
+    )
+    partitions = IdentityPartition(ns, (original, later, control(original)))
+    assert all(partitions.canonical(item, a) == gamma for item in (alpha, beta, gamma))
+    assert partitions.witnesses(beta, a) == (later.curation,)
+
+
+def test_reenable_keeps_original_order_and_current_control_provenance():
+    ns, alpha, beta, _, a, _ = fixture()
+    original = mapping(
+        ns, alpha, (IdentityGroup(canonical_id=alpha, member_ids=(alpha, beta)),), material=a
+    )
+    disabled = control(original, order=1)
+    restored = control(original, enabled=True, order=2)
+    partitions = IdentityPartition(ns, (original, disabled, restored))
+    assert partitions.canonical(beta, a) == alpha
+    assert partitions.witnesses(beta, a) == (original.curation, restored.curation)
+
+
+def test_control_cannot_borrow_another_scope_or_an_unknown_original():
+    ns, alpha, beta, _, a, _ = fixture()
+    original = mapping(
+        ns, alpha, (IdentityGroup(canonical_id=alpha, member_ids=(alpha, beta)),), material=a
+    )
+    with pytest.raises(DomainError):
+        IdentityPartition(ns, (original, control(original, public=True, material_ids=())))
+    with pytest.raises(DomainError):
+        IdentityPartition(ns, (control(original),))

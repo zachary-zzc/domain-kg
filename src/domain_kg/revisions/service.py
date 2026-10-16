@@ -8,6 +8,7 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.curation import authorize_curation
 from domain_kg.graph.curation_models import NodeFields
+from domain_kg.graph.identity_commands import IdentityChange, IdentityImpact
 from domain_kg.graph.manual_relations import RelationFields
 from domain_kg.graph.models import AssertionRecord, DomainSchema
 from domain_kg.graph.schema import schema_for_kg
@@ -95,10 +96,16 @@ class RevisionService:
 
     async def curate_node(
         self, access: AccessContext, command: CurationCommand
-    ) -> CurationReceipt | CurationImpact:
+    ) -> CurationReceipt | CurationImpact | IdentityImpact | RevisionReceipt:
         from domain_kg.graph.node_actions import NodeVisibilityService
 
         await self.initialize()
+        if command.action in ("merge", "split"):
+            from domain_kg.graph.identity_actions import IdentityService
+
+            return await IdentityService(self.queue).apply(
+                access, IdentityChange.model_validate(command.model_dump())
+            )
         return await NodeVisibilityService(self.queue).apply(access, command)
 
     async def get_revisions(self, access: AccessContext, request: HistoryRequest) -> HistoryPage:
@@ -184,6 +191,18 @@ class RevisionService:
         )
         if visibility is not None:
             return await self._rollback_visibility(current, command)
+        identity = await self.database.curation_revisions.find_one(
+            {
+                "org_id": str(current.org_id),
+                "kg_id": str(command.kg_id),
+                "id": str(command.revision_id),
+                "kind": "identity",
+            }
+        )
+        if identity is not None:
+            from domain_kg.graph.identity_rollback import IdentityRollbackService
+
+            return await IdentityRollbackService(self.queue).apply(current, command)
         fingerprint = digest({"operation": "rollback", "command": command.model_dump(mode="json")})
         previous = await self._replay(current, command.kg_id, command.idempotency_key, fingerprint)
         if previous is not None:
@@ -279,6 +298,10 @@ class RevisionService:
             node = graph.repository.node(data, command.target_id)
             if node is None:
                 raise inaccessible_reference()
+            if node.id != command.target_id:
+                raise DomainError(
+                    ErrorCode.VERSION_CONFLICT, "Use the current canonical identity target."
+                )
             if node.truncation and not (command.source_ids or public):
                 raise DomainError(
                     ErrorCode.QUOTA_EXCEEDED, "Choose explicit source targets for this edit."

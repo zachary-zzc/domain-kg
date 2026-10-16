@@ -144,6 +144,34 @@ class GraphData:
                 value = proposed
         return value
 
+    def node_contexts(self, manual: ManualNode) -> tuple[IdentityContext, ...]:
+        contexts: tuple[IdentityContext, ...] = (
+            (None, *(source.material_id for source in self.scope.visible_sources))
+            if manual.public
+            else manual.material_ids
+        )
+        return tuple(
+            context
+            for context in contexts
+            if not self.node_masks.blocked(
+                manual.entity.id,
+                material_ids=(context,) if isinstance(context, UUID) else (context or ()),
+            )
+            and not self.node_masks.blocked(
+                self.entity_id(manual.entity.id, context),
+                material_ids=(context,) if isinstance(context, UUID) else (context or ()),
+            )
+        )
+
+    @cached_property
+    def node_masks(self) -> NodeMasks:
+        return NodeMasks(
+            Namespace(org_id=self.scope.view.org_id, kg_id=self.scope.view.kg_id),
+            self.scope.node_fences,
+        ).expanded(
+            self.identities, tuple(source.material_id for source in self.scope.visible_sources)
+        )
+
     @cached_property
     def _observations_by_entity(self) -> dict[UUID, tuple[ResolvedEntity, ...]]:
         grouped: dict[UUID, list[ResolvedEntity]] = {}
@@ -163,14 +191,22 @@ class GraphData:
         return {key: tuple(value) for key, value in grouped.items()}
 
     def human_types(self, entity: UUID, materials: tuple[UUID, ...]) -> tuple[str, ...]:
-        typed = self._typed_nodes.get(entity, ())
+        typed = tuple(node for values in self._typed_nodes.values() for node in values)
         contexts: tuple[UUID | None, ...] = materials or (
             None,
             *sorted({source for node in typed for source in node.material_ids}, key=str),
         )
         result = []
         for source in contexts:
-            eligible = [node for node in typed if node.public or source in node.material_ids]
+            eligible = sorted(
+                (
+                    node
+                    for node in typed
+                    if (node.public or source in node.material_ids)
+                    and self.entity_id(node.entity.id, source) == self.entity_id(entity, source)
+                ),
+                key=lambda node: (node.created_at, str(node.curation.id)),
+            )
             if eligible and (value := eligible[-1].changes.entity_type) is not None:
                 result.append(value)
         return tuple(result)
@@ -269,9 +305,19 @@ class GraphData:
                 continue
             if not any(value is not None for value in manual.changes.model_dump().values()):
                 continue
-            if manual.entity.id in self.scope.filters.exclude_entity_ids or (
-                self.scope.filters.entity_ids
-                and manual.entity.id not in self.scope.filters.entity_ids
+            contexts = self.node_contexts(manual)
+            if (
+                any(
+                    self.entity_id(manual.entity.id, context)
+                    in self.effective_filters(context).exclude_entity_ids
+                    for context in contexts
+                )
+                or self.scope.filters.entity_ids
+                and not any(
+                    self.entity_id(manual.entity.id, context)
+                    in self.effective_filters(context).entity_ids
+                    for context in contexts
+                )
             ):
                 continue
             if self.scope.filters.entity_types:
@@ -283,17 +329,20 @@ class GraphData:
                 if not set(types).intersection(self.scope.filters.entity_types):
                     continue
             if self.scope.filters.requires_assertion_support:
-                observations = [item for item in self.observations if item.entity == manual.entity]
-                source_support = bool(observations) and (
-                    manual.public
-                    or set(manual.material_ids).issubset(
-                        {item.material_id for item in observations}
-                    )
-                )
+                observations = [
+                    item
+                    for item in self.observations
+                    if self.entity_id(item.entity.id, item.material_id)
+                    == self.entity_id(manual.entity.id, item.material_id)
+                    and (manual.public or item.material_id in manual.material_ids)
+                ]
+                # Source ownership was authorized in full before loading this
+                # directive; a positive filter needs one qualifying owned fact.
+                source_support = bool(observations)
                 human_support = any(
                     row.manual_relation
                     and row.claim
-                    and manual.entity in (row.claim.assertion.subject, row.claim.assertion.target)
+                    and self.entity_id(manual.entity.id, self.context(row)) in self.endpoints(row)
                     and (
                         manual.public
                         or row.manual_relation.public
@@ -357,12 +406,15 @@ async def scoped_graph_data(
     queue: JobQueue,
     scope: ReadScope,
     rows: tuple[ProjectionBody, ...],
-    curations: tuple[ManualNode | ManualRelation, ...],
+    curations: tuple[ManualNode | ManualRelation | ManualIdentity, ...],
 ) -> GraphData:
     if not scope.node_fences:
         return GraphData(scope, rows, curations)
     masks = NodeMasks(
         Namespace(org_id=scope.view.org_id, kg_id=scope.view.kg_id), scope.node_fences
+    ).expanded(
+        GraphData(scope, rows, curations).identities,
+        tuple(source.material_id for source in scope.visible_sources),
     )
     contexts: dict[UUID, AssertionRecord] = {}
     annotations = [
@@ -398,7 +450,7 @@ class GraphRepository:
     async def open(self, scope: ReadScope) -> GraphData:
         await self.resolver.revalidate(scope)
         rows: list[ProjectionBody] = []
-        curations: list[ManualNode | ManualRelation] = []
+        curations: list[ManualNode | ManualRelation | ManualIdentity] = []
         if len(scope.visible_sources) + len(scope.visible_curations) > 1000:
             raise DomainError(
                 ErrorCode.QUOTA_EXCEEDED, "This read exceeds the accepted-source budget."
@@ -462,6 +514,9 @@ class GraphRepository:
     def node(
         self, data: GraphData, identifier: UUID, *, resolve_alias: bool = True
     ) -> NodeView | None:
+        from domain_kg.graph.identity_presence import identity_presence
+
+        identity_origins = identity_presence(data, identifier)
         observations = sorted(
             (
                 item
@@ -478,14 +533,16 @@ class GraphRepository:
         manuals = tuple(
             item
             for item in data.manual_nodes
-            if data.entity_id(item.entity.id, item.material_ids if not item.public else None)
-            == identifier
+            if any(
+                data.entity_id(item.entity.id, context) == identifier
+                for context in data.node_contexts(item)
+            )
         )
         supports = [row for row in data.supports if row.claim and identifier in data.endpoints(row)]
         # Eligible human claims retain opaque endpoints when source observations
         # disappear. Removed sources are already excluded by the read scope.
         manual_endpoint = any(row.manual_relation for row in supports)
-        if not observations and not manuals and not manual_endpoint:
+        if not observations and not manuals and not manual_endpoint and not identity_origins:
             if resolve_alias and data.identities:
                 roots = {data.entity_id(identifier, context) for context in data.identity_contexts}
                 roots.discard(identifier)
@@ -512,8 +569,11 @@ class GraphRepository:
         proofs = tuple(
             dict.fromkeys(
                 proof
-                for item in selected
-                if (proof := data.identity_witness(item.entity.id, item.material_id)) is not None
+                for origin, context in (
+                    *((item.entity.id, item.material_id) for item in selected),
+                    *identity_origins,
+                )
+                if (proof := data.identity_witness(origin, context)) is not None
             )
         )
         identity_members = (
@@ -523,7 +583,8 @@ class GraphRepository:
                         origin
                         for item in selected
                         for origin in data.identities.members(item.entity.id, item.material_id)
-                    },
+                    }
+                    | {origin for origin, _ in identity_origins},
                     key=str,
                 )
             )
@@ -679,7 +740,7 @@ class GraphRepository:
         if data.scope != scope:
             raise ValueError("sealed graph data belongs to another scope")
         nodes = {
-            identifier: node
+            node.id: node
             for identifier in sorted(set(request.seed_ids), key=str)
             if (node := self.node(data, identifier)) is not None
         }

@@ -37,7 +37,7 @@ async def authorize_curation(
     )
     if raw is None or raw.get("state") not in ("pending", "accepted"):
         raise inaccessible_reference()
-    if raw.get("kind") not in ("node", "relation"):
+    if raw.get("kind") not in ("node", "relation", "identity"):
         raise inaccessible_reference()
     mirror = await queue.database.curation_access.find_one(
         {"org_id": raw["org_id"], "kg_id": raw["kg_id"], "id": raw["id"]},
@@ -46,6 +46,10 @@ async def authorize_curation(
     if mirror is None or any(mirror.get(key) != raw[key] for key in ("public", "material_ids")):
         raise DomainError(
             ErrorCode.PROJECTION_INCONSISTENT, "Curation visibility ownership differs."
+        )
+    if (mirror.get("kind") == "identity") != (raw["kind"] == "identity"):
+        raise DomainError(
+            ErrorCode.PROJECTION_INCONSISTENT, "Structural curation ownership differs."
         )
     origin = await queue.database.jobs.find_one(
         {
@@ -67,7 +71,7 @@ async def authorize_curation(
     if write:
         if role not in ("owner", "editor") or current.principal.kind != "human":
             raise inaccessible_reference()
-        if raw["public"] and role != "owner":
+        if (raw["public"] or raw.get("rollback_of") is not None) and role != "owner":
             raise inaccessible_reference()
         if any(
             raw["actor"].get(field) != getattr(current.principal, field)
@@ -128,7 +132,7 @@ async def authorize_curation(
         ):
             raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Curation provenance differs.")
         target_record = await stores.authority._require(
-            "entities" if raw["kind"] == "node" else "assertions",
+            "entities" if raw["kind"] in ("node", "identity") else "assertions",
             ScopedRef(org_id=current.org_id, kg_id=kg, id=raw["target_id"]),
         )
         if raw["kind"] == "relation":
@@ -169,4 +173,10 @@ async def authorize_curation(
                 )
                 if source is None or str(source.material.id) != material:
                     raise inaccessible_reference()
+    if raw["kind"] == "identity":
+        from domain_kg.graph.identity_records import validate_identity_record
+
+        await validate_identity_record(
+            queue, current, dict(raw), preparing=preparing, session=session
+        )
     return dict(raw)

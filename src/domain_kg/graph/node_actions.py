@@ -3,13 +3,16 @@
 from typing import Any
 from uuid import UUID, uuid4, uuid5
 
+from pydantic import ValidationError
 from pymongo.asynchronous.client_session import AsyncClientSession
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.identity_models import ManualIdentity
 from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.repository import GraphData
 from domain_kg.graph.service import GraphService
+from domain_kg.graph.visibility import NodeMasks
 from domain_kg.graph.visibility_models import (
     CurationCommand,
     CurationImpact,
@@ -20,7 +23,7 @@ from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.queue import JobQueue, now
 from domain_kg.materials.models import BlobRef
 from domain_kg.materials.service import digest
-from domain_kg.models import ManualProvenance, ScopedRef
+from domain_kg.models import ManualProvenance, Namespace, ScopedRef
 from domain_kg.retrieval.models import SearchFilters, SearchRequest
 from domain_kg.revisions.models import ReadScope
 from domain_kg.revisions.projections import CurationEmbeddedDocument, ProjectionBody
@@ -175,7 +178,7 @@ class NodeVisibilityService:
         from domain_kg.graph.repository import scoped_graph_data
 
         rows: list[ProjectionBody] = []
-        directives: list[ManualNode | ManualRelation] = []
+        directives: list[ManualNode | ManualRelation | ManualIdentity] = []
         for binding in scope.projections:
             if (
                 binding.source not in scope.visible_sources
@@ -241,6 +244,8 @@ class NodeVisibilityService:
         rollback_of: UUID | None = None,
     ) -> CurationReceipt | CurationImpact:
         command = CurationCommand.model_validate(command)
+        if command.action not in ("suppress", "restore"):
+            raise DomainError(ErrorCode.VALIDATION_ERROR, "Select a node visibility action.")
         current = await self.policy.revalidate(access, action=Action.CURATE)
         public = command.curation_scope == "kg_public"
         if command.kg_id not in current.kg_ids or current.principal.kind != "human":
@@ -273,6 +278,10 @@ class NodeVisibilityService:
             node = graph.repository.node(data, command.entity_id)
             if node is None:
                 raise inaccessible_reference()
+            if node.id != command.entity_id:
+                raise DomainError(
+                    ErrorCode.VERSION_CONFLICT, "Use the current canonical identity target."
+                )
             if not public and not materials:
                 owners = {item.material_id for item in node.observations}
                 owners.update(m for directive in node.curations for m in directive.material_ids)
@@ -342,6 +351,25 @@ class NodeVisibilityService:
         await graph.resolver.revalidate(scope)
         await self.initialize()
         identifier = uuid4()
+        fence = NodeFence(
+            org_id=current.org_id,
+            kg_id=command.kg_id,
+            entity_id=command.entity_id,
+            curation=ScopedRef(org_id=current.org_id, kg_id=command.kg_id, id=identifier),
+            revision=revision + 1,
+            public=public,
+            material_ids=materials,
+            identity_groups=prior.get("identity_groups", ()) if prior else (),
+        )
+        if command.action == "suppress":
+            fence = (
+                NodeMasks(Namespace(org_id=current.org_id, kg_id=command.kg_id), (fence,))
+                .expanded(
+                    data.identities, tuple(source.material_id for source in scope.visible_sources)
+                )
+                .fences[0]
+            )
+        identity_groups = fence.model_dump(mode="json")["identity_groups"]
         stores = await self.queue.router.for_sources(current, command.kg_id)
         entity = ScopedRef(org_id=current.org_id, kg_id=command.kg_id, id=command.entity_id)
 
@@ -410,7 +438,7 @@ class NodeVisibilityService:
                 **ns,
                 revision_id=identifier,
                 target_id=command.entity_id,
-                action=command.action,
+                action="restore" if command.action == "restore" else "suppress",
                 target_revision=revision + 1,
                 visibility_revision=scope.visibility_revision + 1,
             )
@@ -427,6 +455,7 @@ class NodeVisibilityService:
                     "public": public,
                     "material_ids": list(map(str, materials)),
                     "source_versions": source_versions,
+                    "identity_groups": identity_groups,
                     "before": {"suppressed": bool(prior and prior["suppressed"])},
                     "after": {"suppressed": command.action == "suppress"},
                     "state": "accepted",
@@ -450,6 +479,7 @@ class NodeVisibilityService:
                         "public": public,
                         "material_ids": list(map(str, materials)),
                         "suppressed": command.action == "suppress",
+                        "identity_groups": identity_groups,
                     }
                 },
                 upsert=True,
@@ -542,7 +572,14 @@ class NodeVisibilityService:
                 raise DomainError(
                     ErrorCode.PROJECTION_INCONSISTENT, "An accepted node fence mirror is missing."
                 )
-            fence = NodeFence.model_validate({key: row[key] for key in NodeFence.model_fields})
+            try:
+                fence = NodeFence.model_validate(
+                    {key: row[key] for key in NodeFence.model_fields if key in row}
+                )
+            except ValidationError as error:
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Node fence ownership is malformed."
+                ) from error
             if any(
                 (
                     str(fence.curation.id) != record["id"],
@@ -551,6 +588,8 @@ class NodeVisibilityService:
                     record["expected_revision"] + 1 != fence.revision,
                     record["public"] != fence.public,
                     record["material_ids"] != list(map(str, fence.material_ids)),
+                    record.get("identity_groups", [])
+                    != fence.model_dump(mode="json")["identity_groups"],
                     record["after"] != {"suppressed": True},
                     record["actor"]["kind"] != "human",
                     record.get("job_id") is not None,
@@ -569,6 +608,10 @@ class NodeVisibilityService:
                     ErrorCode.PROJECTION_INCONSISTENT, "Node fence provenance differs."
                 )
             await stores.authority._require("entities", ScopedRef(**ns, id=fence.entity_id))
+            for entity_id in {
+                member for group in fence.identity_groups for member in group.member_ids
+            }:
+                await stores.authority._require("entities", ScopedRef(**ns, id=entity_id))
             for material in fence.material_ids:
                 await stores.authority._require("materials", ScopedRef(**ns, id=material))
             if fence.public or set(fence.material_ids).intersection(materials):

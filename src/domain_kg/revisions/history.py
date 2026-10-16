@@ -87,6 +87,10 @@ class RevisionHistory:
             Namespace(org_id=current.org_id, kg_id=request.kg_id),
             () if request.include_suppressed else scope.node_fences,
         )
+        if not request.include_suppressed:
+            masks = masks.expanded(
+                data.identities, tuple(source.material_id for source in scope.visible_sources)
+            )
         endpoints: tuple[UUID, ...] = (request.target_id,)
         if request.kind == "relation" and scope.node_fences and not request.include_suppressed:
             stores = await self.queue.router.for_sources(current, request.kg_id)
@@ -112,8 +116,9 @@ class RevisionHistory:
         ]
         public_history = not any(masks.blocked(endpoint) for endpoint in endpoints)
         query: dict[str, Any] = ns | {
-            "target_id": str(request.target_id),
-            "kind": {"$in": ["node", "visibility"]} if request.kind == "node" else "relation",
+            "kind": {"$in": ["node", "visibility", "identity"]}
+            if request.kind == "node"
+            else "relation",
             "state": {"$in": ["pending", "accepted"]},
             "$or": [
                 {"public": True, "material_ids": [], "$expr": {"$eq": [public_history, True]}},
@@ -124,15 +129,42 @@ class RevisionHistory:
                 },
             ],
         }
-        if cursor:
+        if request.kind == "node":
             query["$and"] = [
+                {
+                    "$or": [
+                        {"target_id": str(request.target_id)},
+                        {"kind": "identity", "members": str(request.target_id)},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"kind": {"$ne": "identity"}},
+                        {
+                            "members": {"$nin": list(map(str, masks.public_entities))},
+                            "$nor": [
+                                {
+                                    "members": str(entity),
+                                    "material_ids": {"$in": list(map(str, materials))},
+                                }
+                                for entity, materials in masks.source_entities.items()
+                            ]
+                            or [{"id": {"$exists": False}}],
+                        },
+                    ]
+                },
+            ]
+        else:
+            query["target_id"] = str(request.target_id)
+        if cursor:
+            query.setdefault("$and", []).append(
                 {
                     "$or": [
                         {"created_at": {"$gt": cursor["after_time"]}},
                         {"created_at": cursor["after_time"], "id": {"$gt": cursor["after_id"]}},
                     ]
                 }
-            ]
+            )
         rows = (
             await self.database.curation_revisions.find(query)
             .sort([("created_at", 1), ("id", 1)])
@@ -162,7 +194,9 @@ class RevisionHistory:
                     "revision_id": record["id"],
                     "target_id": record["target_id"],
                     "target_revision": record["expected_revision"] + 1,
-                    "kind": record["kind"],
+                    "kind": "identity_control"
+                    if record["kind"] == "identity" and record.get("retracts")
+                    else record["kind"],
                     "state": record["state"],
                     "public": record["public"],
                     "material_ids": record["material_ids"],
@@ -177,6 +211,16 @@ class RevisionHistory:
                 | (
                     {"visibility_revision": record["visibility_revision"]}
                     if record["kind"] == "visibility"
+                    else {}
+                )
+                | (
+                    {"member_ids": record["members"]}
+                    | (
+                        {"original_revision_id": record["retracts"]["id"]}
+                        if record.get("retracts")
+                        else {"operation": record["operation"]}
+                    )
+                    if record["kind"] == "identity"
                     else {}
                 )
             )

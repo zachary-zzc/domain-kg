@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from domain_kg.engine.scope import EligibilityResolver
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.identity_models import ManualIdentity
 from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.repository import scoped_graph_data
 from domain_kg.graph.service import AcceptedMetadata
@@ -21,6 +22,7 @@ from domain_kg.retrieval.deep import DeepRetrievalBranch
 from domain_kg.retrieval.federation import fan_out
 from domain_kg.retrieval.fusion import fuse, rank_pool, select_evidence
 from domain_kg.retrieval.graph import GraphRetrievalBranch, source_citation
+from domain_kg.retrieval.identity import evidence_identity
 from domain_kg.retrieval.lexical import LexicalRetrievalBranch
 from domain_kg.retrieval.models import (
     BranchStatus,
@@ -210,7 +212,7 @@ class RetrievalService:
         if not items:
             return
         rows: list[ProjectionBody] = []
-        curations: list[ManualNode | ManualRelation] = []
+        curations: list[ManualNode | ManualRelation | ManualIdentity] = []
         for binding in scope.projections:
             if (
                 binding.source not in scope.visible_sources
@@ -237,7 +239,7 @@ class RetrievalService:
                 )
                 if manual is None:
                     raise inconsistent()
-                expected = manual_candidate(manual, "vector", item.score, 1)
+                expected = manual_candidate(manual, "vector", item.score, 1, data=data)
                 if item.model_dump(exclude={"score", "method_ranks"}) != expected.model_dump(
                     exclude={"score", "method_ranks"}
                 ):
@@ -259,11 +261,9 @@ class RetrievalService:
                 )
             ):
                 raise inconsistent()
-            entities = {
-                observation.entity.id
-                for observation in data.observations
-                if observation.chunk_id == row.id
-            }
+            entities, witnesses = evidence_identity(data, row)
+            if item.identity_mappings != witnesses:
+                raise inconsistent()
             assertions = {
                 support.assertion.assertion.id
                 for support in supports.values()
@@ -280,11 +280,25 @@ class RetrievalService:
                     if support is None or support.claim is None:
                         raise inconsistent()
                     fact = support.claim.assertion
+                    mapped = data.endpoints(support)
                     if (step.subject_id, step.assertion_id, step.target_id) != (
-                        fact.subject.id,
+                        mapped[0],
                         fact.id,
-                        fact.target.id,
+                        mapped[1],
                     ):
+                        raise inconsistent()
+                    expected_originals = (fact.subject.id, fact.target.id)
+                    if (step.original_subject_id, step.original_target_id) != (
+                        expected_originals if data.identities else (None, None)
+                    ):
+                        raise inconsistent()
+                    expected_proofs = tuple(
+                        proof
+                        for origin in expected_originals
+                        if (proof := data.identity_witness(origin, data.context(support)))
+                        is not None
+                    )
+                    if step.identity_mappings != tuple(dict.fromkeys(expected_proofs)):
                         raise inconsistent()
                     endpoints = {step.subject_id, step.target_id}
                     if previous and not previous.intersection(endpoints):

@@ -49,8 +49,11 @@ class ManualIdentity(IdentityState):
     provenance: ManualProvenance
     revision: NonNegative
     created_at: UTCDateTime
+    sequence: NonNegative = 0
     public: bool = False
     material_ids: Annotated[tuple[UUID, ...], Field(max_length=100)] = ()
+    retracts: ScopedRef | None = None
+    enabled: bool = Field(default=True, strict=True)
 
     @model_validator(mode="after")
     def independent_owner(self) -> Self:
@@ -60,6 +63,18 @@ class ManualIdentity(IdentityState):
             self.material_ids
         ):
             raise ValueError("choose explicit source ownership or an owner-public identity mapping")
+        if self.retracts is not None:
+            if (
+                self.groups
+                or self.retracts == self.curation
+                or (self.retracts.org_id, self.retracts.kg_id)
+                != (self.curation.org_id, self.curation.kg_id)
+            ):
+                raise ValueError(
+                    "an identity control requires another same-KG original and no groups"
+                )
+        elif not self.enabled:
+            raise ValueError("only an explicit identity control can disable a mapping")
         return self
 
     @property

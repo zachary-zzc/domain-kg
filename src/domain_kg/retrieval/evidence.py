@@ -6,11 +6,13 @@ from typing import Any, Literal
 from domain_kg.engine.scope import EligibilityResolver
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.identity_models import ManualIdentity
 from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.repository import GraphData, scoped_graph_data
 from domain_kg.graph.service import AcceptedMetadata
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.graph import source_citation
+from domain_kg.retrieval.identity import evidence_identity
 from domain_kg.retrieval.models import EvidenceCandidate
 from domain_kg.revisions.models import ReadScope
 from domain_kg.revisions.projections import CurationEmbeddedDocument, ProjectionBody
@@ -20,14 +22,19 @@ from domain_kg.storage.qdrant import VectorProjection
 
 
 def manual_candidate(
-    row: ProjectionBody, method: Literal["vector", "lexical", "graph"], score: float, rank: int
+    row: ProjectionBody,
+    method: Literal["vector", "lexical", "graph"],
+    score: float,
+    rank: int,
+    *,
+    data: GraphData | None = None,
 ) -> EvidenceCandidate:
     from uuid import uuid5
 
     manual = row.manual_node or row.manual_relation
     if manual is None or row.curation is None or manual.curation != row.curation:
         raise inconsistent()
-    return EvidenceCandidate(
+    candidate = EvidenceCandidate(
         kind="manual",
         kg_id=row.kg_id,
         text=row.text,
@@ -48,6 +55,12 @@ def manual_candidate(
         score=score,
         method_ranks={method: rank},
     )
+    if data is not None:
+        entities, witnesses = evidence_identity(data, row)
+        candidate = candidate.model_copy(
+            update={"entity_ids": entities, "identity_mappings": witnesses}
+        )
+    return candidate
 
 
 @dataclass(frozen=True)
@@ -81,10 +94,10 @@ class EvidenceData:
         self, row: ProjectionBody, method: Literal["vector", "lexical"], score: float, rank: int
     ) -> EvidenceCandidate:
         if row.manual_node or row.manual_relation:
-            return manual_candidate(row, method, score, rank)
+            return manual_candidate(row, method, score, rank, data=self.graph)
         if row.chunk is None or row.source is None:
             raise inconsistent()
-        observations = [item for item in self.graph.observations if item.chunk_id == row.id]
+        entities, witnesses = evidence_identity(self.graph, row)
         assertions = [
             item.assertion.assertion.id
             for item in self.graph.supports
@@ -104,7 +117,8 @@ class EvidenceData:
                     row.org_id, row.kg_id, row.source.material_id, row.source.version_id, row.id
                 ),
             ),
-            entity_ids=tuple(sorted({item.entity.id for item in observations}, key=str)),
+            entity_ids=entities,
+            identity_mappings=witnesses,
             assertion_ids=tuple(sorted(set(assertions), key=str)),
             score=score,
             method_ranks={method: rank},
@@ -125,7 +139,7 @@ class SealedEvidence:
         bodies: list[ProjectionBody] = []
         payloads: list[dict[str, Any]] = []
         spaces = []
-        curations: list[ManualNode | ManualRelation] = []
+        curations: list[ManualNode | ManualRelation | ManualIdentity] = []
         for accepted in scope.projections:
             if (
                 accepted.source not in scope.visible_sources

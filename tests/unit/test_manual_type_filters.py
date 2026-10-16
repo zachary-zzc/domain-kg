@@ -39,7 +39,12 @@ def manual_fixture(*, own_type=True, wanted_type="concept"):
         provenance=relation.provenance,
         manual_relation=relation,
     )
-    scope = SimpleNamespace(filters=SearchFilters(entity_types=(wanted_type,)))
+    scope = SimpleNamespace(
+        filters=SearchFilters(entity_types=(wanted_type,)),
+        view=relation.curation,
+        node_fences=(),
+        visible_sources=(),
+    )
     return GraphData(scope, (row,), (node, relation)), node
 
 

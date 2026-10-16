@@ -6,9 +6,11 @@ from uuid import UUID
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.identity_models import ManualIdentity
+from domain_kg.graph.identity_partition import IdentityPartition
 from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.models import AssertionRecord
-from domain_kg.graph.visibility_models import NodeFence
+from domain_kg.graph.visibility_models import IdentityFenceGroup, NodeFence
 from domain_kg.models import Namespace, SourceVersion
 from domain_kg.revisions.projections import ProjectionBody
 
@@ -30,7 +32,20 @@ class NodeMasks:
 
     @cached_property
     def public_entities(self) -> frozenset[UUID]:
-        return frozenset(item.entity_id for item in self.fences if item.public)
+        return frozenset(
+            entity
+            for item in self.fences
+            if item.public
+            for entity in (
+                item.entity_id,
+                *(
+                    entity
+                    for group in item.identity_groups
+                    if group.material_id is None
+                    for entity in group.member_ids
+                ),
+            )
+        )
 
     @cached_property
     def source_entities(self) -> dict[UUID, frozenset[UUID]]:
@@ -38,7 +53,76 @@ class NodeMasks:
         for item in self.fences:
             if not item.public:
                 grouped.setdefault(item.entity_id, set()).update(item.material_ids)
+            for group in item.identity_groups:
+                if group.material_id is not None:
+                    for entity in group.member_ids:
+                        grouped.setdefault(entity, set()).add(group.material_id)
         return {key: frozenset(value) for key, value in grouped.items()}
+
+    def expanded(
+        self, identities: IdentityPartition | None, materials: tuple[UUID, ...]
+    ) -> "NodeMasks":
+        fences = []
+        for fence in self.fences:
+            contexts: set[UUID | None] = set(materials if fence.public else fence.material_ids)
+            contexts.update(group.material_id for group in fence.identity_groups)
+            if fence.public:
+                contexts.add(None)
+            groups = []
+            public_members = {fence.entity_id}
+            for context in sorted(contexts, key=lambda value: (value is not None, str(value))):
+                members = set(public_members) if fence.public else {fence.entity_id}
+                members.update(
+                    entity
+                    for group in fence.identity_groups
+                    if group.material_id == context
+                    for entity in group.member_ids
+                )
+                if identities:
+                    while True:
+                        previous = set(members)
+                        for entity in previous:
+                            members.update(identities.members(entity, context))
+                        # A single human revision may describe several partitions.
+                        # Its proof must not reveal a separately fenced member.
+                        for directive in identities.directives:
+                            if not directive.members.intersection(members):
+                                continue
+                            if any(
+                                directive.curation in identities.witnesses(entity, context)
+                                for entity in directive.members
+                            ):
+                                members.update(directive.members)
+                        if len(members) > 100:
+                            raise DomainError(
+                                ErrorCode.QUOTA_EXCEEDED, "Identity mask is too large."
+                            )
+                        if members == previous:
+                            break
+                if context is None:
+                    public_members = set(members)
+                    if members == {fence.entity_id}:
+                        continue
+                elif members.issubset(public_members if fence.public else {fence.entity_id}):
+                    # The base fence already covers these IDs in this context.
+                    continue
+                groups.append(
+                    IdentityFenceGroup(
+                        material_id=context, member_ids=tuple(sorted(members, key=str))
+                    )
+                )
+            if (
+                len(groups) > 101
+                or len({member for group in groups for member in group.member_ids}) > 100
+            ):
+                raise DomainError(
+                    ErrorCode.QUOTA_EXCEEDED,
+                    "Choose a smaller source scope for this identity fence.",
+                )
+            fences.append(
+                NodeFence.model_validate(fence.model_dump() | {"identity_groups": tuple(groups)})
+            )
+        return NodeMasks(self.namespace, tuple(fences))
 
     def blocked(
         self, entity: UUID, *, material_id: UUID | None = None, material_ids: tuple[UUID, ...] = ()
@@ -95,11 +179,14 @@ class NodeMasks:
 
     def hides_directive(
         self,
-        manual: ManualNode | ManualRelation,
+        manual: ManualNode | ManualRelation | ManualIdentity,
         *,
         relation_context: AssertionRecord | None = None,
     ) -> bool:
         self._require_namespace(manual.curation)
+        if isinstance(manual, ManualIdentity):
+            # Structural definitions are needed to expand node masks; they never add text rows.
+            return False
         if not self.fences:
             return False
         if isinstance(manual, ManualNode):

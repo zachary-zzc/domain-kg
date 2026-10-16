@@ -55,6 +55,9 @@ def fuse(
                         sorted(set(base.assertion_ids) | set(item.assertion_ids), key=str)
                     ),
                     "graph_paths": tuple(dict.fromkeys((*base.graph_paths, *item.graph_paths))),
+                    "identity_mappings": tuple(
+                        dict.fromkeys((*base.identity_mappings, *item.identity_mappings))
+                    ),
                 }
             )
     return sorted(merged.values(), key=lambda item: (-item.score, str(evidence_key(item))))

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 
+from domain_kg.graph.identity_models import IdentityWitness
 from domain_kg.materials.models import MaterialMetadata
 from domain_kg.models import FrozenModel, ManualProvenance, NonNegative, PreservedText, UTCDateTime
 
@@ -158,6 +159,9 @@ class GraphStep(FrozenModel):
     assertion_id: UUID
     target_id: UUID
     support_id: UUID
+    original_subject_id: UUID | None = None
+    original_target_id: UUID | None = None
+    identity_mappings: tuple[IdentityWitness, ...] = ()
 
 
 class EvidenceCandidate(FrozenModel):
@@ -175,9 +179,12 @@ class EvidenceCandidate(FrozenModel):
     score: float = 0.0
     method_ranks: dict[str, Annotated[int, Field(ge=1)]] = Field(default_factory=dict)
     graph_paths: tuple[tuple[GraphStep, ...], ...] = ()
+    identity_mappings: tuple[IdentityWitness, ...] = ()
 
     @model_validator(mode="after")
     def honest_provenance(self) -> Self:
+        if any(witness.kg_id != self.kg_id for witness in self.identity_mappings):
+            raise ValueError("identity witnesses must belong to the evidence KG")
         if self.kind == "source":
             if any(value is None for value in (self.material_id, self.version_id, self.chunk_id)):
                 raise ValueError("source evidence requires material, version, and chunk IDs")

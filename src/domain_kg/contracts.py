@@ -8,6 +8,7 @@ from domain_kg.catalog.models import BackendCapabilities as BackendCapabilities
 from domain_kg.catalog.models import CreateKG as CreateKG
 from domain_kg.catalog.models import KGReceipt as KGReceipt
 from domain_kg.catalog.models import StorageProfile as StorageProfile
+from domain_kg.graph.identity_commands import IdentityImpact as IdentityImpact
 from domain_kg.graph.models import DomainSchema as DomainSchema
 from domain_kg.identity.models import AccessContext as AccessContext
 from domain_kg.identity.models import Action as Action
@@ -140,7 +141,7 @@ class ProjectionCoordinator(Protocol):
 class RevisionService(Protocol):
     async def curate_node(
         self, access: AccessContext, command: CurationCommand
-    ) -> CurationReceipt | CurationImpact: ...
+    ) -> CurationReceipt | CurationImpact | IdentityImpact | RevisionReceipt: ...
     async def get_revisions(
         self, access: AccessContext, request: HistoryRequest
     ) -> HistoryPage: ...

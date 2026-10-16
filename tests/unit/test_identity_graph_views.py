@@ -296,3 +296,44 @@ def test_disagreeing_source_aliases_require_explicit_scope():
     changed = GraphData(scope, data.rows, (*data.curations, second))
     with pytest.raises(DomainError):
         GraphRepository(None, None).node(changed, beta)
+
+
+@pytest.mark.parametrize("joint", [False, True])
+def test_grouped_human_fields_keep_provenance_under_effective_entity_filter(joint):
+    from domain_kg.graph.curation_models import ManualNode, NodeFields
+
+    data, alpha, beta, _, a, b, identity = graph_fixture()
+    manual = ManualNode(
+        curation=identity.curation.model_copy(update={"id": uuid4()}),
+        entity=identity.target.model_copy(update={"id": beta}),
+        changes=NodeFields(name="Reviewed shared name"),
+        provenance=identity.provenance,
+        revision=1,
+        created_at=identity.created_at,
+        material_ids=(a, b) if joint else (a,),
+    )
+    filtered = GraphData(
+        data.scope.model_copy(update={"filters": SearchFilters(entity_ids=(alpha,))}),
+        data.rows,
+        (*data.curations, manual),
+    )
+    node = GraphRepository(None, None).node(filtered, alpha)
+    assert node.name == manual.changes.name and manual in node.curations
+
+
+def test_human_identity_retains_opaque_endpoints_without_reviving_source_fields():
+    data, alpha, beta, _, _, _, _ = graph_fixture()
+    retained = GraphData(data.scope, (), data.curations)
+    repository = GraphRepository(None, None)
+    node = repository.node(retained, alpha)
+    assert node is not None and node.name == str(alpha)
+    assert node.observation_count == node.support_count == 0
+    assert node.descriptions == node.aliases == node.entity_types == ()
+    assert set(node.identity_members) == {alpha, beta} and node.identity_mappings
+    alias = repository.node(retained, beta)
+    assert alias.id == alpha and alias.requested_id == beta
+    supported_only = GraphData(
+        retained.scope.model_copy(update={"filters": SearchFilters(predicates=("uses",))}),
+        (), retained.curations,
+    )
+    assert repository.node(supported_only, alpha) is None

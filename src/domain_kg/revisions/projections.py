@@ -8,6 +8,7 @@ from uuid import UUID, uuid5
 from pydantic import Field, model_validator
 
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.identity_models import ManualIdentity
 from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.ingestion.models import ParsedChunk
 from domain_kg.ingestion.resolved import ResolvedAssertion, ResolvedEntity
@@ -265,7 +266,7 @@ class EmbeddedDocument(SourceVersion):
 
 class CurationEmbeddedDocument(Namespace):
     curation: ScopedRef
-    directive: ManualNode | ManualRelation
+    directive: ManualNode | ManualRelation | ManualIdentity
     profile: EmbeddingProfile
     profile_selection_revision: int
     schema_id: UUID

@@ -9,6 +9,7 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.curation import authorize_curation
 from domain_kg.graph.curation_models import ManualNode, NodeFields
+from domain_kg.graph.identity_models import ManualIdentity
 from domain_kg.graph.manual_relations import ManualRelation, RelationFields
 from domain_kg.graph.models import AssertionRecord, DomainSchema, SupportRecord
 from domain_kg.identity.models import AccessContext, Action
@@ -31,7 +32,11 @@ from domain_kg.storage.neo4j import inconsistent
 from domain_kg.storage.router import projection_checksum
 
 
-def directive(record: dict[str, Any]) -> ManualNode | ManualRelation:
+def directive(record: dict[str, Any]) -> ManualNode | ManualRelation | ManualIdentity:
+    if record["kind"] == "identity":
+        from domain_kg.graph.identity_records import identity_directive
+
+        return identity_directive(record)
     ns = {"org_id": record["org_id"], "kg_id": record["kg_id"]}
     common = dict(
         curation=ScopedRef(**ns, id=record["id"]),
@@ -233,6 +238,8 @@ class CurationCoordinator:
 
     @staticmethod
     def owner_key(record: dict[str, Any]) -> str:
+        if record["kind"] == "identity":
+            return f"identity:{record['id']}"
         return f"curation:{record['target_id']}:{record['scope_key']}"
 
     async def prepare(self, job: LeasedJob, checkpoint: Checkpoint) -> RevisionBatch:
@@ -357,8 +364,22 @@ class CurationCoordinator:
             return RevisionReceipt.model_validate(attempt["receipt"])
         if (command.lease_token, command.fence) != (lease.lease_token, lease.fence):
             raise DomainError(ErrorCode.VERSION_CONFLICT, "The manual publication lease changed.")
-        if command.expected_target_revisions and command.expected_target_revisions != (
-            (UUID(record["target_id"]), record["expected_revision"]),
+        expected_targets = (
+            tuple(
+                sorted(
+                    (
+                        (UUID(item["target_id"]), item["expected_revision"])
+                        for item in record["target_revisions"]
+                    ),
+                    key=lambda item: str(item[0]),
+                )
+            )
+            if record["kind"] == "identity"
+            else ((UUID(record["target_id"]), record["expected_revision"]),)
+        )
+        if (
+            command.expected_target_revisions
+            and command.expected_target_revisions != expected_targets
         ):
             raise inaccessible_reference()
         coordinator = ProjectionCoordinator(self.queue, self.providers)
@@ -426,6 +447,10 @@ class CurationCoordinator:
                 )
             ]
             retained = [row for row in prior if row["owner_key"] != self.owner_key(current)]
+            if len(retained) >= 1000:
+                raise DomainError(
+                    ErrorCode.QUOTA_EXCEEDED, "Accepted curation metadata needs maintenance."
+                )
             for row in retained:
                 await self.database.publication_bindings.insert_one(
                     {field: value for field, value in row.items() if field != "_id"}
@@ -441,25 +466,38 @@ class CurationCoordinator:
                 },
                 session=session,
             )
-            changed = await self.database.curation_targets.update_one(
-                ns
-                | {
-                    "id": current["target_state_id"],
-                    "revision": current["expected_revision"],
-                    "target_id": current["target_id"],
-                    "scope_key": current["scope_key"],
-                },
-                {"$inc": {"revision": 1}},
-                session=session,
+            target_updates = (
+                current["target_revisions"]
+                if current["kind"] == "identity"
+                else [
+                    {
+                        "state_id": current["target_state_id"],
+                        "target_id": current["target_id"],
+                        "expected_revision": current["expected_revision"],
+                    }
+                ]
             )
-            if not changed.matched_count:
-                raise DomainError(ErrorCode.VERSION_CONFLICT, "The curation target changed.")
-            await self.database.curation_scopes.update_one(
-                ns | {"target_id": current["target_id"], "scope_key": current["scope_key"]},
-                {"$set": {"curation_id": current["id"], "changes": current["after"]}},
-                upsert=True,
-                session=session,
-            )
+            for target_update in target_updates:
+                changed = await self.database.curation_targets.update_one(
+                    ns
+                    | {
+                        "id": target_update["state_id"],
+                        "revision": target_update["expected_revision"],
+                        "target_id": target_update["target_id"],
+                        "scope_key": current["scope_key"],
+                    },
+                    {"$inc": {"revision": 1}},
+                    session=session,
+                )
+                if not changed.matched_count:
+                    raise DomainError(ErrorCode.VERSION_CONFLICT, "The curation target changed.")
+            if current["kind"] != "identity":
+                await self.database.curation_scopes.update_one(
+                    ns | {"target_id": current["target_id"], "scope_key": current["scope_key"]},
+                    {"$set": {"curation_id": current["id"], "changes": current["after"]}},
+                    upsert=True,
+                    session=session,
+                )
             receipt = RevisionReceipt(
                 org_id=job.org_id,
                 kg_id=job.kg_id,

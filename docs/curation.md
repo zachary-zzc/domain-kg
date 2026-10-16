@@ -80,6 +80,10 @@ them before paging. Owner rollback appends a compensating visibility action and
 rechecks current permissions and restoration readiness.
 
 The final visibility regression passed 21 real-store checks in 711.76 seconds.
-Merge/split, full reprocessing restoration and retention-safe cleanup are still
-being completed; Task 14 remains unchecked.
+Merge/split now retains immutable source evidence and per-source identity witnesses.
+The dedicated regression passed 11 real-store checks, including competing member
+edits, owner compensation, current grants and projection recovery. See
+[identity grouping](identity-curation.md). Full reprocessing restoration and
+retention-safe cleanup have separate passing local checks. Task 14 remains unchecked
+while its combined laptop verification runs.
 HTTP/MCP exposure follows in Task 15.

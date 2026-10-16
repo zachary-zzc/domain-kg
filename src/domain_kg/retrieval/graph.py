@@ -6,6 +6,7 @@ from uuid import UUID, uuid5
 from domain_kg.graph.service import GraphService
 from domain_kg.graph.views import SubgraphView
 from domain_kg.jobs.queue import JobQueue
+from domain_kg.retrieval.identity import evidence_identity
 from domain_kg.retrieval.models import EvidenceCandidate, GraphStep, SearchRequest, SubgraphRequest
 from domain_kg.revisions.models import ReadScope
 
@@ -48,7 +49,7 @@ class GraphRetrievalBranch:
             sorted(
                 set(seed_ids)
                 | {
-                    observation.entity.id
+                    data.entity_id(observation.entity.id, observation.material_id)
                     for observation in data.observations
                     if any(
                         any(term.casefold() in text.casefold() for term in (keywords or (query,)))
@@ -64,12 +65,12 @@ class GraphRetrievalBranch:
             )
         )
         manual_seeds = {
-            manual.entity.id
+            data.entity_id(manual.entity.id, manual.material_ids if not manual.public else None)
             for manual in data.manual_nodes
             if any(term.casefold() in manual.text.casefold() for term in (keywords or (query,)))
         }
         manual_seeds.update(
-            endpoint.id
+            data.entity_id(endpoint.id, data.context(row))
             for row in data.manual_rows
             if row.manual_relation
             and row.claim
@@ -77,6 +78,16 @@ class GraphRetrievalBranch:
             for endpoint in (row.claim.assertion.subject, row.claim.assertion.target)
         )
         all_seeds = tuple(sorted(set(all_seeds) | manual_seeds, key=str))
+        all_seeds = tuple(
+            sorted(
+                {
+                    node.id
+                    for identifier in all_seeds
+                    if (node := self.repository.node(data, identifier)) is not None
+                },
+                key=str,
+            )
+        )
         annotation_rows = tuple(
             row
             for row in data.manual_rows
@@ -90,7 +101,7 @@ class GraphRetrievalBranch:
             from domain_kg.retrieval.evidence import manual_candidate
 
             annotation_candidates = [
-                manual_candidate(row, "graph", 0.0, index)
+                manual_candidate(row, "graph", 0.0, index, data=data)
                 for index, row in enumerate(annotation_rows[:50], 1)
             ]
             return GraphRecall(annotation_candidates, None, len(annotation_rows) > 50)
@@ -117,6 +128,9 @@ class GraphRetrievalBranch:
                     assertion_id=edge.assertion_id,
                     target_id=edge.target_id,
                     support_id=edge.support_id,
+                    original_subject_id=edge.original_subject_id,
+                    original_target_id=edge.original_target_id,
+                    identity_mappings=edge.identity_mappings,
                 )
                 for start, end in (
                     (edge.subject_id, edge.target_id),
@@ -143,7 +157,7 @@ class GraphRetrievalBranch:
             grouped = {
                 observation.chunk_id: []
                 for observation in data.observations
-                if observation.entity.id in seeds
+                if data.entity_id(observation.entity.id, observation.material_id) in seeds
             }
         candidates: list[EvidenceCandidate] = []
         for identifier in sorted(grouped, key=str):
@@ -151,7 +165,7 @@ class GraphRetrievalBranch:
             if chunk_row is None or chunk_row.chunk is None or chunk_row.source is None:
                 continue
             paths_for_chunk = tuple(grouped[identifier])
-            entities = {item.entity.id for item in data.observations if item.chunk_id == identifier}
+            entities, witnesses = evidence_identity(data, chunk_row)
             candidates.append(
                 EvidenceCandidate(
                     kind="source",
@@ -169,7 +183,8 @@ class GraphRetrievalBranch:
                     material_id=chunk_row.source.material_id,
                     version_id=chunk_row.source.version_id,
                     chunk_id=identifier,
-                    entity_ids=tuple(sorted(entities, key=str)),
+                    entity_ids=entities,
+                    identity_mappings=witnesses,
                     assertion_ids=tuple(
                         sorted(
                             {step.assertion_id for path in paths_for_chunk for step in path},
@@ -186,19 +201,19 @@ class GraphRetrievalBranch:
         node_ids = {node.id for node in graph.nodes}
         first_rank = len(candidates)
         candidates.extend(
-            manual_candidate(row, "graph", 0.0, first_rank + index)
+            manual_candidate(row, "graph", 0.0, first_rank + index, data=data)
             for index, row in enumerate(
                 (
                     row
                     for row in data.manual_rows
-                    if (row.manual_node and row.manual_node.entity.id in node_ids)
+                    if (
+                        row.manual_node
+                        and data.entity_id(row.manual_node.entity.id, data.context(row)) in node_ids
+                    )
                     or (
                         row.manual_relation
                         and row.claim
-                        and {
-                            row.claim.assertion.subject.id,
-                            row.claim.assertion.target.id,
-                        }.intersection(node_ids)
+                        and set(data.endpoints(row)).intersection(node_ids)
                     )
                 ),
                 1,
@@ -206,7 +221,7 @@ class GraphRetrievalBranch:
         )
         annotation_first_rank = len(candidates)
         candidates.extend(
-            manual_candidate(row, "graph", 0.0, annotation_first_rank + index)
+            manual_candidate(row, "graph", 0.0, annotation_first_rank + index, data=data)
             for index, row in enumerate(annotation_rows, 1)
         )
         return GraphRecall(
