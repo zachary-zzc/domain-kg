@@ -8,7 +8,8 @@ Updated 16 October 2026. Execution is native in this chat, following the current
 | 2: Domain contracts and namespace integrity | Complete | 47 smoke tests pass; full regression 59 tests; lint and strict mypy pass. |
 | 3: OIDC identity and organization accounts | Local checks pass; external gate pending | 19 smoke tests pass, including signed issuer fixtures and real MongoDB transactions. A real development IdP login is still required. |
 | 4: Shared policy and scoped repositories | Complete locally | 18 smoke tests pass; full suite 81 tests; real MongoDB, Neo4j and Qdrant scope checks. |
-| 5–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
+| 5: Catalog and registered storage profiles | Complete locally | 14 smoke tests pass, including three KGs across independent physical graph/vector deployments run serially. |
+| 6–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 
@@ -46,3 +47,7 @@ Task 3's complete suite passed 73 tests; Ruff and strict mypy passed. [Developme
 Task 4's complete suite passed 81 tests in 21.09 seconds, including interleaved principals querying real graph/vector stores, empty eligible scopes, restricted ACL intersection, action scopes, service revocation, concurrent last-owner removal, and revocation between policy reads. Its laptop smoke passed 18 tests. Current policy and visibility revisions are rechecked before results return. Organization-admin and operator flags do not grant KG data access. Five loopback Qdrant warnings remain a documented development limitation.
 
 The smoke stack remains capped at 1.476 GB with swap disabled. Repeated disposable schema tests reached MongoDB's inherited file-descriptor limit; its volume recovered after applying the official 64,000 open-file setting. No RAM limit was raised. See [resource notes](development-resources.md). Smoke containers remain up during continued implementation and are stopped when work pauses.
+
+Task 5 adds approved connection references, operator registration, bounded driver pools, namespace provisioning, explicit owner appointment, permission-filtered KG lists, lifecycle controls, redacted health, and mounted catalog HTTP routes. Concurrent KG creation replays one accepted reservation; profile/backend detachment is serialized with placement claims. Inventory and catalog cursors enforce limits and bind current policy.
+
+The regular full suite passed 89 tests in 45.87 seconds with the physical drill intentionally skipped. The final Task 5 smoke explicitly ran that drill: all 14 checks passed in 83.90 seconds, and the primary stack was restored. Its 17 warnings identify loopback HTTP and the intentionally offline primary compatibility check. All operations kept four containers totalling 1.476 GB. [Storage-profile details](decisions/0003-storage-profiles.md) record the server-approved replica-set databases and independent graph/vector endpoints. No real operator invitation was issued.
