@@ -23,6 +23,9 @@ async def test_retrieval_cannot_reuse_a_write_only_access_context(team):
     view = PublishedView(org_id=org, kg_id=kg, revision=0, generation=uuid4())
 
     class Views:
+        async def node_fences(self, access, kg_id, materials):
+            return ()
+
         async def load(self, access, kg_id):
             return view
 
@@ -92,6 +95,9 @@ async def test_immutable_eligible_scopes_and_visibility_rechecks(
     )
 
     class Views:
+        async def node_fences(self, access, kg_id, materials):
+            return ()
+
         async def load(self, access, kg_id):
             return view
 

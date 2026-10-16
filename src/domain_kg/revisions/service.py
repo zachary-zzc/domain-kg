@@ -20,6 +20,9 @@ from domain_kg.models import ManualProvenance, ScopedRef
 from domain_kg.providers.service import ProviderService
 from domain_kg.retrieval.models import SearchFilters, SearchRequest
 from domain_kg.revisions.models import (
+    CurationCommand,
+    CurationImpact,
+    CurationReceipt,
     EditCommand,
     HistoryPage,
     HistoryRequest,
@@ -90,6 +93,14 @@ class RevisionService:
             [("org_id", 1), ("kg_id", 1), ("target_id", 1), ("scope_key", 1)], unique=True
         )
 
+    async def curate_node(
+        self, access: AccessContext, command: CurationCommand
+    ) -> CurationReceipt | CurationImpact:
+        from domain_kg.graph.node_actions import NodeVisibilityService
+
+        await self.initialize()
+        return await NodeVisibilityService(self.queue).apply(access, command)
+
     async def get_revisions(self, access: AccessContext, request: HistoryRequest) -> HistoryPage:
         from domain_kg.revisions.history import RevisionHistory
 
@@ -153,13 +164,26 @@ class RevisionService:
             )
         return receipt
 
-    async def rollback(self, access: AccessContext, command: RollbackRevision) -> RevisionReceipt:
+    async def rollback(
+        self, access: AccessContext, command: RollbackRevision
+    ) -> RevisionReceipt | CurationReceipt:
         command = RollbackRevision.model_validate(command)
         current = await self.policy.revalidate(access, action=Action.CURATE)
         if current.principal.kind != "human" or not any(
             grant.kg_id == command.kg_id and grant.role == "owner" for grant in current.grants
         ):
             raise inaccessible_reference()
+        visibility = await self.database.curation_revisions.find_one(
+            {
+                "org_id": str(current.org_id),
+                "kg_id": str(command.kg_id),
+                "id": str(command.revision_id),
+                "kind": "visibility",
+                "state": "accepted",
+            }
+        )
+        if visibility is not None:
+            return await self._rollback_visibility(current, command)
         fingerprint = digest({"operation": "rollback", "command": command.model_dump(mode="json")})
         previous = await self._replay(current, command.kg_id, command.idempotency_key, fingerprint)
         if previous is not None:
@@ -561,3 +585,32 @@ class RevisionService:
                 raise inaccessible_reference()
             if not set(node.entity_types).intersection(allowed):
                 raise DomainError(ErrorCode.VALIDATION_ERROR, "Predicate endpoint type differs.")
+
+    async def _rollback_visibility(
+        self, access: AccessContext, command: RollbackRevision
+    ) -> CurationReceipt:
+        from domain_kg.graph.node_actions import NodeVisibilityService
+        from domain_kg.graph.visibility_history import authorize_visibility_record
+
+        original = await authorize_visibility_record(
+            self.queue, access, command.kg_id, command.revision_id
+        )
+        fingerprint = digest(
+            {"operation": "rollback_visibility", "command": command.model_dump(mode="json")}
+        )
+        action = CurationCommand(
+            kg_id=command.kg_id,
+            entity_id=original["target_id"],
+            action="suppress" if original["before"]["suppressed"] else "restore",
+            expected_revision=command.expected_current_revision,
+            curation_scope="kg_public" if original["public"] else "source",
+            source_ids=tuple(UUID(value) for value in original["material_ids"]),
+            reason=command.reason,
+            idempotency_key=command.idempotency_key,
+        )
+        result = await NodeVisibilityService(self.queue).apply(
+            access, action, intent_hash=fingerprint, rollback_of=command.revision_id
+        )
+        if not isinstance(result, CurationReceipt):
+            raise inaccessible_reference()
+        return result

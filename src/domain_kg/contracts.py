@@ -41,6 +41,9 @@ from domain_kg.retrieval.models import SearchFilters as SearchFilters
 from domain_kg.retrieval.models import SearchRequest as SearchRequest
 from domain_kg.retrieval.models import SearchResponse as SearchResponse
 from domain_kg.retrieval.models import SubgraphRequest as SubgraphRequest
+from domain_kg.revisions.models import CurationCommand as CurationCommand
+from domain_kg.revisions.models import CurationImpact as CurationImpact
+from domain_kg.revisions.models import CurationReceipt as CurationReceipt
 from domain_kg.revisions.models import HistoryPage as HistoryPage
 from domain_kg.revisions.models import HistoryRequest as HistoryRequest
 from domain_kg.revisions.models import NodeUpdate as NodeUpdate
@@ -132,6 +135,9 @@ class ProjectionCoordinator(Protocol):
 
 
 class RevisionService(Protocol):
+    async def curate_node(
+        self, access: AccessContext, command: CurationCommand
+    ) -> CurationReceipt | CurationImpact: ...
     async def get_revisions(
         self, access: AccessContext, request: HistoryRequest
     ) -> HistoryPage: ...
@@ -141,7 +147,7 @@ class RevisionService(Protocol):
     ) -> RevisionReceipt: ...
     async def rollback(
         self, access: AccessContext, command: RollbackRevision
-    ) -> RevisionReceipt: ...
+    ) -> RevisionReceipt | CurationReceipt: ...
 
 
 class RetrievalBranch(Protocol):

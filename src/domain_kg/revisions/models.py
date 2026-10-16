@@ -7,6 +7,10 @@ from pydantic import Field, model_validator
 
 from domain_kg.graph.curation_models import NodeChanges as NodeChanges
 from domain_kg.graph.manual_relations import RelationChanges as RelationChanges
+from domain_kg.graph.visibility_models import CurationCommand as CurationCommand
+from domain_kg.graph.visibility_models import CurationImpact as CurationImpact
+from domain_kg.graph.visibility_models import CurationReceipt as CurationReceipt
+from domain_kg.graph.visibility_models import NodeFence
 from domain_kg.identity.models import AccessContext
 from domain_kg.materials.models import MaterialMetadata
 from domain_kg.models import (
@@ -90,6 +94,7 @@ class ReadScope(FrozenModel):
     visible_sources: tuple[SourceVersion, ...] = ()
     visible_curations: tuple[ScopedRef, ...] = ()
     visibility_revision: NonNegative
+    node_fences: tuple[NodeFence, ...] = ()
     filters: SearchFilters = SearchFilters()
 
     @property
@@ -113,6 +118,11 @@ class ReadScope(FrozenModel):
             or self.view.generation != self.fence_view.generation
         ):
             raise ValueError("retained view must have a current publication fence")
+        if any(
+            (fence.org_id, fence.kg_id) != (self.view.org_id, self.view.kg_id)
+            for fence in self.node_fences
+        ):
+            raise ValueError("node fences must share their read namespace")
         if any(source not in self.view.sources for source in self.visible_sources):
             raise ValueError("visible sources must belong to the accepted view")
         if any(curation not in self.current_view.curations for curation in self.visible_curations):

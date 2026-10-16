@@ -11,7 +11,7 @@ from domain_kg.engine.scope import EligibilityResolver
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.curation_models import ManualNode
 from domain_kg.graph.manual_relations import ManualRelation
-from domain_kg.graph.repository import GraphData
+from domain_kg.graph.repository import scoped_graph_data
 from domain_kg.graph.service import AcceptedMetadata
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.queue import JobQueue
@@ -224,7 +224,7 @@ class RetrievalService:
             )
             if isinstance(document, CurationEmbeddedDocument):
                 curations.append(document.directive)
-        data = GraphData(scope, tuple(rows), tuple(curations))
+        data = await scoped_graph_data(self.queue, scope, tuple(rows), tuple(curations))
         manuals = {row.curation.id: row for row in rows if row.curation and row in data.manual_rows}
         chunks = {row.id: row for row in rows if row.chunk}
         supports = {row.id: row for row in data.supports if row.claim}

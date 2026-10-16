@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
+from domain_kg.graph.visibility_models import NodeFence
 from domain_kg.identity.models import AccessContext
 from domain_kg.jobs.models import Checkpoint, JobArtifact
 from domain_kg.jobs.queue import JobQueue
@@ -95,6 +96,13 @@ async def read_artifact(
 class PublicationJournal:
     def __init__(self, queue: JobQueue) -> None:
         self.queue, self.database = queue, queue.database
+
+    async def node_fences(
+        self, access: AccessContext, kg_id: UUID, materials: tuple[UUID, ...]
+    ) -> tuple[NodeFence, ...]:
+        from domain_kg.graph.node_actions import NodeVisibilityService
+
+        return await NodeVisibilityService(self.queue).load(access, kg_id, materials)
 
     async def initialize(self) -> None:
         for name in ("projection_attempts", "publication_manifests"):

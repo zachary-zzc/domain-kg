@@ -7,7 +7,7 @@ from domain_kg.engine.scope import EligibilityResolver
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.graph.curation_models import ManualNode
 from domain_kg.graph.manual_relations import ManualRelation
-from domain_kg.graph.repository import GraphData
+from domain_kg.graph.repository import GraphData, scoped_graph_data
 from domain_kg.graph.service import AcceptedMetadata
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.graph import source_citation
@@ -194,5 +194,7 @@ class SealedEvidence:
                 )
         await self.resolver.revalidate(scope)
         return EvidenceData(
-            GraphData(scope, tuple(bodies), tuple(curations)), tuple(payloads), tuple(spaces)
+            await scoped_graph_data(self.queue, scope, tuple(bodies), tuple(curations)),
+            tuple(payloads),
+            tuple(spaces),
         )

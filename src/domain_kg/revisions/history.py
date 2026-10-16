@@ -9,9 +9,13 @@ from uuid import UUID
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.curation import authorize_curation
 from domain_kg.graph.manual_relations import ManualRelation
+from domain_kg.graph.models import AssertionRecord
 from domain_kg.graph.service import GraphService
+from domain_kg.graph.visibility import NodeMasks
+from domain_kg.graph.visibility_history import authorize_visibility_record
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.queue import JobQueue
+from domain_kg.models import Namespace, ScopedRef
 from domain_kg.retrieval.models import SearchRequest
 from domain_kg.revisions.history_models import HistoryPage, HistoryRequest
 
@@ -22,7 +26,11 @@ class RevisionHistory:
 
     async def get(self, access: AccessContext, request: HistoryRequest) -> HistoryPage:
         request = HistoryRequest.model_validate(request)
-        current = await self.queue.policy.revalidate(access, action=Action.READ)
+        current = await self.queue.policy.revalidate(
+            access, action=Action.CURATE if request.include_suppressed else Action.READ
+        )
+        if request.include_suppressed and current.principal.kind != "human":
+            raise inaccessible_reference()
         graph = GraphService(self.queue)
         scope = await graph.resolver.resolve(
             current,
@@ -45,6 +53,7 @@ class RevisionHistory:
             "target_id": str(request.target_id),
             "kind": request.kind,
             "limit": request.limit,
+            "include_suppressed": request.include_suppressed,
         }
         cursor = None
         if request.cursor:
@@ -57,38 +66,61 @@ class RevisionHistory:
             )
             if cursor is None or any(cursor.get(key) != value for key, value in binding.items()):
                 raise DomainError(ErrorCode.CURSOR_EXPIRED, "The history cursor scope changed.")
-        data = await graph.repository.open(scope)
-        if request.kind == "node":
-            visible = graph.repository.node(data, request.target_id) is not None
-        else:
-            visible = any(
-                row.claim and row.claim.assertion.id == request.target_id for row in data.supports
-            ) or any(
-                isinstance(manual, ManualRelation)
-                and manual.logical_assertion.id == request.target_id
-                and any(value is not None for value in manual.fields.model_dump().values())
-                for manual in data.curations
+        visible = False
+        if not request.include_suppressed:
+            data = await graph.repository.open(scope)
+            if request.kind == "node":
+                visible = graph.repository.node(data, request.target_id) is not None
+            else:
+                visible = any(
+                    row.claim and row.claim.assertion.id == request.target_id
+                    for row in data.supports
+                ) or any(
+                    isinstance(manual, ManualRelation)
+                    and manual.logical_assertion.id == request.target_id
+                    and any(value is not None for value in manual.fields.model_dump().values())
+                    for manual in data.curations
+                )
+            if not visible:
+                raise inaccessible_reference()
+        masks = NodeMasks(
+            Namespace(org_id=current.org_id, kg_id=request.kg_id),
+            () if request.include_suppressed else scope.node_fences,
+        )
+        endpoints: tuple[UUID, ...] = (request.target_id,)
+        if request.kind == "relation" and scope.node_fences and not request.include_suppressed:
+            stores = await self.queue.router.for_sources(current, request.kg_id)
+            raw = await stores.authority._require(
+                "assertions",
+                ScopedRef(org_id=current.org_id, kg_id=request.kg_id, id=request.target_id),
             )
-        if not visible:
-            raise inaccessible_reference()
+            fact = AssertionRecord.model_validate(
+                {key: value for key, value in raw.items() if key != "_id"}
+            )
+            if any(
+                (ref.org_id, ref.kg_id) != (current.org_id, request.kg_id)
+                for ref in (fact, fact.subject, fact.target)
+            ):
+                raise inaccessible_reference()
+            endpoints = (fact.subject.id, fact.target.id)
+        history_materials = [
+            str(source.material_id)
+            for source in scope.visible_sources
+            if not any(
+                masks.blocked(endpoint, material_id=source.material_id) for endpoint in endpoints
+            )
+        ]
+        public_history = not any(masks.blocked(endpoint) for endpoint in endpoints)
         query: dict[str, Any] = ns | {
             "target_id": str(request.target_id),
-            "kind": request.kind,
+            "kind": {"$in": ["node", "visibility"]} if request.kind == "node" else "relation",
             "state": {"$in": ["pending", "accepted"]},
             "$or": [
-                {"public": True, "material_ids": []},
+                {"public": True, "material_ids": [], "$expr": {"$eq": [public_history, True]}},
                 {
                     "public": False,
                     "material_ids.0": {"$exists": True},
-                    "material_ids": {
-                        "$not": {
-                            "$elemMatch": {
-                                "$nin": [
-                                    str(source.material_id) for source in scope.visible_sources
-                                ]
-                            }
-                        }
-                    },
+                    "material_ids": {"$not": {"$elemMatch": {"$nin": history_materials}}},
                 },
             ],
         }
@@ -107,14 +139,24 @@ class RevisionHistory:
             .limit(request.limit + 1)
             .to_list()
         )
+        if request.include_suppressed:
+            if not rows:
+                raise inaccessible_reference()
+            stores = await self.queue.router.for_sources(current, request.kg_id)
+            await stores.authority._require(
+                "entities" if request.kind == "node" else "assertions",
+                ScopedRef(org_id=current.org_id, kg_id=request.kg_id, id=request.target_id),
+            )
         entries = []
         for row in rows[: request.limit]:
-            record = await authorize_curation(
-                self.queue,
-                current,
-                UUID(row["id"]),
-                kg_id=request.kg_id,
-            )
+            if row["kind"] == "visibility":
+                record = await authorize_visibility_record(
+                    self.queue, current, request.kg_id, UUID(row["id"])
+                )
+            else:
+                record = await authorize_curation(
+                    self.queue, current, UUID(row["id"]), kg_id=request.kg_id
+                )
             entries.append(
                 {
                     "revision_id": record["id"],
@@ -132,6 +174,11 @@ class RevisionHistory:
                     "job_id": record["job_id"],
                     "published_revision": record.get("receipt", {}).get("published_revision"),
                 }
+                | (
+                    {"visibility_revision": record["visibility_revision"]}
+                    if record["kind"] == "visibility"
+                    else {}
+                )
             )
         await graph.resolver.revalidate(scope)
         next_cursor = None
@@ -148,4 +195,6 @@ class RevisionHistory:
                 }
             )
         await graph.resolver.revalidate(scope)
+        if request.include_suppressed:
+            await self.queue.policy.revalidate(current, action=Action.CURATE)
         return HistoryPage.model_validate({"items": entries, "next_cursor": next_cursor})

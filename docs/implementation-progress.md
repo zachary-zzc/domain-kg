@@ -154,10 +154,16 @@ passed in 261.58 seconds. Retained-version retrieval passed eight further checks
 208.81 seconds, including all search modes and current grant/removal fences. See
 [incremental changes](incremental-changes.md).
 
-Initial human node curation now passes a two-case, real-store smoke in 156.42
-seconds: durable jobs publish isolated graph/vector attempts, preserve original
-observations, return manual provenance, and keep an A-scoped correction out of B's
-filtered fields and retrieval. Forty-four contract/projection unit checks pass,
-including old source-payload compatibility. Further curation variants, relationship
-edits, rollback, merge/split, suppression, full reprocessing restoration and retained
-physical purge remain unfinished. Task 14's plan boxes therefore remain unchecked.
+Human node and relationship corrections now publish isolated graph/vector attempts,
+preserve original evidence, and return source-scoped manual provenance. Typed
+history and compensating owner rollback preserve independent support and later
+changes to other fields. Description-only relationship changes remain annotations
+on their verified original claims. Retained human claims can use opaque endpoints
+without recovering removed source labels.
+
+Immediate node suppression now fences all retrieval modes and history paging,
+survives re-ingestion, and restores only after original/projection readiness checks.
+Its final real-store regression passed 21 checks in 711.76 seconds, including races,
+current-permission rollback and source/public scope boundaries. Merge/split, full
+reprocessing restoration and retained physical purge remain unfinished. Task 14's
+plan boxes therefore remain unchecked. See [curation](curation.md).

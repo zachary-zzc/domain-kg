@@ -14,6 +14,7 @@ class HistoryRequest(FrozenModel):
     kg_id: UUID
     target_id: UUID
     kind: Literal["node", "relation"] = "node"
+    include_suppressed: bool = False
     limit: Annotated[int, Field(ge=1, le=100, strict=True)] = 25
     cursor: Annotated[str, Field(min_length=1, max_length=256)] | None = None
 
@@ -28,24 +29,44 @@ class HistoryEntry(FrozenModel):
     provenance: ManualProvenance
     created_at: UTCDateTime
     rollback_of: UUID | None = None
-    job_id: UUID
+    job_id: UUID | None = None
     published_revision: NonNegative | None = None
 
 
 class NodeHistoryEntry(HistoryEntry):
+    job_id: UUID = Field(...)
     kind: Literal["node"] = "node"
     before: NodeFields
     after: NodeFields
 
 
 class RelationHistoryEntry(HistoryEntry):
+    job_id: UUID = Field(...)
     kind: Literal["relation"] = "relation"
     before: RelationFields
     after: RelationFields
 
 
+class VisibilityState(FrozenModel):
+    suppressed: bool = Field(strict=True)
+
+
+class VisibilityHistoryEntry(HistoryEntry):
+    kind: Literal["visibility"] = "visibility"
+    state: Literal["accepted"] = "accepted"
+    job_id: None = None
+    published_revision: None = None
+    visibility_revision: NonNegative
+    before: VisibilityState
+    after: VisibilityState
+
+
 class HistoryPage(FrozenModel):
     items: tuple[
-        Annotated[NodeHistoryEntry | RelationHistoryEntry, Field(discriminator="kind")], ...
+        Annotated[
+            NodeHistoryEntry | RelationHistoryEntry | VisibilityHistoryEntry,
+            Field(discriminator="kind"),
+        ],
+        ...,
     ]
     next_cursor: str | None = None

@@ -11,9 +11,12 @@ from domain_kg.engine.scope import EligibilityResolver, ScopePredicates
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.graph.curation_models import ManualNode
 from domain_kg.graph.manual_relations import ManualRelation
+from domain_kg.graph.models import AssertionRecord
 from domain_kg.graph.views import EdgeView, NodeView, SubgraphView
+from domain_kg.graph.visibility import NodeMasks
 from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.jobs.queue import JobQueue
+from domain_kg.models import Namespace
 from domain_kg.retrieval.filters import matches_observation, matches_support
 from domain_kg.retrieval.models import SubgraphRequest
 from domain_kg.revisions.models import ReadScope
@@ -205,6 +208,44 @@ class GraphData:
         return tuple(result)
 
 
+async def scoped_graph_data(
+    queue: JobQueue,
+    scope: ReadScope,
+    rows: tuple[ProjectionBody, ...],
+    curations: tuple[ManualNode | ManualRelation, ...],
+) -> GraphData:
+    if not scope.node_fences:
+        return GraphData(scope, rows, curations)
+    masks = NodeMasks(
+        Namespace(org_id=scope.view.org_id, kg_id=scope.view.kg_id), scope.node_fences
+    )
+    contexts: dict[UUID, AssertionRecord] = {}
+    annotations = [
+        item for item in curations if isinstance(item, ManualRelation) and item.fact is None
+    ]
+    if annotations:
+        stores = await queue.router.for_sources(scope.access, scope.view.kg_id)
+        for manual in annotations:
+            raw = await stores.authority._require("assertions", manual.logical_assertion)
+            contexts[manual.curation.id] = AssertionRecord.model_validate(
+                {key: value for key, value in raw.items() if key != "_id"}
+            )
+    chunks = masks.blocked_chunks(rows)
+    visible_rows = tuple(
+        row
+        for row in rows
+        if not masks.hides(
+            row, chunks, relation_context=contexts.get(row.curation.id) if row.curation else None
+        )
+    )
+    visible_directives = tuple(
+        manual
+        for manual in curations
+        if not masks.hides_directive(manual, relation_context=contexts.get(manual.curation.id))
+    )
+    return GraphData(scope, visible_rows, visible_directives)
+
+
 class GraphRepository:
     def __init__(self, queue: JobQueue, resolver: EligibilityResolver) -> None:
         self.queue, self.resolver = queue, resolver
@@ -271,7 +312,7 @@ class GraphRepository:
                     raise
                 raise BranchUnavailable("The graph backend is unavailable.") from error
         await self.resolver.revalidate(scope)
-        return GraphData(scope, tuple(rows), tuple(curations))
+        return await scoped_graph_data(self.queue, scope, tuple(rows), tuple(curations))
 
     def node(self, data: GraphData, identifier: UUID) -> NodeView | None:
         observations = sorted(

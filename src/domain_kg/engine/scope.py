@@ -8,6 +8,7 @@ from uuid import UUID
 from qdrant_client import models
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
+from domain_kg.graph.visibility_models import NodeFence
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.policy import Policy
 from domain_kg.materials.models import MaterialMetadata
@@ -16,6 +17,10 @@ from domain_kg.revisions.models import PublishedView, ReadScope, RetainedSelecti
 
 
 class AcceptedViews(Protocol):
+    async def node_fences(
+        self, access: AccessContext, kg_id: UUID, materials: tuple[UUID, ...]
+    ) -> tuple[NodeFence, ...]: ...
+
     async def load(self, access: AccessContext, kg_id: UUID) -> PublishedView: ...
 
     async def retained(
@@ -123,6 +128,9 @@ class EligibilityResolver:
             visible_curations=tuple(curations),
             filters=request.filters,
             visibility_revision=kg["visibility_revision"],
+            node_fences=await self.views.node_fences(
+                current, kg_id, tuple(source.material_id for source in visible)
+            ),
         )
         await self.revalidate(scope)
         return scope

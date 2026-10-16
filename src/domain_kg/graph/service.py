@@ -6,6 +6,7 @@ from domain_kg.engine.scope import EligibilityResolver
 from domain_kg.errors import inaccessible_reference
 from domain_kg.graph.repository import GraphRepository
 from domain_kg.graph.views import NodeView, SubgraphView
+from domain_kg.graph.visibility_models import NodeFence
 from domain_kg.identity.models import AccessContext
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.models import SearchFilters, SearchRequest, SubgraphRequest
@@ -18,6 +19,13 @@ class AcceptedMetadata:
 
     def __init__(self, queue: JobQueue) -> None:
         self.journal = PublicationJournal(queue)
+
+    async def node_fences(
+        self, access: AccessContext, kg_id: UUID, materials: tuple[UUID, ...]
+    ) -> tuple[NodeFence, ...]:
+        from domain_kg.graph.node_actions import NodeVisibilityService
+
+        return await NodeVisibilityService(self.journal.queue).load(access, kg_id, materials)
 
     async def load(self, access: AccessContext, kg_id: UUID) -> PublishedView:
         return await self.journal.load_metadata(access, kg_id)

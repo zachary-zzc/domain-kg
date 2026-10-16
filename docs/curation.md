@@ -62,7 +62,19 @@ contains no extracted entities. This preserves human work without recovering old
 source labels, types, descriptions or spans. Removing their owning material still
 excludes them. Independently public claims retain their own ownership.
 
-Node/relationship corrections, history, rollback, re-ingestion persistence and
-selective vector work have passed targeted local checks. Merge/split, suppression
-and retention-safe cleanup are still being completed; Task 14 remains unchecked.
+Node suppression immediately fences its source-scoped fields, incident claims,
+chunks and human annotations in every retrieval mode. A source-scoped fence does
+not hide independent support from other materials. Public suppression requires
+an owner. Re-ingestion cannot clear the fence. Restoration verifies the retained
+original and all projection receipts before changing visibility.
+
+Suppression and restoration append immutable human history and use the same
+target/scope revision counter as field edits. Management history can include
+suppressed revisions under current curator permissions; ordinary history filters
+them before paging. Owner rollback appends a compensating visibility action and
+rechecks current permissions and restoration readiness.
+
+The final visibility regression passed 21 real-store checks in 711.76 seconds.
+Merge/split, full reprocessing restoration and retention-safe cleanup are still
+being completed; Task 14 remains unchecked.
 HTTP/MCP exposure follows in Task 15.
