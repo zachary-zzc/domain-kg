@@ -78,6 +78,29 @@ class GraphData:
                 grouped.setdefault(row.observation.entity.id, []).append(row.observation)
         return {key: tuple(value) for key, value in grouped.items()}
 
+    @cached_property
+    def _typed_nodes(self) -> dict[UUID, tuple[ManualNode, ...]]:
+        grouped: dict[UUID, list[ManualNode]] = {}
+        for item in sorted(
+            self.curations, key=lambda item: (item.created_at, str(item.curation.id))
+        ):
+            if isinstance(item, ManualNode) and item.changes.entity_type is not None:
+                grouped.setdefault(item.entity.id, []).append(item)
+        return {key: tuple(value) for key, value in grouped.items()}
+
+    def human_types(self, entity: UUID, materials: tuple[UUID, ...]) -> tuple[str, ...]:
+        typed = self._typed_nodes.get(entity, ())
+        contexts: tuple[UUID | None, ...] = materials or (
+            None,
+            *sorted({source for node in typed for source in node.material_ids}, key=str),
+        )
+        result = []
+        for source in contexts:
+            eligible = [node for node in typed if node.public or source in node.material_ids]
+            if eligible and (value := eligible[-1].changes.entity_type) is not None:
+                result.append(value)
+        return tuple(result)
+
     def endpoint_types(self, row: ProjectionBody) -> tuple[str, ...] | None:
         if not self.scope.filters.entity_types:
             return None
@@ -93,6 +116,10 @@ class GraphData:
                 for item in self._observations_by_entity.get(endpoint.id, ())
                 if row.manual_relation.public
                 or item.material_id in row.manual_relation.material_ids
+            ) + tuple(
+                value
+                for endpoint in (row.claim.assertion.subject, row.claim.assertion.target)
+                for value in self.human_types(endpoint.id, row.manual_relation.material_ids)
             )
         return ()
 
@@ -149,14 +176,34 @@ class GraphData:
                 and manual.entity.id not in self.scope.filters.entity_ids
             ):
                 continue
+            if self.scope.filters.entity_types:
+                types = self.human_types(manual.entity.id, manual.material_ids) + tuple(
+                    self.field(item, "entity_type")
+                    for item in self._observations_by_entity.get(manual.entity.id, ())
+                    if manual.public or item.material_id in manual.material_ids
+                )
+                if not set(types).intersection(self.scope.filters.entity_types):
+                    continue
             if self.scope.filters.requires_assertion_support:
                 observations = [item for item in self.observations if item.entity == manual.entity]
-                if not observations or (
-                    not manual.public
-                    and not set(manual.material_ids).issubset(
+                source_support = bool(observations) and (
+                    manual.public
+                    or set(manual.material_ids).issubset(
                         {item.material_id for item in observations}
                     )
-                ):
+                )
+                human_support = any(
+                    row.manual_relation
+                    and row.claim
+                    and manual.entity in (row.claim.assertion.subject, row.claim.assertion.target)
+                    and (
+                        manual.public
+                        or row.manual_relation.public
+                        or set(manual.material_ids).intersection(row.manual_relation.material_ids)
+                    )
+                    for row in self.supports
+                )
+                if not source_support and not human_support:
                     continue
             result.append(manual)
         return tuple(sorted(result, key=lambda item: (item.created_at, str(item.curation.id))))

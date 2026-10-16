@@ -7,16 +7,17 @@ from test_publication import make_publishing, prepare, ready
 
 from domain_kg.graph.service import GraphService
 from domain_kg.materials.models import ReplaceMaterial
-from domain_kg.retrieval.models import SearchRequest, SubgraphRequest
+from domain_kg.retrieval.models import SearchFilters, SearchRequest, SubgraphRequest
 from domain_kg.retrieval.service import RetrievalService
-from domain_kg.revisions.models import RelationChanges, RelationUpdate
+from domain_kg.revisions.models import NodeChanges, NodeUpdate, RelationChanges, RelationUpdate
 from domain_kg.revisions.service import RevisionService
 
 pytestmark = pytest.mark.storage
 
 
+@pytest.mark.parametrize("typed", [False, True])
 async def test_source_owned_manual_claim_keeps_opaque_endpoints_after_reingestion(
-    material_service, team
+    material_service, team, typed
 ):
     extraction = {"empty": False, "calls": 0}
 
@@ -57,6 +58,21 @@ async def test_source_owned_manual_claim_keeps_opaque_endpoints_after_reingestio
         ),
     )
     await publish_curation(queue, coordinator, editor, receipt)
+    if typed:
+        node_revision = await RevisionService(queue, coordinator.providers).update_node(
+            editor,
+            NodeUpdate(
+                kg_id=job.kg_id,
+                entity_id=original.subject.id,
+                expected_revision=0,
+                source_ids=(source.material_id,),
+                changes=NodeChanges(name="Reviewed source entity", entity_type="concept"),
+                reason="Retain independently curated endpoint type",
+                idempotency_key="human-retained-type",
+            ),
+        )
+        await publish_curation(queue, coordinator, editor, node_revision)
+    filters = SearchFilters(entity_types=("concept",)) if typed else SearchFilters()
     extraction["empty"] = True
     replacement, worker, checkpoint = await prepare(
         fixture,
@@ -76,11 +92,16 @@ async def test_source_owned_manual_claim_keeps_opaque_endpoints_after_reingestio
         SubgraphRequest(
             kg_id=job.kg_id,
             seed_ids=(original.subject.id,),
+            filters=filters,
         ),
     )
     assert len(current.edges) == 1 and current.edges[0].status == "manual"
     assert len(current.nodes) == 2 and all(not node.observations for node in current.nodes)
-    assert all(node.name == str(node.id) for node in current.nodes)
+    if typed:
+        reviewed = next(node for node in current.nodes if node.id == original.subject.id)
+        assert reviewed.name == "Reviewed source entity" and reviewed.entity_types == ("concept",)
+    else:
+        assert all(node.name == str(node.id) for node in current.nodes)
     for mode in ("vector", "lexical", "graph", "deep"):
         response = await RetrievalService(queue, coordinator.providers).search(
             editor,
@@ -88,8 +109,11 @@ async def test_source_owned_manual_claim_keeps_opaque_endpoints_after_reingestio
                 kg_ids=editor.kg_ids,
                 query="related_to",
                 mode=mode,
+                filters=filters,
             ),
         )
-        manual = [hit for hit in response.results if hit.kind == "manual"]
-        assert manual and manual[0].curation_revision_id == receipt.revision_id
+        manual = [
+            hit for hit in response.results if hit.curation_revision_id == receipt.revision_id
+        ]
+        assert manual
         assert all("Alpha" not in hit.text and "Beta" not in hit.text for hit in manual)

@@ -62,6 +62,11 @@ contains no extracted entities. This preserves human work without recovering old
 source labels, types, descriptions or spans. Removing their owning material still
 excludes them. Independently public claims retain their own ownership.
 
+Retained claims can satisfy a type filter through an explicit eligible human
+endpoint type. A source-scoped claim cannot borrow a type from an independent
+source. Curated endpoint fields remain visible with their own provenance when the
+matching retained human claim qualifies the filter.
+
 Node suppression immediately fences its source-scoped fields, incident claims,
 chunks and human annotations in every retrieval mode. A source-scoped fence does
 not hide independent support from other materials. Public suppression requires
