@@ -397,6 +397,13 @@ class JobQueue:
             and target.get("active_version_id") != raw["expected_active_version"]
         ):
             raise DomainError(ErrorCode.VERSION_CONFLICT, "The source version changed.")
+        if (
+            raw.get("expected_metadata_epoch") is not None
+            and target.get("metadata_epoch", 0) != raw["expected_metadata_epoch"]
+        ):
+            raise DomainError(
+                ErrorCode.VERSION_CONFLICT, "Material metadata changed during ingestion."
+            )
         return access
 
     async def heartbeat(self, job: LeasedJob) -> LeasedJob:

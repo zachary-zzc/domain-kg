@@ -10,14 +10,17 @@ from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.queue import TERMINAL, JobQueue
 from domain_kg.materials.models import (
+    MaterialMetadata,
+    MaterialMetadataReceipt,
     RemovalReceipt,
     RemoveMaterial,
     RestorationReceipt,
     RestoreMaterial,
     RestoreReadPermit,
+    UpdateMaterialMetadata,
 )
 from domain_kg.materials.service import MaterialService, digest
-from domain_kg.models import SourceVersion
+from domain_kg.models import ScopedRef, SourceVersion
 from domain_kg.revisions.journal import PublicationJournal
 
 
@@ -39,6 +42,122 @@ class MaterialLifecycle:
         if row is None:
             raise inaccessible_reference()
         return row
+
+    async def update_metadata(
+        self, access: AccessContext, command: UpdateMaterialMetadata
+    ) -> MaterialMetadataReceipt:
+        command = UpdateMaterialMetadata.model_validate(command)
+        current = await self.materials._access(access, command.kg_id, Action.REPLACE)
+        stores = await self.materials.router.for_sources(current, command.kg_id)
+        key = self.transactions.key(current, command.kg_id, command.idempotency_key)
+        fingerprint = digest(
+            {
+                "operation": "metadata",
+                "command": command.model_dump(mode="json", exclude_unset=True),
+            }
+        )
+
+        async def commit(session: AsyncClientSession) -> MaterialMetadataReceipt:
+            await self.transactions.fence(current, Action.REPLACE, session)
+            row = await self.materials._target(current, command.kg_id, command.material_id, session)
+            previous = await self.database.material_commands.find_one(key, session=session)
+            if previous:
+                if previous["digest"] != fingerprint:
+                    raise DomainError(
+                        ErrorCode.IDEMPOTENCY_CONFLICT, "Material key has different input."
+                    )
+                receipt = MaterialMetadataReceipt.model_validate(previous["receipt"])
+                if (receipt.org_id, receipt.kg_id, receipt.material_id) != (
+                    current.org_id,
+                    command.kg_id,
+                    command.material_id,
+                ):
+                    raise inaccessible_reference()
+                return receipt
+            if row["revision"] != command.expected_revision:
+                raise DomainError(ErrorCode.VERSION_CONFLICT, "The material revision changed.")
+            if not row.get("active_version_id") or "metadata" not in row:
+                raise DomainError(
+                    ErrorCode.REVISION_NOT_READY, "The material has no accepted version."
+                )
+            before = MaterialMetadata.model_validate(row["metadata"])
+            if (before.material_id, str(before.version_id)) != (
+                command.material_id,
+                row["active_version_id"],
+            ):
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Material metadata ownership differs."
+                )
+            changes = command.changes.model_dump(exclude_unset=True)
+            title = changes.pop("title", None)
+            after = MaterialMetadata.model_validate(
+                before.model_copy(update=changes | {"updated_at": datetime.now(UTC)})
+            )
+            namespace = {"org_id": str(current.org_id), "kg_id": str(command.kg_id)}
+            canonical = await stores.authority._require(
+                "materials",
+                ScopedRef(org_id=current.org_id, kg_id=command.kg_id, id=command.material_id),
+                session=session,
+            )
+            if title is not None:
+                await stores.authority._database.materials.update_one(
+                    namespace | {"id": str(command.material_id)},
+                    {"$set": {"title": title}},
+                    session=session,
+                )
+            updated = await self.database.material_access.update_one(
+                namespace | {"id": str(command.material_id), "revision": command.expected_revision},
+                {
+                    "$set": {"metadata": after.model_dump(mode="json")},
+                    "$inc": {"revision": 1, "metadata_epoch": 1},
+                },
+                session=session,
+            )
+            if not updated.matched_count:
+                raise DomainError(ErrorCode.VERSION_CONFLICT, "The material revision changed.")
+            await self.database.kgs.update_one(
+                {"org_id": namespace["org_id"], "id": namespace["kg_id"]},
+                {"$inc": {"visibility_revision": 1}},
+                session=session,
+            )
+            receipt = MaterialMetadataReceipt(
+                org_id=current.org_id,
+                kg_id=command.kg_id,
+                material_id=command.material_id,
+                version_id=after.version_id,
+                revision=command.expected_revision + 1,
+            )
+            record = key | {
+                "id": str(uuid4()),
+                "digest": fingerprint,
+                "operation": "metadata",
+                "state": "accepted",
+                "receipt": receipt.model_dump(mode="json"),
+                "material_id": str(command.material_id),
+                "actor": current.principal.model_dump(mode="json"),
+                "before": before.model_dump(mode="json") | {"title": canonical["title"]},
+                "after": after.model_dump(mode="json")
+                | {"title": title if title is not None else canonical["title"]},
+                "created_at": datetime.now(UTC),
+            }
+            await self.database.material_commands.insert_one(record, session=session)
+            await self.database.audit.insert_one(
+                namespace
+                | {
+                    "id": record["id"],
+                    "kind": "material_metadata",
+                    "material_id": str(command.material_id),
+                    "actor": current.principal.model_dump(mode="json"),
+                    "revision": receipt.revision,
+                    "created_at": record["created_at"],
+                },
+                session=session,
+            )
+            return receipt
+
+        result = await self.transactions.transaction(commit)
+        await self.materials._target(current, command.kg_id, command.material_id)
+        return result
 
     async def remove(self, access: AccessContext, command: RemoveMaterial) -> RemovalReceipt:
         command = RemoveMaterial.model_validate(command)

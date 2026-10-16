@@ -363,6 +363,7 @@ class MaterialService:
                         "member_ids": [member["id"]],
                         "group_ids": [],
                         "revision": 0,
+                        "metadata_epoch": 0,
                         "active_version_id": None,
                         "excluded": False,
                         "tombstoned": False,
@@ -399,6 +400,12 @@ class MaterialService:
                 target_id=version,
                 idempotency_key=command.idempotency_key,
             )
+            metadata_target = await self.database.material_access.find_one(
+                {"org_id": str(current.org_id), "kg_id": str(command.kg_id), "id": str(material)},
+                session=session,
+            )
+            if metadata_target is None:
+                raise inaccessible_reference()
             await self.database.jobs.insert_one(
                 job.model_dump(mode="json")
                 | {
@@ -409,6 +416,7 @@ class MaterialService:
                     "attempts": 0,
                     "created_at": datetime.now(UTC),
                     "command_id": command_row["id"],
+                    "expected_metadata_epoch": metadata_target.get("metadata_epoch", 0),
                     "expected_active_version": str(command.expected_active_version)
                     if isinstance(command, ReplaceMaterial)
                     else None,

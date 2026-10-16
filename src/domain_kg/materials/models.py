@@ -164,3 +164,37 @@ class RestoreReadPermit(Namespace):
         ):
             raise ValueError("a restoration job proof requires its exact lease and fence")
         return self
+
+
+class MaterialMetadataChanges(FrozenModel):
+    title: Annotated[str, Field(min_length=1, max_length=1000)] | None = None
+    tags: Annotated[tuple[str, ...], Field(max_length=100)] | None = None
+    author: Annotated[str, Field(max_length=1000)] | None = None
+    source: Annotated[str, Field(max_length=4000)] | None = None
+    language: Annotated[str, Field(max_length=50)] | None = None
+
+    @model_validator(mode="after")
+    def useful_changes(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("at least one metadata field is required")
+        if any(
+            key in self.model_fields_set and getattr(self, key) is None for key in ("title", "tags")
+        ):
+            raise ValueError("title and tags cannot be null")
+        if self.tags is not None and any(not tag or len(tag) > 200 for tag in self.tags):
+            raise ValueError("tags require one to 200 characters")
+        return self
+
+
+class UpdateMaterialMetadata(FrozenModel):
+    kg_id: UUID
+    material_id: UUID
+    changes: MaterialMetadataChanges
+    expected_revision: NonNegative
+    idempotency_key: IdempotencyKey
+
+
+class MaterialMetadataReceipt(Namespace):
+    material_id: UUID
+    version_id: UUID
+    revision: NonNegative
