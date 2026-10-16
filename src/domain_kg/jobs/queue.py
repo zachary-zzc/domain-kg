@@ -154,11 +154,15 @@ class JobQueue:
     def _action(kind: str) -> Action:
         if kind == "curate":
             return Action.CURATE
-        if kind not in ("ingest", "replace", "repair", "restore_material"):
+        if kind not in ("ingest", "replace", "repair", "restore_material", "reprocess_material"):
             raise DomainError(
                 ErrorCode.VALIDATION_ERROR, "This job kind has no configured handler."
             )
-        return Action.REPLACE if kind in ("replace", "restore_material") else Action.INGEST
+        return (
+            Action.REPLACE
+            if kind in ("replace", "restore_material", "reprocess_material")
+            else Action.INGEST
+        )
 
     async def _source(
         self, access: AccessContext, command: JobCommand, session: AsyncClientSession | None = None
@@ -169,7 +173,7 @@ class JobQueue:
         if session is None:
             stores = (
                 await self.router.for_sources(access, command.kg_id)
-                if command.kind == "restore_material"
+                if command.kind in ("restore_material", "reprocess_material")
                 else await self.router.for_kg(access, command.kg_id)
             )
             self._authorities[key] = stores.authority
@@ -182,7 +186,7 @@ class JobQueue:
         raw = await authority._require("material_versions", reference, session=session)
         await authority.require_version(reference, session=session)
         material = UUID(raw["material"]["id"])
-        if command.kind == "restore_material":
+        if command.kind in ("restore_material", "reprocess_material"):
             from domain_kg.materials.restoration import authorize_restore_job
 
             await authorize_restore_job(self, access, command, material, session)
@@ -263,23 +267,27 @@ class JobQueue:
                     expected_active_version=str(command.target_id),
                     repair_parent_manifest_id=binding["binding"]["manifest_id"],
                 )
-                if command.kind == "restore_material":
-                    changed = await self.database.material_commands.update_one(
-                        {
-                            "org_id": str(command.org_id),
-                            "kg_id": str(command.kg_id),
-                            "id": str(command.restore_intent_id),
-                            "operation": "restore",
-                            "state": "pending",
-                            "$or": [{"job_id": {"$exists": False}}, {"job_id": str(command.id)}],
-                        },
-                        {"$set": {"job_id": str(command.id)}},
-                        session=session,
-                    )
-                    if not changed.matched_count:
-                        raise DomainError(
-                            ErrorCode.VERSION_CONFLICT, "The restoration intent changed."
-                        )
+            if command.kind in ("restore_material", "reprocess_material"):
+                material_row = await self.database.material_access.find_one(
+                    self._scope(command) | {"id": str(material)}, session=session
+                )
+                if material_row is None:
+                    raise inaccessible_reference()
+                raw["expected_metadata_epoch"] = material_row.get("metadata_epoch", 0)
+                changed = await self.database.material_commands.update_one(
+                    {
+                        "org_id": str(command.org_id),
+                        "kg_id": str(command.kg_id),
+                        "id": str(command.restore_intent_id),
+                        "operation": "restore",
+                        "state": "pending",
+                        "$or": [{"job_id": {"$exists": False}}, {"job_id": str(command.id)}],
+                    },
+                    {"$set": {"job_id": str(command.id)}},
+                    session=session,
+                )
+                if not changed.matched_count:
+                    raise DomainError(ErrorCode.VERSION_CONFLICT, "The restoration intent changed.")
             await self.database.jobs.insert_one(raw, session=session)
             await self.database.outbox.insert_one(
                 self._scope(command)
@@ -304,10 +312,10 @@ class JobQueue:
         allowed = (
             kinds
             if kinds is not None
-            else ("ingest", "replace", "repair", "restore_material", "curate")
+            else ("ingest", "replace", "repair", "restore_material", "reprocess_material", "curate")
         )
         if not allowed or not set(allowed).issubset(
-            {"ingest", "replace", "repair", "restore_material", "curate"}
+            {"ingest", "replace", "repair", "restore_material", "reprocess_material", "curate"}
         ):
             raise ValueError("job kinds require a configured handler")
         # Expired leases at the bound become explicit terminal failures; no
@@ -796,7 +804,7 @@ class JobQueue:
                 for key in ("issuer", "subject", "kind")
             )
             if (
-                raw["kind"] != "restore_material"
+                raw["kind"] not in ("restore_material", "reprocess_material")
                 or grant not in ("owner", "editor")
                 or (grant != "owner" and not same_actor)
                 or await self.policy._material_acl_record(current, kg, material, session=session)

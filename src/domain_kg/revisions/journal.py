@@ -10,7 +10,7 @@ from domain_kg.graph.visibility_models import NodeFence
 from domain_kg.identity.models import AccessContext
 from domain_kg.jobs.models import Checkpoint, JobArtifact
 from domain_kg.jobs.queue import JobQueue
-from domain_kg.materials.models import BlobRef, MaterialMetadata, RestoreReadPermit
+from domain_kg.materials.models import BlobRef, MaterialMetadata, MaterialReadPermit
 from domain_kg.models import ScopedRef, SourceVersion
 from domain_kg.revisions.models import ProjectionReceipt, PublishedView, RetainedSelection
 from domain_kg.revisions.projections import AcceptedProjection
@@ -23,7 +23,7 @@ async def read_artifact(
     checkpoint: Checkpoint,
     source: SourceVersion,
     *,
-    restoration: RestoreReadPermit | None = None,
+    restoration: MaterialReadPermit | None = None,
 ) -> bytes:
     """Read immutable artifacts under current permission, independent of the original actor."""
     await queue.policy.revalidate(access)

@@ -89,7 +89,15 @@ class MaterialLifecycle:
             | {
                 "$or": [{"material_id": str(material)}, {"material_ids": str(material)}],
                 "kind": {
-                    "$in": ["ingest", "replace", "repair", "project", "restore_material", "curate"]
+                    "$in": [
+                        "ingest",
+                        "replace",
+                        "repair",
+                        "project",
+                        "restore_material",
+                        "reprocess_material",
+                        "curate",
+                    ]
                 },
                 "stage": {"$nin": list(TERMINAL)},
             },
@@ -285,6 +293,7 @@ class MaterialLifecycle:
                             "repair",
                             "project",
                             "restore_material",
+                            "reprocess_material",
                             "curate",
                         ]
                     },
@@ -417,8 +426,6 @@ class MaterialLifecycle:
                 raise DomainError(
                     ErrorCode.VERSION_CONFLICT, "The source is outside live retention."
                 )
-            if not row.get("active_version_id"):
-                raise DomainError(ErrorCode.REVISION_NOT_READY, "The source needs reprocessing.")
 
         async def prepare_intent(session: AsyncClientSession) -> dict[str, Any]:
             await self.transactions.fence(current, Action.REPLACE, session)
@@ -432,12 +439,23 @@ class MaterialLifecycle:
                 if previous["state"] == "accepted":
                     return dict(previous)
             expected(row)
-            source = SourceVersion(
-                org_id=current.org_id,
-                kg_id=command.kg_id,
-                material_id=command.material_id,
-                version_id=UUID(row["active_version_id"]),
-            )
+            unpublished = row.get("active_version_id") is None
+            if unpublished:
+                from domain_kg.materials.reprocessing import unpublished_source
+
+                source = await unpublished_source(
+                    self.queue,
+                    current,
+                    ScopedRef(org_id=current.org_id, kg_id=command.kg_id, id=command.material_id),
+                    session,
+                )
+            else:
+                source = SourceVersion(
+                    org_id=current.org_id,
+                    kg_id=command.kg_id,
+                    material_id=command.material_id,
+                    version_id=UUID(row["active_version_id"]),
+                )
             if previous and previous["source"] != source.model_dump(mode="json"):
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "The retained source changed.")
             expires = datetime.now(UTC) + timedelta(minutes=5)
@@ -453,6 +471,7 @@ class MaterialLifecycle:
                 "state": "pending",
                 "source": source.model_dump(mode="json"),
                 "expected_revision": command.expected_revision,
+                "unpublished": unpublished,
                 "actor": current.principal.model_dump(mode="json"),
                 "created_at": datetime.now(UTC),
                 "expires_at": expires,
@@ -474,6 +493,30 @@ class MaterialLifecycle:
                 job_id=UUID(intent["job_id"]),
             )
         source = SourceVersion.model_validate(intent["source"])
+        if intent.get("unpublished"):
+            from domain_kg.jobs.models import JobCommand
+
+            intent_id = UUID(intent["id"])
+            job = await self.queue.enqueue(
+                current,
+                JobCommand(
+                    org_id=current.org_id,
+                    kg_id=command.kg_id,
+                    id=uuid5(intent_id, "reprocess-material"),
+                    kind="reprocess_material",
+                    target_id=source.version_id,
+                    restore_intent_id=intent_id,
+                    idempotency_key="reprocess-" + str(intent_id),
+                ),
+            )
+            return RestorationReceipt(
+                org_id=current.org_id,
+                kg_id=command.kg_id,
+                material_id=command.material_id,
+                revision=command.expected_revision,
+                state="pending",
+                job_id=job.job_id,
+            )
         view = await PublicationJournal(self.queue).load_metadata(current, command.kg_id)
         binding = next((item for item in view.projections if item.source == source), None)
         if binding is None or view.manifest_id is None:

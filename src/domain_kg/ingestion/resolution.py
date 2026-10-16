@@ -18,9 +18,9 @@ from domain_kg.ingestion.extraction import validate_extraction
 from domain_kg.ingestion.models import ExtractionBatch, ParsedChunk, ParsedDocument
 from domain_kg.ingestion.resolved import ResolvedAssertion, ResolvedBatch, ResolvedEntity
 from domain_kg.jobs.models import JobArtifact
-from domain_kg.materials.models import BlobRef
+from domain_kg.materials.models import BlobRef, ReprocessReadPermit
 from domain_kg.materials.repository import MaterialRepository
-from domain_kg.models import ScopedRef
+from domain_kg.models import ScopedRef, SourceVersion
 from domain_kg.storage.blobs import BlobStore
 from domain_kg.storage.integrity import COLLECTIONS, CanonicalRecord
 from domain_kg.storage.router import KGStoreRouter, RoutedStores
@@ -44,17 +44,41 @@ class ResolutionService:
         self.policy, self.router, self.database = policy, router, policy.database
         self.transactions = MaterialRepository(policy)
 
+    async def _readable(
+        self,
+        access: AccessContext,
+        batch: ExtractionBatch,
+        restoration: ReprocessReadPermit | None,
+        session: AsyncClientSession | None = None,
+    ) -> None:
+        if restoration is not None:
+            from domain_kg.jobs.queue import JobQueue
+            from domain_kg.materials.restoration import authorize_restore_read
+
+            await authorize_restore_read(
+                JobQueue(self.policy, self.router),
+                access,
+                SourceVersion(**{key: getattr(batch, key) for key in SourceVersion.model_fields}),
+                restoration,
+                session,
+            )
+        elif not await self.policy.material_visible(
+            access, batch.kg_id, batch.material_id, session=session
+        ):
+            raise inaccessible_reference()
+
     async def _chunk(
-        self, access: AccessContext, batch: ExtractionBatch, stores: RoutedStores
+        self,
+        access: AccessContext,
+        batch: ExtractionBatch,
+        stores: RoutedStores,
+        restoration: ReprocessReadPermit | None,
     ) -> ParsedChunk:
         reference = ScopedRef(org_id=batch.org_id, kg_id=batch.kg_id, id=batch.version_id)
         version = await stores.authority.get_material_version(reference)
-        if (
-            version is None
-            or version.material.id != batch.material_id
-            or not await self.policy.material_visible(access, batch.kg_id, batch.material_id)
-        ):
+        if version is None or version.material.id != batch.material_id:
             raise inaccessible_reference()
+        await self._readable(access, batch, restoration)
         ns = {"org_id": str(batch.org_id), "kg_id": str(batch.kg_id)}
         raw = await stores.authority._database.source_chunks.find_one(
             ns
@@ -120,13 +144,14 @@ class ResolutionService:
         batch: ExtractionBatch,
         *,
         predecessor: "AcceptedDelta | None" = None,
+        restoration: ReprocessReadPermit | None = None,
     ) -> ResolvedBatch:
         batch = ExtractionBatch.model_validate(batch)
         current = await self.policy.revalidate(access, action=Action.INGEST)
         if batch.org_id != current.org_id or batch.kg_id not in current.kg_ids:
             raise inaccessible_reference()
         stores = await self.router.for_kg(current, batch.kg_id)
-        chunk = await self._chunk(current, batch, stores)
+        chunk = await self._chunk(current, batch, stores, restoration)
         schema = await schema_for_kg(self.policy, current, batch.kg_id)
         batch = validate_extraction(chunk, schema, batch)
         lineage = predecessor.entity_lineage(batch, chunk) if predecessor else {}
@@ -292,10 +317,7 @@ class ResolutionService:
 
         async def commit(session: AsyncClientSession) -> None:
             await self.transactions.fence(current, Action.INGEST, session)
-            if not await self.policy.material_visible(
-                current, batch.kg_id, batch.material_id, session=session
-            ):
-                raise inaccessible_reference()
+            await self._readable(current, batch, restoration, session)
             await stores.authority.require_version(
                 ScopedRef(**namespace, id=batch.version_id), session=session
             )
@@ -332,6 +354,5 @@ class ResolutionService:
 
         await self.transactions.transaction(commit)
         await self.policy.revalidate(current)
-        if not await self.policy.material_visible(current, batch.kg_id, batch.material_id):
-            raise inaccessible_reference()
+        await self._readable(current, batch, restoration)
         return result

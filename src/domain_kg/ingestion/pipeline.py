@@ -254,6 +254,7 @@ def extraction_steps(
 
     async def extract(job: LeasedJob) -> Checkpoint:
         from domain_kg.ingestion.delta import accepted_delta
+        from domain_kg.materials.restoration import reprocessing_permit
 
         wanted_hash = await current_extract_hash(job)
         checkpoint = await queue.load_checkpoint(job, "chunking", await chunk_step.hash_for(job))
@@ -261,6 +262,7 @@ def extraction_steps(
             raise DomainError(ErrorCode.REVISION_NOT_READY, "Source chunks are not ready.")
         document = await source.read(job, checkpoint)
         access = await queue.authorize(job)
+        permit = await reprocessing_permit(queue, access, job)
         selected = await providers.selected(access, job.kg_id)
         profile, _ = providers.registry.resolve(
             UUID(selected["profile_id"]),
@@ -278,19 +280,25 @@ def extraction_steps(
             SourceVersion(
                 **{field: getattr(document.blob, field) for field in SourceVersion.model_fields}
             ),
+            restoration=permit,
         )
         batches = []
         for chunk in document.chunks:
             await queue.authorize(job)
             reused = delta.extraction(chunk) if delta else None
             batches.append(
-                reused if reused is not None else await providers.extract(access, chunk, schema)
+                reused
+                if reused is not None
+                else await providers.extract(access, chunk, schema, restoration=permit)
+                if permit is not None
+                else await providers.extract(access, chunk, schema)
             )
         await providers.authorize_source(
             access,
             SourceVersion(
                 **{field: getattr(document.blob, field) for field in SourceVersion.model_fields}
             ),
+            restoration=permit,
         )
         artifact = ExtractionArtifact(
             org_id=job.org_id,
@@ -312,12 +320,14 @@ def extraction_steps(
 
     async def resolve(job: LeasedJob) -> Checkpoint:
         from domain_kg.ingestion.delta import accepted_delta
+        from domain_kg.materials.restoration import reprocessing_permit
 
         wanted_hash = await current_resolve_hash(job)
         checkpoint = await queue.load_checkpoint(job, "extracting", await current_extract_hash(job))
         if checkpoint is None:
             raise DomainError(ErrorCode.REVISION_NOT_READY, "Source extraction is not ready.")
         access = await queue.authorize(job)
+        permit = await reprocessing_permit(queue, access, job)
         stores = await queue.router.for_kg(access, job.kg_id)
         blob = await queue.artifact_blob(job, checkpoint)
         data = bytearray()
@@ -351,7 +361,9 @@ def extraction_steps(
         batches = []
         for batch in artifact.batches:
             await queue.authorize(job)
-            batches.append(await service.resolve_entities(access, batch, predecessor=delta))
+            batches.append(
+                await service.resolve_entities(access, batch, predecessor=delta, restoration=permit)
+            )
         resolved = ResolvedDocument(
             org_id=job.org_id,
             kg_id=job.kg_id,

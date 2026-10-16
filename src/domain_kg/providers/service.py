@@ -12,6 +12,7 @@ from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.policy import Policy
 from domain_kg.ingestion.extraction import Extractor
 from domain_kg.ingestion.models import ExtractionBatch, ParsedChunk
+from domain_kg.materials.models import ReprocessReadPermit
 from domain_kg.materials.repository import MaterialRepository
 from domain_kg.models import IdempotencyKey, Namespace, NonNegative, SourceVersion
 from domain_kg.providers.extraction import ExtractionClient, Usage
@@ -156,11 +157,14 @@ class ProviderService:
         *,
         source: SourceVersion | None = None,
         curation: "LeasedJob | None" = None,
+        restoration: ReprocessReadPermit | None = None,
     ) -> tuple["EmbeddingProfile", list[list[float]]]:
         from domain_kg.providers.embeddings import EmbeddingClient, EmbeddingProfile
 
         selected = await self.selected(access, namespace.kg_id)
-        if source is not None and curation is not None:
+        if (source is not None and curation is not None) or (
+            restoration is not None and source is None
+        ):
             raise inaccessible_reference()
 
         async def authorize() -> None:
@@ -206,10 +210,7 @@ class ProviderService:
             elif source is not None:
                 if (source.org_id, source.kg_id) != (namespace.org_id, namespace.kg_id):
                     raise inaccessible_reference()
-                if not await self.policy.material_visible(
-                    current, source.kg_id, source.material_id
-                ):
-                    raise inaccessible_reference()
+                await self._authorize_read(current, source, restoration)
                 material = await self.database.material_access.find_one(
                     {
                         "org_id": str(source.org_id),
@@ -275,13 +276,34 @@ class ProviderService:
         finally:
             await client.close()
 
-    async def authorize_source(self, access: AccessContext, source: SourceVersion) -> None:
+    async def _authorize_read(
+        self,
+        access: AccessContext,
+        source: SourceVersion,
+        restoration: ReprocessReadPermit | None,
+    ) -> None:
+        if restoration is not None:
+            from domain_kg.jobs.queue import JobQueue
+            from domain_kg.materials.restoration import authorize_restore_read
+
+            await authorize_restore_read(
+                JobQueue(self.policy, self.router), access, source, restoration
+            )
+        elif not await self.policy.material_visible(access, source.kg_id, source.material_id):
+            raise inaccessible_reference()
+
+    async def authorize_source(
+        self,
+        access: AccessContext,
+        source: SourceVersion,
+        *,
+        restoration: ReprocessReadPermit | None = None,
+    ) -> None:
         """Apply current provider clearance even when accepted artifacts avoid a call."""
         current = await self.policy.revalidate(access)
         if source.org_id != current.org_id or source.kg_id not in current.kg_ids:
             raise inaccessible_reference()
-        if not await self.policy.material_visible(current, source.kg_id, source.material_id):
-            raise inaccessible_reference()
+        await self._authorize_read(current, source, restoration)
         selected = await self.selected(current, source.kg_id)
         material = await self.database.material_access.find_one(
             {
@@ -303,7 +325,12 @@ class ProviderService:
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider configuration changed.")
 
     async def extract(
-        self, access: AccessContext, chunk: ParsedChunk, schema: DomainSchema
+        self,
+        access: AccessContext,
+        chunk: ParsedChunk,
+        schema: DomainSchema,
+        *,
+        restoration: ReprocessReadPermit | None = None,
     ) -> ExtractionBatch:
         current = await self.policy.revalidate(access, action=Action.INGEST)
         selected = await self.selected(current, chunk.kg_id)
@@ -313,8 +340,11 @@ class ProviderService:
 
         async def authorize(item: ParsedChunk) -> None:
             await self.policy.revalidate(current, action=Action.INGEST)
-            if not await self.policy.material_visible(current, item.kg_id, item.material_id):
-                raise inaccessible_reference()
+            await self._authorize_read(
+                current,
+                SourceVersion(**{key: getattr(item, key) for key in SourceVersion.model_fields}),
+                restoration,
+            )
             if await self.selected(current, item.kg_id) != selected:
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider selection changed.")
             material = await self.database.material_access.find_one(

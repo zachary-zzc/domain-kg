@@ -164,6 +164,9 @@ without recovering removed source labels.
 Immediate node suppression now fences all retrieval modes and history paging,
 survives re-ingestion, and restores only after original/projection readiness checks.
 Its final real-store regression passed 21 checks in 711.76 seconds, including races,
-current-permission rollback and source/public scope boundaries. Merge/split, full
-reprocessing restoration and retained physical purge remain unfinished. Task 14's
-plan boxes therefore remain unchecked. See [curation](curation.md).
+current-permission rollback and source/public scope boundaries. Never-published
+originals now restore through a fully authorized reconstruction job while remaining
+hidden until verified publication. The combined restoration/replacement regression
+passed 18 checks in 358.74 seconds. Merge/split and retained physical purge remain
+unfinished, so Task 14's plan boxes remain unchecked. See [curation](curation.md)
+and [material changes](incremental-changes.md).

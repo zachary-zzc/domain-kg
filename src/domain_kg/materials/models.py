@@ -173,6 +173,29 @@ class RestoreReadPermit(Namespace):
         return self
 
 
+class ReprocessReadPermit(Namespace):
+    """Internal proof for an unpublished original; never an accepted-parent claim."""
+
+    command_id: UUID
+    source: SourceVersion
+    expected_revision: NonNegative
+    view_manifest_id: UUID | None
+    generation: UUID
+    visibility_revision: NonNegative
+    job_id: UUID
+    job_fence: NonNegative
+    job_lease_token: UUID
+
+    @model_validator(mode="after")
+    def source_namespace(self) -> Self:
+        if (self.source.org_id, self.source.kg_id) != (self.org_id, self.kg_id):
+            raise ValueError("reprocessing source must share its intent namespace")
+        return self
+
+
+MaterialReadPermit = RestoreReadPermit | ReprocessReadPermit
+
+
 class MaterialMetadataChanges(FrozenModel):
     title: Annotated[str, Field(min_length=1, max_length=1000)] | None = None
     tags: Annotated[tuple[str, ...], Field(max_length=100)] | None = None

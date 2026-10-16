@@ -58,6 +58,23 @@ readiness before clearing that fence. Missing projections create a durable
 provider-free restoration job that publishes a fresh immutable attempt. An original
 lost after a preparation checkpoint still blocks final restoration.
 
-These lifecycle domain behaviors are implemented and locally tested. Complete
-transport exposure, never-published-source reprocessing and retained physical purge
-are still in progress; their plan gates have not been marked complete.
+An original removed before its first publication uses a separate full
+`reprocess_material` job. The service authenticates the initial ingest receipt,
+canonical version and retained original, then runs parsing, extraction, resolution
+and embedding under current provider clearance. A server-only permit binds each
+retained read to the pending restore intent, actor, material revision, live job
+lease and current KG generation/visibility. It does not invent an accepted parent.
+The material stays hidden until all projection receipts pass and Mongo accepts the
+new publication. Original loss after staging, permission revocation, repeated
+withdrawal or expired deletion retention must prevent final activation.
+
+The native `--restore-only` worker remains limited to provider-free accepted-data
+restoration. Full reprocessing runs in a normally configured worker and needs an
+approved extraction/embedding profile. These lifecycle checks use synthetic provider
+responses; they do not establish the small native chat model's extraction quality.
+The combined local restoration and replacement regression passed 18 real-store
+checks in 358.74 seconds, including current provider restrictions and activation
+failures after original loss, grant revocation, deletion and retention expiry.
+
+Complete transport exposure, merge/split and retained physical purge are still in
+progress; Task 14's plan gates have not been marked complete.

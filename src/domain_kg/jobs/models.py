@@ -48,6 +48,7 @@ class JobCommand(Namespace):
         "backup",
         "restore",
         "restore_material",
+        "reprocess_material",
         "curate",
         "purge",
     ]
@@ -57,7 +58,9 @@ class JobCommand(Namespace):
 
     @model_validator(mode="after")
     def restoration_intent(self) -> "JobCommand":
-        if (self.kind == "restore_material") != (self.restore_intent_id is not None):
+        if (self.kind in ("restore_material", "reprocess_material")) != (
+            self.restore_intent_id is not None
+        ):
             raise ValueError("material restoration requires its exact durable intent")
         return self
 

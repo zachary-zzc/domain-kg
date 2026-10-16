@@ -16,7 +16,7 @@ from domain_kg.ingestion.resolved import ResolvedDocument
 from domain_kg.jobs.models import Checkpoint, LeasedJob, PublicationLease
 from domain_kg.jobs.queue import JobQueue, now
 from domain_kg.materials.models import BlobRef, MaterialMetadata, RestoreReadPermit
-from domain_kg.materials.restoration import restoration_permit
+from domain_kg.materials.restoration import reprocessing_permit, restoration_permit
 from domain_kg.models import Namespace, ScopedRef, SourceVersion
 from domain_kg.providers.embeddings import EmbeddingProfile
 from domain_kg.providers.profiles import embedding_space_id
@@ -209,6 +209,7 @@ class ProjectionCoordinator:
         self, job: LeasedJob, resolved_checkpoint: Checkpoint, *, input_hash: str | None = None
     ) -> Checkpoint:
         access = await self.queue.authorize(job)
+        permit = await reprocessing_permit(self.queue, access, job)
         raw = await self.queue._current(job)
         source = SourceVersion(
             org_id=job.org_id,
@@ -217,7 +218,7 @@ class ProjectionCoordinator:
             version_id=job.target_id,
         )
         resolved = ResolvedDocument.model_validate_json(
-            await read_artifact(self.queue, access, resolved_checkpoint, source)
+            await read_artifact(self.queue, access, resolved_checkpoint, source, restoration=permit)
         )
         if source_of(resolved) != source:
             raise inaccessible_reference()
@@ -236,7 +237,7 @@ class ProjectionCoordinator:
             {key: chunk_raw[key] for key in Checkpoint.model_fields}
         )
         parsed = ParsedDocument.model_validate_json(
-            await read_artifact(self.queue, access, chunk_checkpoint, source)
+            await read_artifact(self.queue, access, chunk_checkpoint, source, restoration=permit)
         )
         if source_of(parsed.blob) != source or {chunk.id for chunk in parsed.chunks} != {
             batch.chunk_id for batch in resolved.batches
@@ -319,7 +320,7 @@ class ProjectionCoordinator:
         cached = await self.queue.load_checkpoint(job, "embedding", input_hash)
         if cached is not None:
             previous = EmbeddedDocument.model_validate_json(
-                await read_artifact(self.queue, access, cached, source)
+                await read_artifact(self.queue, access, cached, source, restoration=permit)
             )
             if (
                 source_of(previous),
@@ -332,7 +333,7 @@ class ProjectionCoordinator:
             return cached
         from domain_kg.ingestion.delta import accepted_delta
 
-        await self.providers.authorize_source(access, source)
+        await self.providers.authorize_source(access, source, restoration=permit)
         delta = await accepted_delta(self.queue, job, parsed)
         reused = (
             {(row.kind, row.text): list(row.vector) for row in delta.embedded.rows}
@@ -343,7 +344,11 @@ class ProjectionCoordinator:
         profile = expected_profile
         if missing:
             profile, generated = await self.providers.embeddings(
-                access, Namespace(**namespace), [body.text for body in missing], source=source
+                access,
+                Namespace(**namespace),
+                [body.text for body in missing],
+                source=source,
+                restoration=permit,
             )
             fresh = iter(generated)
         else:
@@ -352,7 +357,7 @@ class ProjectionCoordinator:
             reused[(body.kind, body.text)] if (body.kind, body.text) in reused else next(fresh)
             for body in bodies
         ]
-        await self.providers.authorize_source(access, source)
+        await self.providers.authorize_source(access, source, restoration=permit)
         await self.queue.authorize(job)
         if profile != expected_profile or profile.dimensions != self.queue.router.dimensions:
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Embedding generation dimensions differ.")
@@ -633,7 +638,7 @@ class ProjectionCoordinator:
         current = await self.queue.policy.revalidate(access, action=self.queue._action(job.kind))
         source = SourceVersion.model_validate(attempt["source"])
         if not await self.queue.policy.material_visible(current, job.kg_id, source.material_id):
-            if job.kind != "restore_material":
+            if job.kind not in ("restore_material", "reprocess_material"):
                 raise inaccessible_reference()
             await self.queue.authorize(job)
         raw_job = await self.database.jobs.find_one(
@@ -662,7 +667,7 @@ class ProjectionCoordinator:
         document = await self._document(current, attempt)
         if not isinstance(document, EmbeddedDocument):
             raise inconsistent()
-        if job.kind == "restore_material":
+        if job.kind in ("restore_material", "reprocess_material"):
             from domain_kg.materials.restoration import verify_restoration_original
 
             permit = await restoration_permit(self.queue, current, job)
@@ -754,7 +759,10 @@ class ProjectionCoordinator:
             material = await self.database.material_access.find_one(material_key, session=session)
             if version is None or material is None:
                 raise inaccessible_reference()
-            if job.kind == "ingest" and material.get("active_version_id") is not None:
+            if (
+                job.kind in ("ingest", "reprocess_material")
+                and material.get("active_version_id") is not None
+            ):
                 raise DomainError(
                     ErrorCode.VERSION_CONFLICT, "This source already has an accepted version."
                 )
@@ -823,7 +831,7 @@ class ProjectionCoordinator:
                 "active_version_id": str(source.version_id),
                 "metadata": metadata.model_dump(mode="json"),
             }
-            if job.kind == "restore_material":
+            if job.kind in ("restore_material", "reprocess_material"):
                 material_update.update(
                     excluded=False, tombstoned=False, purge_after=None, restored_at=timestamp
                 )
@@ -852,7 +860,7 @@ class ProjectionCoordinator:
                 {"$set": {"state": "accepted"}},
                 session=session,
             )
-            if job.kind == "restore_material":
+            if job.kind in ("restore_material", "reprocess_material"):
                 from domain_kg.materials.models import RestorationReceipt
 
                 restoration = RestorationReceipt(

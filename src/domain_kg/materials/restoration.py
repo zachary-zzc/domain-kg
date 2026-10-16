@@ -11,16 +11,25 @@ from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.models import Checkpoint, JobCommand, LeasedJob
 from domain_kg.jobs.queue import JobQueue
-from domain_kg.materials.models import BlobRef, RestoreReadPermit
+from domain_kg.materials.models import (
+    BlobRef,
+    MaterialReadPermit,
+    ReprocessReadPermit,
+    RestoreReadPermit,
+)
 from domain_kg.models import SourceVersion
 from domain_kg.revisions.projections import AcceptedProjection
 
 
 async def authorize_restore_read(
-    queue: JobQueue, access: AccessContext, source: SourceVersion, permit: RestoreReadPermit
+    queue: JobQueue,
+    access: AccessContext,
+    source: SourceVersion,
+    permit: MaterialReadPermit,
+    session: AsyncClientSession | None = None,
 ) -> None:
-    permit = RestoreReadPermit.model_validate(permit)
-    current = await queue.policy.revalidate(access, action=Action.REPLACE)
+    unpublished = isinstance(permit, ReprocessReadPermit)
+    current = await queue.policy.revalidate(access, action=Action.REPLACE, session=session)
     if (
         (permit.org_id, permit.kg_id) != (current.org_id, source.kg_id)
         or source.org_id != current.org_id
@@ -30,12 +39,14 @@ async def authorize_restore_read(
         raise inaccessible_reference()
     namespace = {"org_id": str(source.org_id), "kg_id": str(source.kg_id)}
     intent = await queue.database.material_commands.find_one(
-        namespace | {"id": str(permit.command_id), "operation": "restore", "state": "pending"}
+        namespace | {"id": str(permit.command_id), "operation": "restore", "state": "pending"},
+        session=session,
     )
     if (
         intent is None
         or intent.get("source") != source.model_dump(mode="json")
         or intent.get("expected_revision") != permit.expected_revision
+        or bool(intent.get("unpublished", False)) != unpublished
         or any(
             intent.get("actor", {}).get(key) != getattr(current.principal, key)
             for key in ("issuer", "subject", "kind")
@@ -48,13 +59,14 @@ async def authorize_restore_read(
             namespace
             | {
                 "id": str(permit.job_id),
-                "kind": "restore_material",
+                "kind": "reprocess_material" if unpublished else "restore_material",
                 "restore_intent_id": str(permit.command_id),
                 "fence": permit.job_fence,
                 "lease_token": str(permit.job_lease_token),
                 "lease_until": {"$gt": now},
                 "stage": {"$nin": ["ready", "ready_with_warnings", "cancelled", "failed"]},
-            }
+            },
+            session=session,
         )
         if (
             job is None
@@ -69,12 +81,14 @@ async def authorize_restore_read(
             raise inaccessible_reference()
     elif intent["expires_at"].replace(tzinfo=UTC) <= now:
         raise DomainError(ErrorCode.VERSION_CONFLICT, "The restoration read window expired.")
-    material = await queue.policy._material_acl_record(current, source.kg_id, source.material_id)
+    material = await queue.policy._material_acl_record(
+        current, source.kg_id, source.material_id, session=session
+    )
     if material is None:
         raise inaccessible_reference()
     if (
         material["revision"] != permit.expected_revision
-        or material.get("active_version_id") != str(source.version_id)
+        or material.get("active_version_id") != (None if unpublished else str(source.version_id))
         or not (material.get("tombstoned") or material.get("excluded"))
     ):
         raise DomainError(ErrorCode.VERSION_CONFLICT, "The restoration target changed.")
@@ -86,18 +100,38 @@ async def authorize_restore_read(
         {
             "org_id": namespace["org_id"],
             "id": namespace["kg_id"],
-            "published_manifest_id": str(permit.view_manifest_id),
+            "published_manifest_id": str(permit.view_manifest_id)
+            if permit.view_manifest_id
+            else None,
             "generation": str(permit.generation),
             "visibility_revision": permit.visibility_revision,
-        }
+        },
+        session=session,
     )
+    if unpublished:
+        if kg is None:
+            raise DomainError(ErrorCode.POLICY_CHANGED, "The restoration publication changed.")
+        from domain_kg.materials.reprocessing import unpublished_source
+        from domain_kg.models import ScopedRef
+
+        original = await unpublished_source(
+            queue,
+            current,
+            ScopedRef(org_id=source.org_id, kg_id=source.kg_id, id=source.material_id),
+            session,
+        )
+        if original != source:
+            raise inaccessible_reference()
+        return
+    assert isinstance(permit, RestoreReadPermit)
     binding = await queue.database.publication_bindings.find_one(
         namespace
         | {
             "view_manifest_id": str(permit.view_manifest_id),
             "owner_key": f"source:{source.material_id}",
             "binding.manifest_id": str(permit.projection_manifest_id),
-        }
+        },
+        session=session,
     )
     if kg is None or binding is None:
         raise DomainError(ErrorCode.POLICY_CHANGED, "The retained publication changed.")
@@ -115,7 +149,7 @@ async def authorize_restore_job(
 ) -> dict[str, Any]:
     current = await queue.policy.revalidate(access, action=Action.REPLACE, session=session)
     if (
-        command.kind != "restore_material"
+        command.kind not in ("restore_material", "reprocess_material")
         or command.restore_intent_id is None
         or command.org_id != current.org_id
         or command.kg_id not in current.kg_ids
@@ -131,7 +165,15 @@ async def authorize_restore_job(
         },
         session=session,
     )
-    if intent is None or command.id != uuid5(command.restore_intent_id, "restore-material"):
+    unpublished = command.kind == "reprocess_material"
+    if (
+        intent is None
+        or bool(intent.get("unpublished", False)) != unpublished
+        or command.id
+        != uuid5(
+            command.restore_intent_id, "reprocess-material" if unpublished else "restore-material"
+        )
+    ):
         raise inaccessible_reference()
     source = SourceVersion.model_validate(intent["source"])
     if (
@@ -149,7 +191,7 @@ async def authorize_restore_job(
         raise inaccessible_reference()
     if (
         row["revision"] != intent["expected_revision"]
-        or row.get("active_version_id") != str(source.version_id)
+        or row.get("active_version_id") != (None if unpublished else str(source.version_id))
         or not (row.get("excluded") or row.get("tombstoned"))
     ):
         raise DomainError(ErrorCode.VERSION_CONFLICT, "The restoration target changed.")
@@ -162,8 +204,8 @@ async def authorize_restore_job(
 
 async def restoration_permit(
     queue: JobQueue, access: AccessContext, job: LeasedJob
-) -> RestoreReadPermit | None:
-    if job.kind != "restore_material":
+) -> MaterialReadPermit | None:
+    if job.kind not in ("restore_material", "reprocess_material"):
         return None
     if job.restore_intent_id is None:
         raise inaccessible_reference()
@@ -175,7 +217,7 @@ async def restoration_permit(
 
     view = await PublicationJournal(queue).load_metadata(access, job.kg_id)
     binding = next((item for item in view.projections if item.source == source), None)
-    if view.manifest_id is None or binding is None:
+    if job.kind == "restore_material" and (view.manifest_id is None or binding is None):
         raise DomainError(
             ErrorCode.REVISION_NOT_READY, "The retained source binding is unavailable."
         )
@@ -183,26 +225,32 @@ async def restoration_permit(
         {
             "org_id": str(job.org_id),
             "id": str(job.kg_id),
-            "published_manifest_id": str(view.manifest_id),
+            "published_manifest_id": str(view.manifest_id) if view.manifest_id else None,
             "generation": str(view.generation),
         }
     )
     if kg is None:
         raise DomainError(ErrorCode.POLICY_CHANGED, "The retained publication changed.")
-    permit = RestoreReadPermit(
+    common = dict(
         org_id=job.org_id,
         kg_id=job.kg_id,
         command_id=job.restore_intent_id,
         source=source,
         expected_revision=intent["expected_revision"],
         view_manifest_id=view.manifest_id,
-        projection_manifest_id=binding.manifest_id,
         generation=view.generation,
         visibility_revision=kg["visibility_revision"],
         job_id=job.id,
         job_fence=job.fence,
         job_lease_token=job.lease_token,
     )
+    permit: MaterialReadPermit
+    if job.kind == "reprocess_material":
+        permit = ReprocessReadPermit(**common)
+    else:
+        if binding is None or view.manifest_id is None:
+            raise inaccessible_reference()
+        permit = RestoreReadPermit(**common, projection_manifest_id=binding.manifest_id)
     await authorize_restore_read(queue, access, source, permit)
     return permit
 
@@ -222,7 +270,7 @@ async def restore_embedding_artifact(
     parent = await PublicationJournal(queue).attempt(access, UUID(raw["repair_parent_manifest_id"]))
     permit = await restoration_permit(queue, access, job)
     if (
-        permit is None
+        not isinstance(permit, RestoreReadPermit)
         or parent["state"] != "accepted"
         or (
             parent["source"] != permit.source.model_dump(mode="json")
@@ -248,8 +296,19 @@ async def restore_embedding_artifact(
     return await queue.store_artifact(job, "embedding", input_hash, body)
 
 
+async def reprocessing_permit(
+    queue: JobQueue, access: AccessContext, job: LeasedJob
+) -> ReprocessReadPermit | None:
+    if job.kind != "reprocess_material":
+        return None
+    permit = await restoration_permit(queue, access, job)
+    if not isinstance(permit, ReprocessReadPermit):
+        raise inaccessible_reference()
+    return permit
+
+
 async def verify_restoration_original(
-    queue: JobQueue, access: AccessContext, permit: RestoreReadPermit
+    queue: JobQueue, access: AccessContext, permit: MaterialReadPermit
 ) -> None:
     from domain_kg.models import ScopedRef
     from domain_kg.storage.blobs import BlobStore
@@ -266,7 +325,9 @@ async def verify_restoration_original(
             "kg_id": str(source.kg_id),
             "id": str(source.version_id),
             "material_id": str(source.material_id),
-            "state": {"$in": ["accepted", "retained"]},
+            "state": {"$in": ["staged", "accepted", "retained"]}
+            if isinstance(permit, ReprocessReadPermit)
+            else {"$in": ["accepted", "retained"]},
         }
     )
     if version is None or version.material.id != source.material_id or raw is None:
