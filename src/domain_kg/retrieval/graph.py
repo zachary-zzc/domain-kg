@@ -77,10 +77,23 @@ class GraphRetrievalBranch:
             for endpoint in (row.claim.assertion.subject, row.claim.assertion.target)
         )
         all_seeds = tuple(sorted(set(all_seeds) | manual_seeds, key=str))
+        annotation_rows = tuple(
+            row
+            for row in data.manual_rows
+            if row.manual_relation
+            and not row.claim
+            and any(term.casefold() in row.text.casefold() for term in (keywords or (query,)))
+        )
         seeds = all_seeds[: request.max_nodes]
         if not seeds:
             await self.resolver.revalidate(scope)
-            return GraphRecall([], None, False)
+            from domain_kg.retrieval.evidence import manual_candidate
+
+            annotation_candidates = [
+                manual_candidate(row, "graph", 0.0, index)
+                for index, row in enumerate(annotation_rows[:50], 1)
+            ]
+            return GraphRecall(annotation_candidates, None, len(annotation_rows) > 50)
         graph = await self.repository.traverse(
             scope,
             SubgraphRequest(
@@ -190,6 +203,11 @@ class GraphRetrievalBranch:
                 ),
                 1,
             )
+        )
+        annotation_first_rank = len(candidates)
+        candidates.extend(
+            manual_candidate(row, "graph", 0.0, annotation_first_rank + index)
+            for index, row in enumerate(annotation_rows, 1)
         )
         return GraphRecall(
             candidates[:50],

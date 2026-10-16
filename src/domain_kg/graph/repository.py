@@ -1,6 +1,7 @@
 """Bounded indexed adjacency over accepted, visible source-owned support rows."""
 
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Any
 from uuid import UUID
 
@@ -66,32 +67,41 @@ class GraphData:
                 value = proposed
         return value
 
-    @property
+    @cached_property
+    def _observations_by_entity(self) -> dict[UUID, tuple[ResolvedEntity, ...]]:
+        grouped: dict[UUID, list[ResolvedEntity]] = {}
+        for row in self.rows:
+            if row.observation:
+                grouped.setdefault(row.observation.entity.id, []).append(row.observation)
+        return {key: tuple(value) for key, value in grouped.items()}
+
+    def endpoint_types(self, row: ProjectionBody) -> tuple[str, ...] | None:
+        if not self.scope.filters.entity_types:
+            return None
+        if row.subject_observation and row.target_observation:
+            return tuple(
+                self.field(item, "entity_type")
+                for item in (row.subject_observation, row.target_observation)
+            )
+        if row.manual_relation and row.claim:
+            return tuple(
+                self.field(item, "entity_type")
+                for endpoint in (row.claim.assertion.subject, row.claim.assertion.target)
+                for item in self._observations_by_entity.get(endpoint.id, ())
+                if row.manual_relation.public
+                or item.material_id in row.manual_relation.material_ids
+            )
+        return ()
+
+    @cached_property
     def supports(self) -> tuple[ProjectionBody, ...]:
         return tuple(
             row
             for row in self.rows
-            if matches_support(
-                row,
-                self.scope.filters,
-                endpoint_types=tuple(
-                    self.field(item.observation, "entity_type")
-                    for item in self.rows
-                    if item.observation
-                    and row.claim
-                    and item.observation.entity
-                    in (row.claim.assertion.subject, row.claim.assertion.target)
-                    and (not row.source or item.observation.material_id == row.source.material_id)
-                    and (
-                        not row.manual_relation
-                        or row.manual_relation.public
-                        or item.observation.material_id in row.manual_relation.material_ids
-                    )
-                ),
-            )
+            if matches_support(row, self.scope.filters, endpoint_types=self.endpoint_types(row))
         )
 
-    @property
+    @cached_property
     def observations(self) -> tuple[ResolvedEntity, ...]:
         support_observations = {
             observation.id
@@ -123,7 +133,7 @@ class GraphData:
             )
         )
 
-    @property
+    @cached_property
     def manual_nodes(self) -> tuple[ManualNode, ...]:
         result = []
         for manual in self.curations:
@@ -148,8 +158,32 @@ class GraphData:
             result.append(manual)
         return tuple(sorted(result, key=lambda item: (item.created_at, str(item.curation.id))))
 
-    @property
+    def relation_annotations(self, row: ProjectionBody) -> tuple[ManualRelation, ...]:
+        if row.claim is None:
+            return ()
+        return tuple(
+            sorted(
+                (
+                    manual
+                    for manual in self.curations
+                    if isinstance(manual, ManualRelation)
+                    and manual.fact is None
+                    and manual.logical_assertion.id == row.claim.assertion.id
+                    and (
+                        manual.public
+                        or row.source is not None
+                        and row.source.material_id in manual.material_ids
+                    )
+                    and any(value is not None for value in manual.fields.model_dump().values())
+                ),
+                key=lambda item: (item.created_at, str(item.curation.id)),
+            )
+        )
+
+    @cached_property
     def manual_rows(self) -> tuple[ProjectionBody, ...]:
+        if "manual" not in self.scope.filters.support_statuses:
+            return ()
         result = []
         for row in self.rows:
             if row.manual_node and row.manual_node in self.manual_nodes:
@@ -158,10 +192,16 @@ class GraphData:
                 if row.claim:
                     if row in self.supports:
                         result.append(row)
-                elif not self.scope.filters.requires_assertion_support:
-                    if not self.scope.filters.entity_ids and not self.scope.filters.entity_types:
-                        # Annotation-only text cannot invent an endpoint or a support.
-                        result.append(row)
+                elif not (
+                    self.scope.filters.requires_assertion_support
+                    or self.scope.filters.exclude_entity_ids
+                ) or any(
+                    row.manual_relation in self.relation_annotations(support)
+                    for support in self.supports
+                ):
+                    # A description annotates an eligible original claim. It does
+                    # not add a new support or fabricate a document quotation.
+                    result.append(row)
         return tuple(result)
 
 
@@ -249,12 +289,10 @@ class GraphRepository:
                 row.claim.assertion.target.id,
             )
         ]
-        # Explicit public endpoints retain opaque identities after all source
-        # observations are removed. No deleted names/types/descriptions return.
-        public_endpoint = any(
-            row.manual_relation and row.manual_relation.public for row in supports
-        )
-        if not observations and not manuals and not public_endpoint:
+        # Eligible human claims retain opaque endpoints when source observations
+        # disappear. Removed sources are already excluded by the read scope.
+        manual_endpoint = any(row.manual_relation for row in supports)
+        if not observations and not manuals and not manual_endpoint:
             return None
         neighbors = {
             endpoint.id
@@ -312,10 +350,18 @@ class GraphRepository:
         )
 
     @staticmethod
-    def edge(row: ProjectionBody) -> EdgeView:
+    def edge(row: ProjectionBody, *, data: GraphData | None = None) -> EdgeView:
         if not row.claim:
             raise inconsistent()
         fact, support = row.claim.assertion, row.claim.support
+        annotations = data.relation_annotations(row) if data else ()
+        description = row.manual_relation.fields.description if row.manual_relation else None
+        tags = row.manual_relation.fields.tags or () if row.manual_relation else ()
+        for manual in annotations:
+            if manual.fields.description is not None:
+                description = manual.fields.description
+            if manual.fields.tags is not None:
+                tags = manual.fields.tags
         return EdgeView(
             subject_id=fact.subject.id,
             target_id=fact.target.id,
@@ -329,8 +375,9 @@ class GraphRepository:
             curation_revision_id=row.curation.id if row.curation else None,
             provenance=support.provenance,
             status=support.status,
-            description=row.manual_relation.fields.description if row.manual_relation else None,
-            tags=row.manual_relation.fields.tags or () if row.manual_relation else (),
+            description=description,
+            tags=tags,
+            annotations=annotations,
         )
 
     async def adjacent(
@@ -389,7 +436,7 @@ class GraphRepository:
             rows = await self.adjacent(data, frontier, request.max_edges + 1)
             next_frontier: set[UUID] = set()
             for row in rows:
-                edge = self.edge(row)
+                edge = self.edge(row, data=data)
                 if edge.support_id in edges:
                     continue
                 additions = {edge.subject_id, edge.target_id} - nodes.keys()

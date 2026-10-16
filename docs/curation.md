@@ -51,7 +51,18 @@ A source removal or permission change expires the old cursor. Hidden source
 corrections are filtered before paging, including when another source supports the
 same entity.
 
-Node corrections, semantic relationship claims, history, rollback and selective
-vector work have passed targeted local checks. Description-only relationship
-annotations, merge/split, suppression and retention-safe cleanup are still being
-completed; Task 14 remains unchecked. HTTP/MCP exposure follows in Task 15.
+A description-only relationship edit is a separately attributed annotation on the
+original verified edge. It does not manufacture a new support. Source-A annotations
+are omitted from B-only views. Annotation text is searchable in all four recall
+modes; positive filters require an eligible original claim, and verified-only
+requests exclude manual search evidence. Tag changes reuse unchanged vectors.
+
+Eligible source-owned human claims also retain opaque endpoints when a replacement
+contains no extracted entities. This preserves human work without recovering old
+source labels, types, descriptions or spans. Removing their owning material still
+excludes them. Independently public claims retain their own ownership.
+
+Node/relationship corrections, history, rollback, re-ingestion persistence and
+selective vector work have passed targeted local checks. Merge/split, suppression
+and retention-safe cleanup are still being completed; Task 14 remains unchecked.
+HTTP/MCP exposure follows in Task 15.

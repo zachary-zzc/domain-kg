@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.ingestion.models import Span
 from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.models import FrozenModel, ManualProvenance, SourceVersion
@@ -38,6 +39,7 @@ class EdgeView(FrozenModel):
     provenance: ManualProvenance | None = None
     status: str = "verified"
     description: str | None = None
+    annotations: tuple[ManualRelation, ...] = ()
     tags: tuple[str, ...] = ()
 
 
