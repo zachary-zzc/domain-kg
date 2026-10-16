@@ -12,6 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVICES = ["mongo", "neo4j", "qdrant", "object-store"]
 MEMORY_BUDGET_BYTES = 1_500_000_000
 TASK_FILES = {
+    5: [
+        "tests/unit/test_smoke_budget.py",
+        "tests/integration/test_catalog.py",
+        "tests/integration/test_database_routing.py",
+        "tests/integration/test_identity.py::test_catalog_http_uses_same_policy_services",
+    ],
     4: [
         "tests/unit/test_smoke_budget.py",
         "tests/integration/test_policy_scopes.py",
@@ -160,7 +166,20 @@ def main() -> int:
             env,
         )
         check_memory_budget(running=True)
-        run(["uv", "run", "--locked", "--no-sync", "pytest", *TASK_FILES[args.task], "-q"], env)
+        options = ["--run-physical"] if args.task == 5 else []
+        run(
+            [
+                "uv",
+                "run",
+                "--locked",
+                "--no-sync",
+                "pytest",
+                *TASK_FILES[args.task],
+                *options,
+                "-q",
+            ],
+            env,
+        )
     finally:
         if started and not args.keep_services:
             run(["docker", "compose", "stop", *started], env)

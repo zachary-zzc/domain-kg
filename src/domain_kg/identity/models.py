@@ -10,6 +10,7 @@ from domain_kg.models import FrozenModel, NonNegative, PreservedText
 
 
 class Action(StrEnum):
+    LIST_KGS = "list_kgs"
     READ = "read"
     SEARCH = "search"
     INGEST = "ingest"

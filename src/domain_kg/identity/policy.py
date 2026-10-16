@@ -18,7 +18,7 @@ from domain_kg.identity.models import AccessContext, Action, KGGrant, Member, Pr
 from domain_kg.models import IdempotencyKey
 
 Role = Literal["reader", "editor", "owner"]
-READ_ACTIONS = {Action.READ, Action.SEARCH}
+READ_ACTIONS = {Action.READ, Action.SEARCH, Action.LIST_KGS}
 EDIT_ACTIONS = {Action.INGEST, Action.REPLACE, Action.REMOVE, Action.CURATE}
 ORG_ACTIONS = {Action.CREATE_KG, Action.MANAGE_ORGANIZATION}
 UUID_ADAPTER = TypeAdapter(UUID)
@@ -121,7 +121,7 @@ class Policy:
             raise DomainError(ErrorCode.FORBIDDEN, "Organization administrator access is required.")
         if action == Action.REGISTER_BACKEND and (operator is None or member.kind != "human"):
             raise DomainError(ErrorCode.FORBIDDEN, "Platform operator access is required.")
-        if not kg_ids and action not in ORG_ACTIONS | {Action.REGISTER_BACKEND}:
+        if not kg_ids and action not in ORG_ACTIONS | {Action.REGISTER_BACKEND, Action.LIST_KGS}:
             raise inaccessible_reference()
         groups = (
             await self.database.groups.find(

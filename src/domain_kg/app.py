@@ -17,10 +17,15 @@ from pydantic import AnyHttpUrl
 from pymongo import AsyncMongoClient
 from pymongo.errors import PyMongoError
 
+from domain_kg.catalog.backends import BackendRegistry, approved_from_settings
+from domain_kg.catalog.routes import catalog_router
+from domain_kg.catalog.service import CatalogService
 from domain_kg.errors import DomainError, ErrorCode
+from domain_kg.identity.policy import Policy
 from domain_kg.identity.repository import IdentityRepository
 from domain_kg.identity.routes import IdentityRuntime, identity_router
 from domain_kg.settings import Settings
+from domain_kg.storage.router import KGStoreRouter
 
 
 class DenyAllVerifier(TokenVerifier):
@@ -36,10 +41,13 @@ def create_app(
     token_verifier: TokenVerifier | None = None,
     identity_repository: IdentityRepository | None = None,
     oidc_http_client: httpx.AsyncClient | None = None,
+    catalog_service: CatalogService | None = None,
 ) -> FastAPI:
     mongo_client: AsyncMongoClient[dict[str, Any]] | None = None
     http_client = None
     identity = None
+    catalog = catalog_service
+    owns_catalog = False
     if settings.oidc_client_id:
         repository = identity_repository
         if repository is None:
@@ -52,6 +60,13 @@ def create_app(
             http_client = httpx.AsyncClient(timeout=5, follow_redirects=False, trust_env=False)
             client = http_client
         identity = IdentityRuntime(settings, repository, client)
+        if catalog is None:
+            policy = Policy(repository.database)
+            registry = BackendRegistry(policy, approved_from_settings(settings))
+            catalog = CatalogService(
+                policy, registry, KGStoreRouter(policy, registry, dimensions=1536)
+            )
+            owns_catalog = True
     server: MCPServer[None] = MCPServer(
         "domain_kg_mcp",
         version="0.1.0",
@@ -89,9 +104,15 @@ def create_app(
         try:
             if identity is not None:
                 await identity.initialize()
+            if catalog is not None:
+                await catalog.policy.initialize()
+                await catalog.registry.initialize()
+                await catalog.initialize()
             async with server.session_manager.run():
                 yield
         finally:
+            if catalog is not None and owns_catalog:
+                await catalog.router.close()
             if mongo_client is not None:
                 await mongo_client.close()
             if http_client is not None:
@@ -99,6 +120,7 @@ def create_app(
 
     app = FastAPI(title="Domain KG", lifespan=lifespan)
     app.state.identity = identity
+    app.state.catalog = catalog
 
     @app.exception_handler(DomainError)
     async def domain_error_handler(request: Request, error: DomainError) -> JSONResponse:
@@ -150,6 +172,8 @@ def create_app(
 
     if identity is not None:
         app.include_router(identity_router(identity))
+        if catalog is not None:
+            app.include_router(catalog_router(identity, catalog))
 
     @app.middleware("http")
     async def private_identity_responses(request: Request, call_next: Any) -> Any:

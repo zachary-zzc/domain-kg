@@ -19,6 +19,72 @@ def test_external_subjects_are_opaque_and_never_trimmed() -> None:
     assert principal.subject == " reader "
 
 
+@pytest.mark.storage
+async def test_catalog_http_uses_same_policy_services(
+    catalog, team, mongo_db, issuer_fixture
+) -> None:
+    from domain_kg.app import create_app
+    from domain_kg.settings import Settings
+
+    service, _, _, profile = catalog
+    identities, _, principals, _, _, _ = team
+    _, state, transport, sign = issuer_fixture
+    state["issuer"] = principals["owner"].issuer
+    async with httpx.AsyncClient(transport=transport) as oidc_client:
+        app = create_app(
+            Settings(
+                public_url="http://localhost:8000",
+                oidc_issuer=state["issuer"],
+                oidc_client_id="console",
+            ),
+            identity_repository=identities,
+            oidc_http_client=oidc_client,
+            catalog_service=service,
+        )
+        async with app.router.lifespan_context(app):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://localhost:8000"
+            ) as client:
+                owner_token = sign(
+                    {"sub": "owner", "scope": "domain_kg:read domain_kg:write domain_kg:admin"}
+                )
+                owner = {"Authorization": f"Bearer {owner_token}"}
+                reader = {"Authorization": f"Bearer {sign({'sub': 'reader'})}"}
+                values = {
+                    "name": "HTTP KG",
+                    "domain_profile_id": str(service.general_profile_id),
+                    "placement_id": str(profile.id),
+                    "idempotency_key": "http-kg",
+                }
+                assert (
+                    await client.post("/api/v1/kgs", headers=reader, json=values)
+                ).status_code == 403
+                created = await client.post("/api/v1/kgs", headers=owner, json=values)
+                assert created.status_code == 200 and created.json()["state"] == "ready"
+                listed = await client.get("/api/v1/kgs", headers=reader)
+                assert listed.status_code == 200 and "HTTP KG" not in listed.text
+                assert (
+                    await client.get(f"/api/v1/kgs/{created.json()['kg_id']}", headers=reader)
+                ).status_code == 404
+                for path in (
+                    "/api/v1/backends",
+                    "/api/v1/backends/approved-references",
+                    "/api/v1/storage-profiles",
+                ):
+                    assert (
+                        await client.get(path, headers=owner, params={"limit": 0})
+                    ).status_code == 422
+                backends = await client.get("/api/v1/backends", headers=owner, params={"limit": 1})
+                assert len(backends.json()["items"]) == 1 and backends.json()["next_cursor"]
+                assert (
+                    await client.get(
+                        "/api/v1/backends",
+                        headers=owner,
+                        params={"limit": 2, "cursor": backends.json()["next_cursor"]},
+                    )
+                ).status_code == 409
+
+
 @pytest.fixture
 def issuer_fixture():
     private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -27,7 +93,7 @@ def issuer_fixture():
         "alg": "RS256",
         "use": "sig",
     }
-    state = {"keys": [jwk], "calls": 0}
+    state = {"keys": [jwk], "calls": 0, "issuer": "https://issuer.example"}
 
     def handle(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/token":
@@ -37,10 +103,10 @@ def issuer_fixture():
             return httpx.Response(
                 200,
                 json={
-                    "issuer": "https://issuer.example",
-                    "jwks_uri": "https://issuer.example/keys",
-                    "authorization_endpoint": "https://issuer.example/authorize",
-                    "token_endpoint": "https://issuer.example/token",
+                    "issuer": state["issuer"],
+                    "jwks_uri": f"{state['issuer']}/keys",
+                    "authorization_endpoint": f"{state['issuer']}/authorize",
+                    "token_endpoint": f"{state['issuer']}/token",
                 },
             )
         assert request.url.path == "/keys"
@@ -49,7 +115,7 @@ def issuer_fixture():
 
     def sign(changes=None, *, key=private, kid="one"):
         claims = {
-            "iss": "https://issuer.example",
+            "iss": state["issuer"],
             "sub": "reader",
             "aud": "http://localhost:8000/mcp",
             "iat": int(time.time()),

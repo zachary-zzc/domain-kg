@@ -33,6 +33,11 @@ class CreateKG(FrozenModel):
 
 
 class KGReceipt(Namespace):
-    state: Literal["provisioning", "active", "degraded", "archived", "purging", "purged"]
+    state: Literal["provisioning", "ready", "read_only", "error", "archived", "purging", "purged"]
     revision: NonNegative
     job_id: UUID | None = None
+
+
+class RegisterBackend(FrozenModel):
+    kind: Literal["mongo", "neo4j", "qdrant", "s3"]
+    secret_ref: UUID

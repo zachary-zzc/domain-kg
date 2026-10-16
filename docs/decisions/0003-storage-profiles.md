@@ -1,0 +1,19 @@
+# Storage profiles and the laptop isolation drill
+
+Each KG selects an operator-registered profile; a profile references approved MongoDB, Neo4j, Qdrant and S3 bindings. Requests supply UUID references, never endpoints, credentials or database commands. Registration verifies the configured service. Namespace provisioning verifies real Mongo validators/indexes, Neo4j composite constraints and Qdrant collection dimensions/payload indexes before a KG becomes ready. Driver pools are bounded and shared by registered backend ID; material/vector namespaces remain per KG.
+
+Mongo profiles select independently named databases on the service's authority replica set. Using one replica-set client permits policy, ownership, accepted source metadata and publication transactions across those logical databases. Separate Mongo replica sets would require another policy/publication coordination protocol; they are deliberately rejected by this initial binding. Neo4j, Qdrant and object storage can use independent physical endpoints. This limits initial Mongo placement flexibility and avoids implying a transaction across independent replica sets or other stores.
+
+Only a current platform operator can register backends or change placement allowance. Organization administration does not imply that role. A new KG explicitly appoints its creating organization administrator as owner in the same Mongo transaction as the catalog reservation. Policy and placement epochs serialize concurrent creation and detachment. Referenced profiles/backends cannot be removed. Partially provisioned namespaces remain unavailable and can be retried with the original idempotency key.
+
+After configuring a real IdP and admitting a human member, an operator of the server can record an explicit platform-operator invitation with `uv run python scripts/invite_operator.py --subject EXACT_IDP_SUBJECT`. This offline command uses private server configuration, records a provisioning audit event, and grants no KG access. It does not authenticate or register infrastructure as that person. The invitee must complete external OIDC login before using the operator HTTP APIs. No real invitation has been issued during this implementation run.
+
+The private connection map comes from server-owned settings. Default development references have stable UUIDs and resolve the local endpoints using ignored `.env` credentials. `DOMAIN_KG_BACKEND_CONFIG` can select a private JSON map of approved UUIDs to connection records. This path is server configuration and is never an API argument. Keep the file outside Git, readable only by its operator. Mongo records use `kind` and `database`; Neo4j uses `kind`, `endpoint`, `username`, `credential`; Qdrant uses `kind`, `endpoint`, `credential`; S3 also uses `bucket` and `username` for its access key. API responses omit the resolved values.
+
+The user limits local container RAM to 1.5 GB. The independent-engine drill therefore uses `compose.multi-backend.yaml` to replace the graph/vector pair with separate data volumes and ports, while keeping MongoDB/S3 and the aggregate 1.476 GB limit. It writes a source-bound marker on the primary deployment, verifies a distinct Mongo database and empty independent projection on the second, refuses routing to the offline primary, then restores the primary and checks its original marker. There is no simultaneous second full stack. Run this explicit local gate with:
+
+```bash
+uv run pytest tests/integration/test_database_routing.py --run-physical -q
+```
+
+Ordinary regression runs skip this container-swapping drill; its verified result is recorded separately. The test restores primary containers in `finally`. The override uses Docker Compose's supported `!override` merge syntax; its resolved memory total and published ports are checked before the first drill. It does not change the laptop or VM RAM allocation.

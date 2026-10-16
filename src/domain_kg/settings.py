@@ -1,5 +1,7 @@
 """Server-owned configuration; these fields are never MCP tool arguments."""
 
+from pathlib import Path
+
 from pydantic import AnyHttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +14,7 @@ class Settings(BaseSettings):
     oidc_client_id: str = ""
     oidc_client_secret: SecretStr = SecretStr("")
     mongo_database: str = "domain_kg"
+    backend_config: Path | None = None
     mongo_uri: SecretStr = SecretStr(
         "mongodb://127.0.0.1:27027/?replicaSet=rs0&directConnection=true"
     )

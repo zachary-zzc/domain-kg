@@ -13,6 +13,7 @@ from uuid import UUID
 from neo4j import AsyncDriver
 from pydantic import ValidationError
 from pymongo.asynchronous.database import AsyncDatabase
+from pymongo.errors import CollectionInvalid
 from qdrant_client import AsyncQdrantClient, models
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
@@ -97,12 +98,22 @@ async def install_mongo_schema(database: AsyncDatabase[dict[str, Any]]) -> None:
                 }
             )
         else:
-            await database.create_collection(
-                name,
-                validator={"$jsonSchema": schema},
-                validationLevel="strict",
-                validationAction="error",
-            )
+            try:
+                await database.create_collection(
+                    name,
+                    validator={"$jsonSchema": schema},
+                    validationLevel="strict",
+                    validationAction="error",
+                )
+            except CollectionInvalid:
+                await database.command(
+                    {
+                        "collMod": name,
+                        "validator": {"$jsonSchema": schema},
+                        "validationLevel": "strict",
+                        "validationAction": "error",
+                    }
+                )
         await database[name].create_index(
             [("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True, name="namespace_identity"
         )

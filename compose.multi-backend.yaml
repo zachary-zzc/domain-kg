@@ -1,0 +1,12 @@
+# Sequential physical-isolation drill. Replaces the graph/vector containers;
+# it never adds a second simultaneously running pair above the RAM budget.
+services:
+  neo4j:
+    ports: !override ["127.0.0.1:28687:7687", "127.0.0.1:28474:7474"]
+    volumes: !override ["neo4j-secondary-data:/data"]
+  qdrant:
+    ports: !override ["127.0.0.1:27333:6333"]
+    volumes: !override ["qdrant-secondary-data:/qdrant/storage"]
+volumes:
+  neo4j-secondary-data:
+  qdrant-secondary-data:
