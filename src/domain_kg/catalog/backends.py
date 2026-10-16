@@ -318,6 +318,7 @@ class BackendRegistry:
                 client = AsyncQdrantClient(
                     url=connection.endpoint,
                     api_key=connection.credential.get_secret_value(),
+                    trust_env=False,
                     timeout=5,
                 )
                 try:

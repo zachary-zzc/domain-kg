@@ -183,7 +183,9 @@ async def test_real_lightrag_qdrant_upsert_requires_flush(
             client = QdrantClient(":memory:")
         else:
             client = QdrantClient(
-                url=settings.qdrant_url, api_key=settings.qdrant_api_key.get_secret_value()
+                url=settings.qdrant_url,
+                api_key=settings.qdrant_api_key.get_secret_value(),
+                trust_env=False,
             )
         storage._client = client
         await storage.initialize()

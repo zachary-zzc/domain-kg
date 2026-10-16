@@ -41,7 +41,7 @@ No upstream source patch is carried. The maintained extension boundary is extrac
 
 ## Laptop checks and blocker
 
-The laptop has 16 GiB RAM. The user reduced the initial 2.25 GiB service budget to a hard 1.5 GB maximum. Limits now total 1,408 MiB (1.476 GB): MongoDB 448 MiB, Neo4j 640 MiB, Qdrant 192 MiB, and S3 128 MiB. Swap is disabled. The smoke runner checks both Compose and running Docker limits and rejects an over-budget configuration. CPU limits total 2.5 cores, image pulls are serial, published ports bind to loopback, and inputs use generated private credentials and synthetic fixtures. OCR, local model downloads, large-corpus evaluation, and load generation are excluded. Tiny correctness checks do not establish the acceptance document's performance targets.
+The laptop has 16 GiB RAM. The user reduced the initial 2.25 GiB service budget to a hard 1.5 GB maximum. Limits now total 1,408 MiB (1.476 GB): MongoDB 576 MiB, Neo4j 512 MiB, Qdrant 192 MiB, and S3 128 MiB. Swap is disabled. The smoke runner checks both Compose and running Docker limits and rejects an over-budget configuration. CPU limits total 2.5 cores, image pulls are serial, published ports bind to loopback, and inputs use generated private credentials and synthetic fixtures. OCR, local model downloads, large-corpus evaluation, and load generation are excluded. Tiny correctness checks do not establish the acceptance document's performance targets.
 
 Initial results before Docker cleanup:
 

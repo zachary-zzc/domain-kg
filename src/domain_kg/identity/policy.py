@@ -224,12 +224,18 @@ class Policy:
         material_id: UUID,
         *,
         include_excluded: bool = False,
+        session: AsyncClientSession | None = None,
     ) -> bool:
-        current = await self.revalidate(access)
+        current = await self.revalidate(access, session=session)
         if kg_id not in current.kg_ids:
             return False
         raw = await self.database.material_access.find_one(
-            {"org_id": str(current.org_id), "kg_id": str(kg_id), "id": str(uuid_value(material_id))}
+            {
+                "org_id": str(current.org_id),
+                "kg_id": str(kg_id),
+                "id": str(uuid_value(material_id)),
+            },
+            session=session,
         )
         if (
             raw is None
@@ -247,7 +253,8 @@ class Policy:
                 "issuer": current.principal.issuer,
                 "subject": current.principal.subject,
                 "suspended": False,
-            }
+            },
+            session=session,
         )
         return member is not None and (
             member["id"] in raw.get("member_ids", [])

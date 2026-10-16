@@ -29,6 +29,8 @@ from domain_kg.materials.models import MaterialMetadata as MaterialMetadata
 from domain_kg.materials.models import RemovalReceipt as RemovalReceipt
 from domain_kg.materials.models import RemoveMaterial as RemoveMaterial
 from domain_kg.materials.models import ReplaceMaterial as ReplaceMaterial
+from domain_kg.materials.models import UploadCommand as UploadCommand
+from domain_kg.materials.models import UploadReceipt as UploadReceipt
 from domain_kg.models import Namespace, ScopedRef
 from domain_kg.models import PageRequest as PageRequest
 from domain_kg.models import SourceVersion as SourceVersion

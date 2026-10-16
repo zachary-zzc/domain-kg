@@ -12,6 +12,7 @@ from uuid import UUID
 
 from neo4j import AsyncDriver
 from pydantic import ValidationError
+from pymongo.asynchronous.client_session import AsyncClientSession
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.errors import CollectionInvalid
 from qdrant_client import AsyncQdrantClient, models
@@ -160,20 +161,26 @@ class NamespaceRepository:
         if (reference.org_id, reference.kg_id) != (self.namespace.org_id, self.namespace.kg_id):
             raise inaccessible_reference()
 
-    async def _require(self, collection: str, reference: ScopedRef) -> dict[str, Any]:
+    async def _require(
+        self, collection: str, reference: ScopedRef, *, session: AsyncClientSession | None = None
+    ) -> dict[str, Any]:
         self._check_namespace(reference)
-        record = await self._database[collection].find_one(self._query(reference.id))
+        record = await self._database[collection].find_one(
+            self._query(reference.id), session=session
+        )
         if record is None:
             raise inaccessible_reference()
         return record
 
-    async def require_version(self, reference: ScopedRef) -> None:
+    async def require_version(
+        self, reference: ScopedRef, *, session: AsyncClientSession | None = None
+    ) -> None:
         # Follow the full source chain, including corruption of the version's owner.
-        raw = await self._require("material_versions", reference)
+        raw = await self._require("material_versions", reference, session=session)
         version = MaterialVersionRecord.model_validate(
             {key: value for key, value in raw.items() if key != "_id"}
         )
-        await self._require("materials", version.material)
+        await self._require("materials", version.material, session=session)
 
     async def get_material_version(self, reference: ScopedRef) -> MaterialVersionRecord | None:
         self._check_namespace(reference)
@@ -185,18 +192,20 @@ class NamespaceRepository:
             {key: value for key, value in raw.items() if key != "_id"}
         )
 
-    async def insert(self, record: CanonicalRecord) -> None:
+    async def insert(
+        self, record: CanonicalRecord, *, session: AsyncClientSession | None = None
+    ) -> None:
         if type(record) not in COLLECTIONS:
             raise TypeError("unsupported canonical record")
         self._check_namespace(record)
         record = type(record).model_validate(record)
         for _, collection, reference in _references(record):
-            await self._require(collection, reference)
+            await self._require(collection, reference, session=session)
             if collection == "material_versions":
-                await self.require_version(reference)
+                await self.require_version(reference, session=session)
         data = record.model_dump(mode="json")
         data["_id"] = f"{record.org_id}:{record.kg_id}:{record.id}"
-        await self._database[COLLECTIONS[type(record)]].insert_one(data)
+        await self._database[COLLECTIONS[type(record)]].insert_one(data, session=session)
 
     async def reconcile(self) -> list[IntegrityIssue]:
         issues: list[IntegrityIssue] = []

@@ -24,6 +24,8 @@ from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.policy import Policy
 from domain_kg.identity.repository import IdentityRepository
 from domain_kg.identity.routes import IdentityRuntime, identity_router
+from domain_kg.materials.routes import material_router
+from domain_kg.materials.service import MaterialService
 from domain_kg.settings import Settings
 from domain_kg.storage.router import KGStoreRouter
 
@@ -47,6 +49,7 @@ def create_app(
     http_client = None
     identity = None
     catalog = catalog_service
+    materials = None
     owns_catalog = False
     if settings.oidc_client_id:
         repository = identity_repository
@@ -67,6 +70,7 @@ def create_app(
                 policy, registry, KGStoreRouter(policy, registry, dimensions=1536)
             )
             owns_catalog = True
+        materials = MaterialService(catalog.policy, catalog.router)
     server: MCPServer[None] = MCPServer(
         "domain_kg_mcp",
         version="0.1.0",
@@ -108,6 +112,8 @@ def create_app(
                 await catalog.policy.initialize()
                 await catalog.registry.initialize()
                 await catalog.initialize()
+            if materials is not None:
+                await materials.initialize()
             async with server.session_manager.run():
                 yield
         finally:
@@ -121,6 +127,7 @@ def create_app(
     app = FastAPI(title="Domain KG", lifespan=lifespan)
     app.state.identity = identity
     app.state.catalog = catalog
+    app.state.materials = materials
 
     @app.exception_handler(DomainError)
     async def domain_error_handler(request: Request, error: DomainError) -> JSONResponse:
@@ -133,6 +140,9 @@ def create_app(
             ErrorCode.IDEMPOTENCY_CONFLICT: 409,
             ErrorCode.CURSOR_EXPIRED: 409,
             ErrorCode.POLICY_CHANGED: 409,
+            ErrorCode.QUOTA_EXCEEDED: 413,
+            ErrorCode.UNSUPPORTED_FORMAT: 415,
+            ErrorCode.EVIDENCE_VALIDATION_FAILED: 422,
         }.get(error.code, 503)
         headers = {"Cache-Control": "no-store"}
         if status == 401:
@@ -174,6 +184,8 @@ def create_app(
         app.include_router(identity_router(identity))
         if catalog is not None:
             app.include_router(catalog_router(identity, catalog))
+        if materials is not None:
+            app.include_router(material_router(identity, materials))
 
     @app.middleware("http")
     async def private_identity_responses(request: Request, call_next: Any) -> Any:

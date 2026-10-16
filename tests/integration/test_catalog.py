@@ -215,3 +215,25 @@ async def test_backend_registration_is_operator_only_and_preapproved(catalog, te
         RegisterBackend.model_validate(
             {"kind": "neo4j", "secret_ref": uuid4(), "dsn": "bolt://untrusted.example"}
         )
+
+
+async def test_approved_qdrant_connection_ignores_ambient_proxy(catalog, team, monkeypatch):
+    from domain_kg.identity.models import Action
+
+    _, registry, _, _ = catalog
+    _, policy, principals, _, _, _ = team
+    access = await policy.resolve_access(principals["owner"], [], Action.REGISTER_BACKEND)
+    record = next(item for item in await registry.list_backends(access) if item.kind == "qdrant")
+    connection = await registry.connection(record.backend_id, "qdrant")
+    for name in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ):
+        monkeypatch.setenv(name, "http://127.0.0.1:1")
+    for name in ("NO_PROXY", "no_proxy"):
+        monkeypatch.setenv(name, "")
+    assert (await registry.probe(record.backend_id, connection)).healthy

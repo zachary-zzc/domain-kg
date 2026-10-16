@@ -9,8 +9,8 @@ services:
     image: mongo:8.0.34@sha256:6657bf2413fefc5be649390318f5b4cd7328e982722f8ce2ac6dfa6f0a42cb03
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
     ports: ["127.0.0.1:27027:27017"]
-    mem_limit: 448m
-    memswap_limit: 448m
+    mem_limit: 576m
+    memswap_limit: 576m
     ulimits:
       nofile:
         soft: 64000
@@ -18,11 +18,9 @@ services:
     cpus: 0.75
     volumes: ["mongo-data:/data/db"]
     healthcheck:
-      test:
-        - CMD-SHELL
-        - >-
-          mongosh --quiet --eval 'try { quit(rs.status().myState === 1 ? 0 : 1) }
-          catch (e) { rs.initiate({_id:"rs0",members:[{_id:0,host:"mongo:27017"}]}); quit(1) }'
+      # A mongosh/Node process every five seconds shares this RAM cgroup and
+      # can OOM the database. Host-side init_replica_set.py verifies the primary.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/27017"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -32,13 +30,13 @@ services:
     ports: ["127.0.0.1:27687:7687", "127.0.0.1:27474:7474"]
     environment:
       NEO4J_AUTH: neo4j/${DOMAIN_KG_NEO4J_PASSWORD:?Run scripts/dev_env.py first}
-      NEO4J_server_memory_heap_initial__size: 256m
-      NEO4J_server_memory_heap_max__size: 256m
-      NEO4J_server_memory_pagecache_size: 64m
+      NEO4J_server_memory_heap_initial__size: 128m
+      NEO4J_server_memory_heap_max__size: 128m
+      NEO4J_server_memory_pagecache_size: 32m
       NEO4J_server_bolt_thread__pool__max__size: 8
       JAVA_TOOL_OPTIONS: -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=64m
-    mem_limit: 640m
-    memswap_limit: 640m
+    mem_limit: 512m
+    memswap_limit: 512m
     cpus: 1.0
     volumes: ["neo4j-data:/data"]
     healthcheck:

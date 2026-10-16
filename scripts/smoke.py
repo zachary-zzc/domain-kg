@@ -12,6 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVICES = ["mongo", "neo4j", "qdrant", "object-store"]
 MEMORY_BUDGET_BYTES = 1_500_000_000
 TASK_FILES = {
+    6: [
+        "tests/unit/test_smoke_budget.py",
+        "tests/integration/test_uploads.py",
+        "tests/integration/test_material_submission.py",
+        "tests/integration/test_identity.py::test_material_http_stream_is_private_and_uses_shared_service",
+    ],
     5: [
         "tests/unit/test_smoke_budget.py",
         "tests/integration/test_catalog.py",
@@ -165,6 +171,7 @@ def main() -> int:
             ],
             env,
         )
+        run(["uv", "run", "--locked", "--no-sync", "python", "scripts/init_replica_set.py"], env)
         check_memory_budget(running=True)
         options = ["--run-physical"] if args.task == 5 else []
         run(

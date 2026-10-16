@@ -14,6 +14,7 @@ async def install_identity_schema(database: AsyncDatabase[dict[str, Any]]) -> No
             "name": {"bsonType": "string", "minLength": 1},
             "policy_revision": {"bsonType": ["int", "long"], "minimum": 0},
             "active_admins": {"bsonType": ["int", "long"], "minimum": 1},
+            "material_epoch": {"bsonType": ["int", "long"], "minimum": 0},
         },
         "members": {
             "_id": identifier,
@@ -41,7 +42,7 @@ async def install_identity_schema(database: AsyncDatabase[dict[str, Any]]) -> No
         validator = {
             "$jsonSchema": {
                 "bsonType": "object",
-                "required": list(properties),
+                "required": [key for key in properties if key != "material_epoch"],
                 "properties": properties,
                 "additionalProperties": False,
             }

@@ -62,6 +62,7 @@ async def vectors(settings: Settings) -> AsyncIterator[AsyncQdrantClient]:
     client = AsyncQdrantClient(
         url=settings.qdrant_url,
         api_key=settings.qdrant_api_key.get_secret_value(),
+        trust_env=False,
         timeout=5,
     )
     try:
@@ -182,6 +183,29 @@ async def catalog(team, mongo_db, settings):
     try:
         yield service, registry, router, profile
     finally:
+        # Only this fixture's randomly allocated organization/profile can be
+        # removed. Repeated smoke runs must not accumulate per-KG collections.
+        owned = await mongo_db.kgs.find(
+            {
+                "org_id": str(org),
+                "storage_profile_id": str(profile.id),
+            }
+        ).to_list()
+        vector_client = router._vectors.get(profile.qdrant_id)
+        for kg in owned:
+            if vector_client is not None:
+                from uuid import UUID
+
+                collection = f"kg_{org.hex}_{UUID(kg['id']).hex}_{UUID(kg['generation']).hex}"
+                if await vector_client.collection_exists(collection):
+                    await vector_client.delete_collection(collection)
+        graph_driver = router._graphs.get(profile.neo4j_id)
+        if graph_driver is not None and owned:
+            await graph_driver.execute_query(
+                "MATCH (n {org_id:$org}) WHERE n.kg_id IN $kgs DETACH DELETE n",
+                org=str(org),
+                kgs=[kg["id"] for kg in owned],
+            )
         for connection in approved.values():
             if connection.kind == "s3":
                 from domain_kg.catalog.backends import s3_client
@@ -190,7 +214,66 @@ async def catalog(team, mongo_db, settings):
                 try:
                     names = [item["Name"] for item in client.list_buckets().get("Buckets", [])]
                     if connection.bucket in names:
+                        for page in client.get_paginator("list_objects_v2").paginate(
+                            Bucket=connection.bucket
+                        ):
+                            objects = [{"Key": item["Key"]} for item in page.get("Contents", [])]
+                            if objects:
+                                client.delete_objects(
+                                    Bucket=connection.bucket, Delete={"Objects": objects}
+                                )
                         client.delete_bucket(Bucket=connection.bucket)
                 finally:
                     client.close()
         await router.close()
+
+
+@pytest.fixture
+async def material_service(catalog, team):
+    from domain_kg.catalog.models import CreateKG
+    from domain_kg.identity.models import Action
+    from domain_kg.materials.service import MaterialService
+
+    catalog_service, _, router, profile = catalog
+    _, policy, principals, members, org, _ = team
+    creator = await policy.resolve_access(principals["owner"], [], Action.CREATE_KG)
+    kg = await catalog_service.create_kg(
+        creator,
+        CreateKG(
+            name="Materials",
+            domain_profile_id=catalog_service.general_profile_id,
+            placement_id=profile.id,
+            idempotency_key="materials-kg",
+        ),
+    )
+    for name, role in (("editor", "editor"), ("reader", "reader")):
+        access = await policy.resolve_access(principals["owner"], [kg.kg_id], Action.MANAGE_GRANTS)
+        await policy.set_grant(
+            access, kg.kg_id, "member", members[name].id, role, idempotency_key=f"material-{name}"
+        )
+    service = MaterialService(policy, router)
+    await service.initialize()
+    return service, kg.kg_id
+
+
+@pytest.fixture
+async def blob_store(catalog, team):
+    from domain_kg.catalog.models import CreateKG
+    from domain_kg.identity.models import Action
+    from domain_kg.storage.blobs import BlobStore
+
+    service, _, router, profile = catalog
+    _, policy, principals, _, org, _ = team
+    kg = await service.create_kg(
+        await policy.resolve_access(principals["owner"], [], Action.CREATE_KG),
+        CreateKG(
+            name="Blobs",
+            domain_profile_id=service.general_profile_id,
+            placement_id=profile.id,
+            idempotency_key="blob-kg",
+        ),
+    )
+    stores = await router.for_kg(
+        await policy.resolve_access(principals["owner"], [kg.kg_id], Action.READ), kg.kg_id
+    )
+    return BlobStore(stores.blobs), kg.kg_id, org

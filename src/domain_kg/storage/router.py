@@ -186,6 +186,7 @@ class KGStoreRouter:
                 self._vectors[profile.qdrant_id] = AsyncQdrantClient(
                     url=vector.endpoint,
                     api_key=vector.credential.get_secret_value(),
+                    trust_env=False,
                     timeout=5,
                     limits=httpx.Limits(max_connections=2, max_keepalive_connections=1),
                 )

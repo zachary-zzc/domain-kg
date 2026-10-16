@@ -478,3 +478,95 @@ async def test_identity_mongo_shape_constraints(mongo_db) -> None:
     )
     with pytest.raises(WriteError):
         await mongo_db.organizations.update_one({"_id": str(org)}, {"$set": {"active_admins": 0}})
+
+
+@pytest.mark.storage
+async def test_material_http_stream_is_private_and_uses_shared_service(
+    catalog, team, issuer_fixture
+):
+    import hashlib
+
+    from domain_kg.app import create_app
+    from domain_kg.settings import Settings
+
+    catalog_service, _, _, profile = catalog
+    identities, _, principals, _, _, _ = team
+    _, state, transport, sign = issuer_fixture
+    state["issuer"] = principals["owner"].issuer
+    async with httpx.AsyncClient(transport=transport) as oidc:
+        app = create_app(
+            Settings(
+                public_url="http://localhost:8000",
+                oidc_issuer=state["issuer"],
+                oidc_client_id="console",
+            ),
+            identity_repository=identities,
+            oidc_http_client=oidc,
+            catalog_service=catalog_service,
+        )
+        async with app.router.lifespan_context(app):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://localhost:8000"
+            ) as client:
+                owner_token = sign(
+                    {"sub": "owner", "scope": "domain_kg:read domain_kg:write domain_kg:admin"}
+                )
+                owner = {"Authorization": f"Bearer {owner_token}"}
+                reader = {"Authorization": f"Bearer {sign({'sub': 'reader'})}"}
+                kg = (
+                    await client.post(
+                        "/api/v1/kgs",
+                        headers=owner,
+                        json={
+                            "name": "Material HTTP",
+                            "domain_profile_id": str(catalog_service.general_profile_id),
+                            "placement_id": str(profile.id),
+                            "idempotency_key": "material-http",
+                        },
+                    )
+                ).json()["kg_id"]
+                base = f"/api/v1/kgs/{kg}"
+                data = b"  inert <script>text</script>\n"
+                query = {
+                    "media_type": "text/plain",
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "size_bytes": len(data),
+                    "idempotency_key": "upload",
+                }
+                headers = owner | {"Content-Type": "text/plain"}
+                assert (
+                    await client.post(
+                        base + "/uploads",
+                        headers=headers,
+                        params=query | {"object_key": "/etc/passwd"},
+                        content=data,
+                    )
+                ).status_code == 422
+                response = await client.post(
+                    base + "/uploads", headers=headers, params=query, content=data
+                )
+                assert response.status_code == 200, response.text
+                assert "object_id" not in response.text and "bucket" not in response.text
+                accepted = await client.post(
+                    base + "/materials",
+                    headers=owner,
+                    json={
+                        "kg_id": kg,
+                        "upload_id": response.json()["upload_id"],
+                        "title": "Private",
+                        "idempotency_key": "accept",
+                        "acl_mode": "restricted",
+                    },
+                )
+                assert accepted.status_code == 200, accepted.text
+                receipt = accepted.json()
+                path = (
+                    f"{base}/materials/{receipt['material_id']}"
+                    f"/versions/{receipt['version_id']}/original"
+                )
+                assert (await client.get(path, headers=reader)).status_code == 404
+                original = await client.get(path, headers=owner)
+                assert original.status_code == 200 and original.content == data
+                assert original.headers["content-type"] == "application/octet-stream"
+                assert original.headers["x-content-type-options"] == "nosniff"
+                assert original.headers["cache-control"] == "no-store"

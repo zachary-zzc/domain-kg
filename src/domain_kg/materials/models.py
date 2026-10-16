@@ -28,6 +28,23 @@ class BlobRef(BlobScope):
     media_type: str
 
 
+class UploadCommand(FrozenModel):
+    kg_id: UUID
+    media_type: Annotated[str, Field(min_length=1, max_length=150)]
+    sha256: SHA256
+    size_bytes: Annotated[int, Field(ge=1, le=50 * 1024 * 1024, strict=True)]
+    idempotency_key: IdempotencyKey
+    target_material_id: UUID | None = None
+
+
+class UploadReceipt(Namespace):
+    upload_id: UUID
+    sha256: SHA256
+    size_bytes: NonNegative
+    media_type: str
+    expires_at: UTCDateTime
+
+
 class MaterialMetadata(FrozenModel):
     material_id: UUID
     version_id: UUID
@@ -61,6 +78,15 @@ class AddMaterial(MaterialInput):
     idempotency_key: IdempotencyKey
     acl_mode: Literal["kg", "restricted"] = "kg"
     tags: tuple[str, ...] = ()
+    author: Annotated[str, Field(max_length=1000)] | None = None
+    source: Annotated[str, Field(max_length=4000)] | None = None
+    language: Annotated[str, Field(max_length=50)] | None = None
+
+    @model_validator(mode="after")
+    def bounded_tags(self) -> Self:
+        if len(self.tags) > 100 or any(not tag or len(tag) > 200 for tag in self.tags):
+            raise ValueError("provide at most 100 tags of 1 to 200 characters")
+        return self
 
 
 class ReplaceMaterial(AddMaterial):
