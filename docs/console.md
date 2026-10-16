@@ -2,8 +2,7 @@
 
 The session-bound shell at `/admin` uses the configured external OIDC login.
 It lists authorized KGs, accepted/retained materials, scoped search results and
-source/manual citations. Job, team, curation and operations screens are the next
-implementation steps. Navigation is connected as those services are verified. No local
+source/manual citations. Team, curation and operations screens are the next implementation steps. Navigation is connected as those services are verified. No local
 password or alternative identity provider is bundled.
 
 Current session membership and KG policy are checked before catalog access and
@@ -32,3 +31,13 @@ forms are hidden and forged submissions receive the same denial as the JSON API.
 The read/navigation/permission case and withdrawal-after-search race passed two
 real-store checks in 34.92 seconds. Editor upload/replacement/restoration workflows
 and the complete browser acceptance gate remain in progress.
+
+The job list filters each receipt through current source access before applying
+its visible page limit. Opaque cursors pin principal, policy, visibility and the
+published view. Job reads verify the canonical version's namespace and material
+ownership; missing or mismatched references fail with a consistency error.
+Editors can cancel/retry through the shared durable queue; readers cannot.
+Status refresh uses a local HTMX request with fresh authorization and clears the
+view on an error. There is no automatic background polling. The six-case job
+service/browser gate passed in 17.86 seconds; durable recovery and signed HTTP/MCP
+regression passed 14 cases in 53.58 seconds.

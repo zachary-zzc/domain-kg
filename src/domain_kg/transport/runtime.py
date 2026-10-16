@@ -10,6 +10,7 @@ from domain_kg.identity.material_grants import MaterialGrantManagement
 from domain_kg.identity.models import AccessContext, Action, Principal
 from domain_kg.identity.routes import IdentityRuntime
 from domain_kg.imports.service import Importer
+from domain_kg.jobs.inspection import JobInspection
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.materials.inspection import MaterialInspection
 from domain_kg.materials.lifecycle import MaterialLifecycle
@@ -31,6 +32,7 @@ class ServiceRuntime:
         self.identity, self.catalog = identity, catalog
         self.policy, self.materials, self.providers = catalog.policy, materials, providers
         self.queue = JobQueue(self.policy, catalog.router)
+        self.job_inspection = JobInspection(self.queue)
         self.inspection = MaterialInspection(self.queue)
         self.citations = CitationService(self.queue)
         self.lifecycle = MaterialLifecycle(materials, self.queue)

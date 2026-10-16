@@ -853,7 +853,12 @@ class JobQueue:
                     ErrorCode.PROJECTION_INCONSISTENT, "Curation job ownership differs."
                 )
             return raw
-        kg, material = UUID(raw["kg_id"]), UUID(raw["material_id"])
+        try:
+            kg, material = UUID(raw["kg_id"]), UUID(raw["material_id"])
+        except (ValueError, TypeError, KeyError):
+            raise DomainError(
+                ErrorCode.PROJECTION_INCONSISTENT, "The job source reference is invalid."
+            ) from None
         if not await self.policy.material_visible(current, kg, material, session=session):
             grant = next((grant.role for grant in current.grants if grant.kg_id == kg), None)
             actor = raw.get("actor", {})
@@ -869,6 +874,28 @@ class JobQueue:
                 is None
             ):
                 raise inaccessible_reference()
+        stores = await self.router.for_sources(current, kg)
+        try:
+            reference = ScopedRef(org_id=current.org_id, kg_id=kg, id=UUID(raw["target_id"]))
+            version = await stores.authority._require(
+                "material_versions", reference, session=session
+            )
+            await stores.authority.require_version(reference, session=session)
+            expected = ScopedRef(org_id=current.org_id, kg_id=kg, id=material)
+            if version["material"] != expected.model_dump(mode="json"):
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "The job source ownership differs."
+                )
+        except (ValueError, TypeError, KeyError, ValidationError):
+            raise DomainError(
+                ErrorCode.PROJECTION_INCONSISTENT, "The job source reference is invalid."
+            ) from None
+        except DomainError as error:
+            if error.code == ErrorCode.RESOURCE_NOT_ACCESSIBLE:
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "The job source ownership differs."
+                ) from None
+            raise
         return raw
 
     async def get(self, access: AccessContext, identifier: UUID) -> JobReceipt:

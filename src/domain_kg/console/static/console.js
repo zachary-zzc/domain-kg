@@ -6,3 +6,7 @@ window.addEventListener("pageshow", function(event) {
 window.addEventListener("pagehide", function() {
   document.documentElement.classList.add("leaving");
 });
+document.addEventListener("htmx:responseError", function() {
+  document.documentElement.classList.add("leaving");
+  window.location.assign("/admin");
+});
