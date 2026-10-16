@@ -46,6 +46,11 @@ class BlobStore:
 
     @staticmethod
     def _check_type(media_type: str, prefix: bytes) -> None:
+        if media_type == "application/msword":
+            raise DomainError(
+                ErrorCode.UNSUPPORTED_FORMAT,
+                "Export legacy Word documents as DOCX or PDF before uploading.",
+            )
         if media_type in TEXT_TYPES:
             if b"\x00" in prefix or prefix.startswith((b"%PDF-", b"PK\x03\x04")):
                 raise DomainError(ErrorCode.UNSUPPORTED_FORMAT, "Content does not match its type.")

@@ -14,7 +14,9 @@ from domain_kg.identity.models import Action as Action
 from domain_kg.identity.models import Principal as Principal
 from domain_kg.imports.models import ImportPlan as ImportPlan
 from domain_kg.imports.models import ImportSource as ImportSource
+from domain_kg.ingestion.models import ChunkConfig as ChunkConfig
 from domain_kg.ingestion.models import ExtractionBatch as ExtractionBatch
+from domain_kg.ingestion.models import ParsedBlock as ParsedBlock
 from domain_kg.ingestion.models import ParsedChunk as ParsedChunk
 from domain_kg.ingestion.models import ParsedDocument as ParsedDocument
 from domain_kg.ingestion.models import ParseOptions as ParseOptions

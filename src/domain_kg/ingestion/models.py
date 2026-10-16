@@ -26,6 +26,17 @@ class ParseOptions(FrozenModel):
         return self
 
 
+class ChunkConfig(FrozenModel):
+    target_tokens: Annotated[int, Field(ge=1, le=700, strict=True)] = 700
+    overlap_tokens: Annotated[int, Field(ge=0, le=100, strict=True)] = 100
+
+    @model_validator(mode="after")
+    def bounded_overlap(self) -> Self:
+        if self.overlap_tokens >= self.target_tokens:
+            raise ValueError("overlap must be smaller than chunk size")
+        return self
+
+
 class SourceLocation(FrozenModel):
     kind: Literal["pdf", "docx", "text", "html", "csv", "json"]
     block_id: UUID
@@ -70,19 +81,46 @@ class ParsedChunk(SourceVersion):
     chunker_version: str
 
 
+class ParsedBlock(SourceVersion):
+    id: UUID
+    text: PreservedText
+    location: SourceLocation
+
+    @model_validator(mode="after")
+    def block_location(self) -> Self:
+        if self.id != self.location.block_id:
+            raise ValueError("block location identity must match the block")
+        return self
+
+
 class ParsedDocument(FrozenModel):
     blob: BlobRef
-    chunks: tuple[ParsedChunk, ...]
+    chunks: tuple[ParsedChunk, ...] = ()
+    blocks: Annotated[tuple[ParsedBlock, ...], Field(max_length=100000)] = ()
+    parser_version: str = "legacy"
     warnings: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def scoped_chunks(self) -> Self:
-        for chunk in self.chunks:
+        for chunk in (*self.chunks, *self.blocks):
             if any(
                 getattr(chunk, field) != getattr(self.blob, field)
                 for field in ("org_id", "kg_id", "material_id", "version_id")
             ):
                 raise ValueError("parsed chunks must belong to the original blob")
+        blocks = {block.id: block for block in self.blocks}
+        if len(blocks) != len(self.blocks):
+            raise ValueError("source block IDs must be unique")
+        if blocks:
+            for chunk in self.chunks:
+                for span in chunk.spans:
+                    block = blocks.get(span.location.block_id)
+                    if (
+                        block is None
+                        or span.location != block.location
+                        or (block.text[span.start : span.end] != span.quote)
+                    ):
+                        raise ValueError("chunk spans must match their immutable source blocks")
         return self
 
 
