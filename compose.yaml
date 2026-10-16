@@ -17,8 +17,8 @@ services:
       - --setParameter
       - tcmallocReleaseRate=10485760
     ports: ["127.0.0.1:27027:27017"]
-    mem_limit: 576m
-    memswap_limit: 576m
+    mem_limit: 512m
+    memswap_limit: 512m
     ulimits:
       nofile:
         soft: 64000
@@ -68,15 +68,16 @@ services:
 
   object-store:
     image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
-    command: ["mini", "-dir=/data", "-ip=127.0.0.1", "-volume.max=4", "-master.volumeSizeLimitMB=64", "-webdav=false", "-admin.ui=false", "-master.telemetry=false"]
+    command: ["mini", "-dir=/data", "-ip=127.0.0.1", "-volume.max=8", "-master.volumeSizeLimitMB=64", "-webdav=false", "-admin.ui=false", "-master.telemetry=false", "-s3.readerCacheSizeMB=8", "-s3.cacheCapacityMB=0", "-filer.maxMB=1"]
     ports: ["127.0.0.1:29000:8333"]
     environment:
       AWS_ACCESS_KEY_ID: domain-kg-dev
       AWS_SECRET_ACCESS_KEY: ${DOMAIN_KG_S3_SECRET_KEY:?Run scripts/dev_env.py first}
       GOMEMLIMIT: 96MiB
+      GOGC: "50"
       GOMAXPROCS: "1"
-    mem_limit: 128m
-    memswap_limit: 128m
+    mem_limit: 192m
+    memswap_limit: 192m
     cpus: 0.25
     volumes: ["object-data:/data"]
     healthcheck:

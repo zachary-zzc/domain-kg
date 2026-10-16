@@ -232,7 +232,7 @@ class MaterialService:
         return await self._submit(access, ReplaceMaterial.model_validate(command), Action.REPLACE)
 
     async def _submit(
-        self, access: AccessContext, command: AddMaterial, action: Action
+        self, access: AccessContext, command: AddMaterial | ReplaceMaterial, action: Action
     ) -> IngestReceipt:
         current = await self._access(access, command.kg_id, action)
         stores = await self.router.for_kg(current, command.kg_id)

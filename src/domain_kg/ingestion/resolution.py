@@ -214,7 +214,18 @@ class ResolutionService:
                 spans=spans,
                 confidence=assertion.confidence,
             )
-            assertions.append(ResolvedAssertion(assertion=fact, support=support))
+            observations = {
+                proposal.local_id: item
+                for proposal, item in zip(batch.entities, entities, strict=True)
+            }
+            assertions.append(
+                ResolvedAssertion(
+                    assertion=fact,
+                    support=support,
+                    subject_observation_id=observations[assertion.subject].id,
+                    target_observation_id=observations[assertion.target].id,
+                )
+            )
         result = ResolvedBatch(
             **namespace,
             material_id=batch.material_id,

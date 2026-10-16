@@ -80,6 +80,8 @@ class ResolvedDocument(SourceVersion):
 class ResolvedAssertion(FrozenModel):
     assertion: AssertionRecord
     support: SupportRecord
+    subject_observation_id: UUID | None = None
+    target_observation_id: UUID | None = None
 
     @model_validator(mode="after")
     def assertion_support(self) -> Self:

@@ -1,6 +1,6 @@
 """Owner-selected approved profiles with current material policy at every call."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import httpx
@@ -13,10 +13,13 @@ from domain_kg.identity.policy import Policy
 from domain_kg.ingestion.extraction import Extractor
 from domain_kg.ingestion.models import ExtractionBatch, ParsedChunk
 from domain_kg.materials.repository import MaterialRepository
-from domain_kg.models import IdempotencyKey, Namespace, NonNegative
+from domain_kg.models import IdempotencyKey, Namespace, NonNegative, SourceVersion
 from domain_kg.providers.extraction import ExtractionClient, Usage
 from domain_kg.providers.profiles import ProviderRegistry
 from domain_kg.storage.router import KGStoreRouter
+
+if TYPE_CHECKING:
+    from domain_kg.providers.embeddings import EmbeddingProfile
 
 
 class ProviderService:
@@ -145,6 +148,92 @@ class ProviderService:
                 ErrorCode.PROVIDER_UNAVAILABLE, "Select an approved provider profile."
             )
         return dict(selected)
+
+    async def embeddings(
+        self,
+        access: AccessContext,
+        namespace: Namespace,
+        texts: list[str],
+        *,
+        source: SourceVersion | None = None,
+    ) -> tuple["EmbeddingProfile", list[list[float]]]:
+        from domain_kg.providers.embeddings import EmbeddingClient, EmbeddingProfile
+
+        selected = await self.selected(access, namespace.kg_id)
+
+        async def authorize() -> None:
+            current = await self.policy.revalidate(access)
+            if namespace.org_id != current.org_id or namespace.kg_id not in current.kg_ids:
+                raise inaccessible_reference()
+            if await self.selected(current, namespace.kg_id) != selected:
+                raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider selection changed.")
+            restricted = False
+            if source is not None:
+                if (source.org_id, source.kg_id) != (namespace.org_id, namespace.kg_id):
+                    raise inaccessible_reference()
+                if not await self.policy.material_visible(
+                    current, source.kg_id, source.material_id
+                ):
+                    raise inaccessible_reference()
+                material = await self.database.material_access.find_one(
+                    {
+                        "org_id": str(source.org_id),
+                        "kg_id": str(source.kg_id),
+                        "id": str(source.material_id),
+                    }
+                )
+                if material is None:
+                    raise inaccessible_reference()
+                restricted = material["acl_mode"] == "restricted"
+            elif current.action not in (Action.READ, Action.SEARCH):
+                raise inaccessible_reference()
+            configured, _ = self.registry.resolve(
+                UUID(selected["profile_id"]), namespace, restricted=restricted
+            )
+            if configured.revision != selected["profile_revision"]:
+                raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider configuration changed.")
+
+        async def usage(value: Usage) -> None:
+            await self.database.provider_usage.update_one(
+                {
+                    "_id": f"{value.org_id}:{value.kg_id}:{value.profile_id}",
+                    "org_id": str(value.org_id),
+                    "kg_id": str(value.kg_id),
+                },
+                {
+                    "$inc": {
+                        "input_tokens": value.input_tokens,
+                        "embedding_input_tokens": value.input_tokens,
+                        "output_tokens": 0,
+                        "calls": 1,
+                        "embedding_calls": 1,
+                    }
+                },
+                upsert=True,
+            )
+
+        await authorize()
+        configured, connection = self.registry.resolve(
+            UUID(selected["profile_id"]), namespace, restricted=False
+        )
+        profile = EmbeddingProfile(
+            **namespace.model_dump(),
+            id=configured.id,
+            revision=configured.revision,
+            model=configured.embedding_model,
+            dimensions=configured.embedding_dimensions,
+        )
+        client = EmbeddingClient(
+            configured,
+            connection,
+            authorize=authorize,
+            record_usage=usage,
+            transport=self.transport,
+        )
+        try:
+            return profile, await client.embed(texts, profile)
+        finally:
+            await client.close()
 
     async def extract(
         self, access: AccessContext, chunk: ParsedChunk, schema: DomainSchema

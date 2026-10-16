@@ -2,7 +2,7 @@
 
 import asyncio
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
@@ -101,6 +101,9 @@ class BlobBinding:
     namespace: Namespace
     client: Any
     bucket: str
+    upload_slot: asyncio.Semaphore = field(
+        default_factory=lambda: asyncio.Semaphore(1), repr=False, compare=False
+    )
 
     async def get(self, reference: BlobRef) -> bytes:
         if (reference.org_id, reference.kg_id) != (self.namespace.org_id, self.namespace.kg_id):
@@ -148,6 +151,7 @@ class KGStoreRouter:
         self._graphs: dict[UUID, AsyncDriver] = {}
         self._vectors: dict[UUID, AsyncQdrantClient] = {}
         self._blobs: dict[UUID, Any] = {}
+        self._blob_uploads: dict[UUID, asyncio.Semaphore] = {}
         self._lock = asyncio.Lock()
 
     async def _bind(self, access: AccessContext, kg_id: UUID) -> RoutedStores:
@@ -192,6 +196,7 @@ class KGStoreRouter:
                 )
             if profile.object_store_id not in self._blobs:
                 self._blobs[profile.object_store_id] = s3_client(blob)
+                self._blob_uploads[profile.object_store_id] = asyncio.Semaphore(1)
         namespace = Namespace(org_id=current.org_id, kg_id=kg_id)
         generation = UUID(kg["generation"])
         return RoutedStores(
@@ -203,7 +208,12 @@ class KGStoreRouter:
                 self._vectors[profile.qdrant_id],
                 f"kg_{current.org_id.hex}_{kg_id.hex}_{generation.hex}",
             ),
-            blobs=BlobBinding(namespace, self._blobs[profile.object_store_id], blob.bucket),
+            blobs=BlobBinding(
+                namespace,
+                self._blobs[profile.object_store_id],
+                blob.bucket,
+                self._blob_uploads[profile.object_store_id],
+            ),
         )
 
     async def for_kg(self, access: AccessContext, kg_id: UUID) -> RoutedStores:
@@ -280,3 +290,4 @@ class KGStoreRouter:
         self._graphs.clear()
         self._vectors.clear()
         self._blobs.clear()
+        self._blob_uploads.clear()

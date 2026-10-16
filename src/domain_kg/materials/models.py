@@ -72,11 +72,10 @@ class MaterialInput(FrozenModel):
         return self
 
 
-class AddMaterial(MaterialInput):
+class MaterialSubmission(MaterialInput):
     kg_id: UUID
     title: Annotated[str, Field(min_length=1, max_length=1000)]
     idempotency_key: IdempotencyKey
-    acl_mode: Literal["kg", "restricted"] = "kg"
     tags: tuple[str, ...] = ()
     author: Annotated[str, Field(max_length=1000)] | None = None
     source: Annotated[str, Field(max_length=4000)] | None = None
@@ -89,7 +88,11 @@ class AddMaterial(MaterialInput):
         return self
 
 
-class ReplaceMaterial(AddMaterial):
+class AddMaterial(MaterialSubmission):
+    acl_mode: Literal["kg", "restricted"] = "kg"
+
+
+class ReplaceMaterial(MaterialSubmission):
     material_id: UUID
     expected_active_version: UUID
 

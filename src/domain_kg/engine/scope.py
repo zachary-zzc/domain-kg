@@ -132,6 +132,22 @@ class ScopePredicates:
                 for source in self.scope.visible_sources
             ],
             "curation_ids": [str(curation.id) for curation in self.scope.visible_curations],
+            "accepted_projections": [
+                {
+                    "material_id": str(binding.source.material_id) if binding.source else None,
+                    "source_version_id": str(binding.source.version_id) if binding.source else None,
+                    "curation_revision_id": str(binding.curation.id) if binding.curation else None,
+                    "attempt_id": str(binding.attempt_id),
+                    "manifest_id": str(binding.manifest_id),
+                    "manifest_hash": binding.content_hash,
+                }
+                for binding in self.scope.view.projections
+                if (
+                    binding.source in self.scope.visible_sources
+                    if binding.source
+                    else binding.curation in self.scope.visible_curations
+                )
+            ],
         }
 
     @property
@@ -139,19 +155,32 @@ class ScopePredicates:
         def equal(key: str, value: UUID | str) -> models.FieldCondition:
             return models.FieldCondition(key=key, match=models.MatchValue(value=str(value)))
 
-        alternatives = [
-            models.Filter(
-                must=[
-                    equal("material_id", source.material_id),
-                    equal("source_version_id", source.version_id),
-                ]
+        alternatives = []
+        for binding in self.scope.view.projections:
+            ownership = []
+            if binding.source is not None:
+                if binding.source not in self.scope.visible_sources:
+                    continue
+                ownership.extend(
+                    [
+                        equal("material_id", binding.source.material_id),
+                        equal("source_version_id", binding.source.version_id),
+                    ]
+                )
+            if binding.curation is not None:
+                if binding.curation not in self.scope.visible_curations:
+                    continue
+                ownership.append(equal("curation_revision_id", binding.curation.id))
+            alternatives.append(
+                models.Filter(
+                    must=[
+                        *ownership,
+                        equal("attempt_id", binding.attempt_id),
+                        equal("manifest_id", binding.manifest_id),
+                        equal("manifest_hash", binding.content_hash),
+                    ]
+                )
             )
-            for source in self.scope.visible_sources
-        ]
-        alternatives.extend(
-            models.Filter(must=[equal("curation_revision_id", ref.id)])
-            for ref in self.scope.visible_curations
-        )
         # An impossible UUID payload predicate implements an empty eligible set;
         # omitting an empty should-clause could otherwise broaden the query.
         eligible = (

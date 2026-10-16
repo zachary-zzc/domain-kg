@@ -115,24 +115,36 @@ class BlobStore:
             )
             spool.seek(0)
             try:
-                if size > 5 * 1024 * 1024:
-                    await asyncio.to_thread(self._multipart, spool, key, reference)
-                else:
-                    await asyncio.to_thread(
-                        self.binding.client.put_object,
-                        Bucket=self.binding.bucket,
-                        Key=key,
-                        Body=spool,
-                        ContentLength=size,
-                        ContentType=media_type,
-                        IfNoneMatch="*",
-                        Metadata={"sha256": expected_hash},
+                async with self.binding.upload_slot:
+                    write = asyncio.create_task(
+                        asyncio.to_thread(self._store, spool, key, reference)
                     )
+                    try:
+                        await asyncio.shield(write)
+                    except asyncio.CancelledError:
+                        # Cancellation does not stop a synchronous SDK thread. Keep its
+                        # spool and backend budget alive until the bounded I/O finishes.
+                        await asyncio.gather(write, return_exceptions=True)
+                        raise
             except (ClientError, BotoCoreError) as exc:
                 raise DomainError(
                     ErrorCode.BACKEND_UNAVAILABLE, "Original could not be stored.", retryable=True
                 ) from exc
         return reference
+
+    def _store(self, spool: SpooledTemporaryFile[bytes], key: str, reference: BlobRef) -> None:
+        if reference.size_bytes > 5 * 1024 * 1024:
+            self._multipart(spool, key, reference)
+        else:
+            self.binding.client.put_object(
+                Bucket=self.binding.bucket,
+                Key=key,
+                Body=spool,
+                ContentLength=reference.size_bytes,
+                ContentType=reference.media_type,
+                IfNoneMatch="*",
+                Metadata={"sha256": reference.sha256},
+            )
 
     def _multipart(self, spool: SpooledTemporaryFile[bytes], key: str, reference: BlobRef) -> None:
         client, bucket = self.binding.client, self.binding.bucket

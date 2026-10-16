@@ -31,7 +31,7 @@ Docker storage was emptied at the user's explicit request: images, containers, v
 python3 scripts/smoke.py --task 1
 ```
 
-The four services have hard limits of MongoDB 576 MiB, Neo4j 512 MiB, Qdrant 192 MiB, and S3 128 MiB: 1,408 MiB (1.476 GB) combined, below the user's 1.5 GB RAM cap. Swap is disabled. The runner rejects unbounded RAM, swap allowance, or an over-budget total, and verifies the running Docker limits before tests. CPU limits total 2.5 cores; image pulls run serially.
+The four services have hard limits of MongoDB 512 MiB, Neo4j 512 MiB, Qdrant 192 MiB, and S3 192 MiB: 1,408 MiB (1.476 GB) combined, below the user's 1.5 GB RAM cap. Swap is disabled. The runner rejects unbounded RAM, swap allowance, or an over-budget total, and verifies the running Docker limits before tests. CPU limits total 2.5 cores; image pulls run serially.
 
 The runner stops services it started after the test; `--keep-services` keeps them running for inspection. It retains volumes and never prunes images during ordinary smoke runs. Existing running services are left running. Credentials live in ignored `.env`, generated with restrictive file permissions.
 

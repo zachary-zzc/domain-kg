@@ -201,7 +201,27 @@ def test_read_scope_rejects_unaccepted_sources_and_is_immutable() -> None:
     source = SourceVersion(org_id=org, kg_id=kg, material_id=uuid4(), version_id=uuid4())
     principal = Principal(issuer="https://idp.example", subject="reader", scopes=["domain_kg:read"])
     access = AccessContext(principal=principal, org_id=org, kg_ids=[kg], policy_revision=1)
-    view = PublishedView(org_id=org, kg_id=kg, revision=1, generation=uuid4(), sources=[source])
+    from domain_kg.revisions.projections import AcceptedProjection
+
+    generation = uuid4()
+    binding = AcceptedProjection(
+        org_id=org,
+        kg_id=kg,
+        source=source,
+        generation=generation,
+        attempt_id=uuid4(),
+        manifest_id=uuid4(),
+        content_hash="a" * 64,
+        chunk_artifact_id=uuid4(),
+    )
+    view = PublishedView(
+        org_id=org,
+        kg_id=kg,
+        revision=1,
+        generation=generation,
+        sources=[source],
+        projections=[binding],
+    )
     scope = ReadScope(access=access, view=view, visible_sources=[source], visibility_revision=1)
     with pytest.raises(ValidationError):
         scope.visibility_revision = 2
@@ -286,4 +306,19 @@ def test_readiness_receipts_bind_exact_attempt_and_required_backends() -> None:
             batch=batch,
             receipts=[receipts[0].model_copy(update={"attempt_id": uuid4()})],
             ready=False,
+        )
+
+
+def test_replacement_cannot_change_material_grants() -> None:
+    from domain_kg.materials.models import ReplaceMaterial
+
+    with pytest.raises(ValidationError):
+        ReplaceMaterial(
+            kg_id=uuid4(),
+            material_id=uuid4(),
+            expected_active_version=uuid4(),
+            title="Replacement",
+            inline_text="Source",
+            idempotency_key="replace",
+            acl_mode="kg",
         )

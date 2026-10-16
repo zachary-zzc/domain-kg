@@ -27,6 +27,7 @@ from domain_kg.materials.models import BlobRef, BlobScope
 from domain_kg.materials.repository import MaterialRepository
 from domain_kg.models import SHA256, ScopedRef
 from domain_kg.storage.blobs import BlobStore
+from domain_kg.storage.integrity import NamespaceRepository
 from domain_kg.storage.router import KGStoreRouter
 
 TERMINAL = ("ready", "ready_with_warnings", "cancelled", "failed")
@@ -65,6 +66,7 @@ class JobQueue:
         self.policy, self.router, self.database = policy, router, policy.database
         self.lease_seconds, self.max_attempts = lease_seconds, max_attempts
         self.transactions = MaterialRepository(policy)
+        self._authorities: dict[tuple[UUID, UUID], NamespaceRepository] = {}
 
     async def initialize(self) -> None:
         await self.transactions.initialize()
@@ -138,12 +140,13 @@ class JobQueue:
             job_id=raw["id"],
             stage=raw["stage"],
             progress=raw.get("progress", 0),
-            warnings=(raw["error_code"],) if raw.get("error_code") else (),
+            warnings=tuple(raw.get("warnings", ()))
+            + ((raw["error_code"],) if raw.get("error_code") else ()),
         )
 
     @staticmethod
     def _action(kind: str) -> Action:
-        if kind not in ("ingest", "replace"):
+        if kind not in ("ingest", "replace", "repair"):
             raise DomainError(
                 ErrorCode.VALIDATION_ERROR, "This job kind has no configured handler."
             )
@@ -154,13 +157,35 @@ class JobQueue:
     ) -> UUID:
         if command.org_id != access.org_id or command.kg_id not in access.kg_ids:
             raise inaccessible_reference()
-        stores = await self.router.for_kg(access, command.kg_id)
+        key = (command.org_id, command.kg_id)
+        if session is None:
+            stores = await self.router.for_kg(access, command.kg_id)
+            self._authorities[key] = stores.authority
+        authority = self._authorities.get(key)
+        if authority is None:
+            raise DomainError(
+                ErrorCode.REVISION_NOT_READY, "Bind the source before opening a transaction."
+            )
         reference = ScopedRef(org_id=command.org_id, kg_id=command.kg_id, id=command.target_id)
-        raw = await stores.authority._require("material_versions", reference, session=session)
-        await stores.authority.require_version(reference, session=session)
+        raw = await authority._require("material_versions", reference, session=session)
+        await authority.require_version(reference, session=session)
         material = UUID(raw["material"]["id"])
         if not await self.policy.material_visible(access, command.kg_id, material, session=session):
             raise inaccessible_reference()
+        if command.kind == "repair":
+            active = await self.database.material_access.find_one(
+                {
+                    "org_id": str(command.org_id),
+                    "kg_id": str(command.kg_id),
+                    "id": str(material),
+                    "active_version_id": str(command.target_id),
+                },
+                session=session,
+            )
+            if active is None:
+                raise DomainError(
+                    ErrorCode.VERSION_CONFLICT, "Only the current accepted source can be repaired."
+                )
         return material
 
     async def enqueue(self, access: AccessContext, command: JobCommand) -> JobReceipt:
@@ -197,6 +222,29 @@ class JobQueue:
                 "created_at": now(),
                 "expected_active_version": None,
             }
+            if command.kind == "repair":
+                kg = await self.database.kgs.find_one(
+                    {"org_id": str(command.org_id), "id": str(command.kg_id)}, session=session
+                )
+                binding = await self.database.publication_bindings.find_one(
+                    {
+                        "org_id": str(command.org_id),
+                        "kg_id": str(command.kg_id),
+                        "view_manifest_id": kg.get("published_manifest_id") if kg else None,
+                        "owner_key": f"source:{material}",
+                    },
+                    session=session,
+                )
+                if binding is None or binding["binding"]["source"]["version_id"] != str(
+                    command.target_id
+                ):
+                    raise DomainError(
+                        ErrorCode.VERSION_CONFLICT, "The accepted source mapping changed."
+                    )
+                raw.update(
+                    expected_active_version=str(command.target_id),
+                    repair_parent_manifest_id=binding["binding"]["manifest_id"],
+                )
             await self.database.jobs.insert_one(raw, session=session)
             await self.database.outbox.insert_one(
                 self._scope(command)
@@ -213,13 +261,19 @@ class JobQueue:
         await self._source(current, command)
         return receipt
 
-    async def claim(self, worker_id: str) -> LeasedJob | None:
+    async def claim(
+        self, worker_id: str, *, kinds: tuple[str, ...] | None = None
+    ) -> LeasedJob | None:
         if not isinstance(worker_id, str) or not worker_id or len(worker_id) > 100:
             raise ValueError("invalid worker identifier")
+        allowed = kinds if kinds is not None else ("ingest", "replace", "repair")
+        if not allowed or not set(allowed).issubset({"ingest", "replace", "repair"}):
+            raise ValueError("job kinds require a configured handler")
         # Expired leases at the bound become explicit terminal failures; no
         # unbounded polling or accidental fourth attempt after worker death.
         await self.database.jobs.update_many(
             {
+                "kind": {"$in": list(allowed)},
                 "stage": {"$nin": TERMINAL},
                 "attempts": {"$gte": self.max_attempts},
                 "lease_until": {"$lte": now()},
@@ -228,6 +282,7 @@ class JobQueue:
         )
         raw = await self.database.jobs.find_one_and_update(
             {
+                "kind": {"$in": list(allowed)},
                 "attempts": {"$lt": self.max_attempts},
                 "$or": [
                     {
@@ -318,6 +373,21 @@ class JobQueue:
         )
         if raw is None:
             raise lease_conflict()
+        await self.database.kgs.update_one(
+            {
+                "org_id": str(job.org_id),
+                "id": str(job.kg_id),
+                "publication_lease.job_id": str(job.id),
+                "publication_lease.job_lease_token": str(job.lease_token),
+                "publication_lease.attempt_id": str(job.attempt_id),
+                "publication_lease.lease_until": {"$gt": now()},
+            },
+            {
+                "$set": {
+                    "publication_lease.lease_until": now() + timedelta(seconds=self.lease_seconds)
+                }
+            },
+        )
         return self._lease(raw)
 
     async def store_artifact(
@@ -503,6 +573,10 @@ class JobQueue:
             raise lease_conflict()
 
     async def finish(self, job: LeasedJob) -> None:
+        if await self.accepted(job):
+            return
+        await self.authorize(job)
+
         async def commit(session: AsyncClientSession) -> None:
             await self.authorize(job, session)
             raw = await self._current(job, session)
@@ -544,6 +618,42 @@ class JobQueue:
                 raise lease_conflict()
 
         await self.transactions.transaction(commit)
+
+    async def accepted(self, job: LeasedJob) -> bool:
+        raw = await self.database.jobs.find_one(
+            self._scope(job)
+            | {
+                "lease_token": str(job.lease_token),
+                "attempt_id": str(job.attempt_id),
+                "fence": job.fence,
+                "stage": {"$in": ["ready", "ready_with_warnings"]},
+            }
+        )
+        if raw is None:
+            return False
+        access = await self.policy.resolve_access(
+            Principal.model_validate(raw["actor"]),
+            [job.kg_id],
+            self._action(job.kind),
+            org_id=job.org_id,
+        )
+        if not await self.policy.material_visible(access, job.kg_id, UUID(raw["material_id"])):
+            raise inaccessible_reference()
+        manifest = await self.database.publication_manifests.find_one(
+            {
+                "org_id": str(job.org_id),
+                "kg_id": str(job.kg_id),
+                "id": raw.get("accepted_manifest_id"),
+                "job_id": str(job.id),
+                "attempt_id": str(job.attempt_id),
+                "state": "accepted",
+            }
+        )
+        if manifest is None:
+            raise DomainError(
+                ErrorCode.PROJECTION_INCONSISTENT, "The job acceptance marker is missing."
+            )
+        return True
 
     async def _visible_job(
         self,
@@ -646,6 +756,8 @@ class JobQueue:
         return await self._control(access, identifier, idempotency_key, "retry")
 
     async def acquire_publication(self, job: LeasedJob) -> PublicationLease:
+        await self.authorize(job)
+
         async def acquire(session: AsyncClientSession) -> PublicationLease:
             access = await self.authorize(job, session)
             await self.transactions.fence(access, access.action, session)

@@ -16,6 +16,7 @@ from domain_kg.models import (
     SourceVersion,
 )
 from domain_kg.retrieval.models import SearchFilters
+from domain_kg.revisions.projections import AcceptedProjection
 
 Backend = Literal["graph", "vector", "lexical"]
 
@@ -37,15 +38,28 @@ class PublishedView(Namespace):
     sources: tuple[SourceVersion, ...] = ()
     curations: tuple[ScopedRef, ...] = ()
     receipts: tuple[ProjectionReceipt, ...] = ()
+    projections: tuple[AcceptedProjection, ...] = ()
 
     @model_validator(mode="after")
     def scoped_mappings(self) -> Self:
-        for reference in (*self.sources, *self.curations, *self.receipts):
+        for reference in (*self.sources, *self.curations, *self.receipts, *self.projections):
             if (reference.org_id, reference.kg_id) != (self.org_id, self.kg_id):
                 raise ValueError("published mappings must share their manifest namespace")
         material_ids = [source.material_id for source in self.sources]
         if len(material_ids) != len(set(material_ids)):
             raise ValueError("a published view has one active version per material")
+        bound_sources = [
+            binding.source
+            for binding in self.projections
+            if binding.source and not binding.curation
+        ]
+        bound_curations = [binding.curation for binding in self.projections if binding.curation]
+        if set(bound_sources) != set(self.sources) or set(bound_curations) != set(self.curations):
+            raise ValueError("accepted sources and curations require exact projection bindings")
+        if len(bound_sources) != len(self.sources) or len(bound_curations) != len(self.curations):
+            raise ValueError("duplicate accepted projection owner")
+        if any(binding.generation != self.generation for binding in self.projections):
+            raise ValueError("projection binding generation differs from its view")
         return self
 
 

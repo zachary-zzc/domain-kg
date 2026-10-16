@@ -47,7 +47,30 @@ async def test_immutable_eligible_scopes_and_visibility_rechecks(
                 },
             }
         )
-    view = PublishedView(org_id=org, kg_id=kg, revision=1, generation=uuid4(), sources=sources)
+    from domain_kg.revisions.projections import AcceptedProjection
+
+    generation = uuid4()
+    bindings = tuple(
+        AcceptedProjection(
+            org_id=org,
+            kg_id=kg,
+            source=source,
+            attempt_id=uuid4(),
+            manifest_id=uuid4(),
+            generation=generation,
+            content_hash="a" * 64,
+            chunk_artifact_id=uuid4(),
+        )
+        for source in sources
+    )
+    view = PublishedView(
+        org_id=org,
+        kg_id=kg,
+        revision=1,
+        generation=generation,
+        sources=sources,
+        projections=bindings,
+    )
 
     class Views:
         async def load(self, access, kg_id):
@@ -77,13 +100,16 @@ async def test_immutable_eligible_scopes_and_visibility_rechecks(
     )
     try:
         points = []
-        for source in sources:
+        for source, binding in zip(sources, bindings, strict=True):
             payload = {
                 "org_id": str(org),
                 "kg_id": str(kg),
                 "generation": str(view.generation),
                 "material_id": str(source.material_id),
                 "source_version_id": str(source.version_id),
+                "attempt_id": str(binding.attempt_id),
+                "manifest_id": str(binding.manifest_id),
+                "manifest_hash": binding.content_hash,
             }
             points.append(
                 models.PointStruct(id=str(uuid4()), vector=[1.0, 0.0, 0.0], payload=payload)
@@ -101,7 +127,9 @@ async def test_immutable_eligible_scopes_and_visibility_rechecks(
             rows, _, _ = await graph.execute_query(
                 "MATCH (n:PolicyScopeProbe {org_id:$org_id,kg_id:$kg_id,generation:$generation}) "
                 "WHERE ANY(p IN $source_pairs WHERE p.material_id=n.material_id "
-                "AND p.version_id=n.source_version_id) RETURN n.material_id AS id",
+                "AND p.version_id=n.source_version_id) AND ANY(p IN $accepted_projections WHERE "
+                "p.attempt_id=n.attempt_id AND p.manifest_id=n.manifest_id "
+                "AND p.manifest_hash=n.manifest_hash) RETURN n.material_id AS id",
                 **predicate.graph_parameters,
             )
             return len(found.points), len(rows)

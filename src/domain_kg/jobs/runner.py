@@ -15,17 +15,25 @@ class JobRunner:
     async def _steps(self, job: LeasedJob) -> None:
         if not self.pipeline.steps:
             self.pipeline.require_configured()
-        for step in self.pipeline.steps:
+        steps = self.pipeline.repair_steps if job.kind == "repair" else self.pipeline.steps
+        if not steps:
+            raise DomainError(
+                ErrorCode.PROVIDER_UNAVAILABLE, "This job pipeline is not configured."
+            )
+        for step in steps:
             await self.queue.authorize(job)
-            if await self.queue.load_checkpoint(job, step.stage, step.input_hash) is not None:
+            input_hash = await step.hash_for(job)
+            if await self.queue.load_checkpoint(job, step.stage, input_hash) is not None:
                 continue
             async with asyncio.timeout(step.timeout_seconds):
                 checkpoint = await step.execute(job)
-            if checkpoint.stage != step.stage or checkpoint.input_hash != step.input_hash:
+            if checkpoint.stage != step.stage or checkpoint.input_hash != input_hash:
                 raise DomainError(
                     ErrorCode.EVIDENCE_VALIDATION_FAILED,
                     "Pipeline output does not match its configured step.",
                 )
+            if await self.queue.accepted(job):
+                return
             await self.queue.authorize(job)
             await self.queue.checkpoint(job, checkpoint)
 

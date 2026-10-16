@@ -1,6 +1,9 @@
 """Tiny real-store fixtures. No shared application state or corpus data."""
 
+import fcntl
+import os
 from collections.abc import AsyncIterator
+from tempfile import gettempdir
 from uuid import uuid4
 
 import pytest
@@ -37,17 +40,26 @@ def settings() -> Settings:
 
 @pytest.fixture(scope="session")
 def mongo_database_name():
-    # Reuse only schema/index definitions. All synthetic documents are cleared
-    # between cases; each run and each parallel pytest worker gets its own DB.
-    name = f"domain_kg_smoke_{uuid4().hex}"
-    yield name
-    client = MongoClient(
-        Settings().mongo_uri.get_secret_value(), serverSelectionTimeoutMS=5000, maxPoolSize=2
-    )
-    try:
-        client.drop_database(name)
-    finally:
-        client.close()
+    # Server fixture auth and the 1.5 GB budget are shared across pytest processes.
+    # Serialize local-store suites; each process still owns an independent namespace.
+    lock_path = os.path.join(gettempdir(), f"domain-kg-smoke-{os.getuid()}.lock")
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "a+") as store_lock:
+        fcntl.flock(store_lock, fcntl.LOCK_EX)
+        # Reuse schema definitions only; clear every synthetic document between cases.
+        name = f"domain_kg_smoke_{uuid4().hex}"
+        try:
+            yield name
+        finally:
+            client = MongoClient(
+                Settings().mongo_uri.get_secret_value(),
+                serverSelectionTimeoutMS=5000,
+                maxPoolSize=2,
+            )
+            try:
+                client.drop_database(name)
+            finally:
+                client.close()
 
 
 @pytest.fixture

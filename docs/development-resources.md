@@ -1,6 +1,6 @@
 # Laptop resource limits
 
-The smoke stack has a combined hard container RAM limit of 1,408 MiB (1.476 GB): MongoDB 576 MiB, Neo4j 512 MiB, Qdrant 192 MiB, and S3 128 MiB. Container swap is disabled. CPU limits total 2.5 cores. These limits apply to the services; they do not change the laptop's system RAM or Colima VM configuration.
+The smoke stack has a combined hard container RAM limit of 1,408 MiB (1.476 GB): MongoDB 512 MiB, Neo4j 512 MiB, Qdrant 192 MiB, and S3 192 MiB. Container swap is disabled. CPU limits total 2.5 cores. These limits apply to the services; they do not change the laptop's system RAM or Colima VM configuration.
 
 Task 4's repeated disposable schema tests exposed MongoDB's inherited open-file ceiling: WiredTiger aborted with `Too many open files` during an index build. This was not an OOM event. The Mongo container now uses the [MongoDB-recommended open-file limit](https://www.mongodb.com/docs/v8.0/reference/ulimit/) of 64,000. Raising a descriptor ceiling does not reserve additional RAM; the then-current 448 MiB hard cap was unchanged. The existing volume recovered normally and the complete real-store suite passed after restart.
 
@@ -54,3 +54,23 @@ version check through the same bounded direct client used for data requests.
 Incompatible versions fail the capability check; compatibility checking is
 preserved. Tests reproduce ambient-proxy routing and verify both version and
 data traffic stay on the approved connection.
+
+Task 10's longer publication suite reached the S3 128 MiB cap at the upload
+boundary. The same total now assigns MongoDB 512 MiB and S3 192 MiB; observed
+warm Mongo usage was about 260 MiB with the allocator and schema changes above.
+S3 uses 1 MiB filer chunks, an 8 MiB reader-buffer budget, no persistent chunk
+cache, a 96 MiB Go memory goal and earlier garbage collection. The default
+[pinned reader cache](https://github.com/seaweedfs/seaweedfs/blob/4.48/weed/s3api/s3api_server.go)
+otherwise allows 256 downloader slots without a byte budget. Application writes
+share one writer slot per registered backend and keep it until synchronous SDK
+I/O finishes, including cancellation. Client multipart parts remain 5 MiB.
+The streamed 50 MiB boundary passed after these changes; sustained regression is
+verified separately rather than inferred from that one check.
+
+Seaweed mini persists nondefault CLI settings in `mini.options`. Removing a flag
+from Compose can restore its saved value on restart; inspect only the relevant
+nonsecret keys when troubleshooting. Trial concurrency gates were removed from
+that saved configuration after preserving a backup. These configuration changes
+do not delete bucket data. Eight lazy volume slots allow tests to continue while
+older abandoned fixture buckets are preserved pending explicit cleanup approval.
+Additional slots do not reserve RAM or eagerly allocate eight full data files.

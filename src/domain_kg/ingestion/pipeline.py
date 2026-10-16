@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from domain_kg.ingestion.models import ChunkConfig, ParseOptions
     from domain_kg.jobs.queue import JobQueue
     from domain_kg.providers.service import ProviderService
+    from domain_kg.revisions.publication import ProjectionCoordinator
 
 
 @dataclass(frozen=True)
@@ -23,21 +24,34 @@ class PipelineStep:
     input_hash: str
     execute: Callable[[LeasedJob], Awaitable[Checkpoint]]
     timeout_seconds: int = 120
+    input_hash_for: Callable[[LeasedJob], Awaitable[str]] | None = None
 
     def __post_init__(self) -> None:
         TypeAdapter(SHA256).validate_python(self.input_hash)
         if self.stage not in STAGES or not 1 <= self.timeout_seconds <= 300:
             raise ValueError("invalid bounded pipeline step")
 
+    async def hash_for(self, job: LeasedJob) -> str:
+        value = await self.input_hash_for(job) if self.input_hash_for else self.input_hash
+        return str(TypeAdapter(SHA256).validate_python(value))
+
 
 @dataclass(frozen=True)
 class Pipeline:
     steps: tuple[PipelineStep, ...] = ()
+    repair_steps: tuple[PipelineStep, ...] = ()
 
     def __post_init__(self) -> None:
         order = [STAGES.index(step.stage) for step in self.steps]
         if order != sorted(set(order)):
             raise ValueError("pipeline stages must be unique and ordered")
+        if self.repair_steps and tuple(step.stage for step in self.repair_steps) != (
+            "embedding",
+            "projecting",
+            "verifying",
+            "publishing",
+        ):
+            raise ValueError("repair uses only immutable artifact and publication stages")
 
     @property
     def configured(self) -> bool:
@@ -151,8 +165,32 @@ def extraction_steps(
         (extract_hash + "conservative-resolution-v1").encode()
     ).hexdigest()
 
+    async def current_extract_hash(job: LeasedJob) -> str:
+        access = await queue.authorize(job)
+        selected = await providers.selected(access, job.kg_id)
+        schema = await schema_for_kg(queue.policy, access, job.kg_id)
+        return hashlib.sha256(
+            (
+                extract_hash
+                + "/"
+                + str(selected["profile_id"])
+                + "/"
+                + str(selected["profile_revision"])
+                + "/"
+                + str(selected["revision"])
+                + "/"
+                + schema.model_dump_json()
+            ).encode()
+        ).hexdigest()
+
+    async def current_resolve_hash(job: LeasedJob) -> str:
+        return hashlib.sha256(
+            ((await current_extract_hash(job)) + resolve_hash).encode()
+        ).hexdigest()
+
     async def extract(job: LeasedJob) -> Checkpoint:
-        checkpoint = await queue.load_checkpoint(job, "chunking", chunk_step.input_hash)
+        wanted_hash = await current_extract_hash(job)
+        checkpoint = await queue.load_checkpoint(job, "chunking", await chunk_step.hash_for(job))
         if checkpoint is None:
             raise DomainError(ErrorCode.REVISION_NOT_READY, "Source chunks are not ready.")
         document = await source.read(job, checkpoint)
@@ -180,12 +218,15 @@ def extraction_steps(
             chunk_artifact_id=checkpoint.artifact_id,
             batches=tuple(batches),
         )
+        if await current_extract_hash(job) != wanted_hash:
+            raise DomainError(ErrorCode.VERSION_CONFLICT, "Extraction configuration changed.")
         return await queue.store_artifact(
-            job, "extracting", extract_hash, artifact.model_dump_json().encode()
+            job, "extracting", wanted_hash, artifact.model_dump_json().encode()
         )
 
     async def resolve(job: LeasedJob) -> Checkpoint:
-        checkpoint = await queue.load_checkpoint(job, "extracting", extract_hash)
+        wanted_hash = await current_resolve_hash(job)
+        checkpoint = await queue.load_checkpoint(job, "extracting", await current_extract_hash(job))
         if checkpoint is None:
             raise DomainError(ErrorCode.REVISION_NOT_READY, "Source extraction is not ready.")
         access = await queue.authorize(job)
@@ -223,13 +264,168 @@ def extraction_steps(
             extraction=artifact,
             batches=tuple(batches),
         )
+        if await current_resolve_hash(job) != wanted_hash:
+            raise DomainError(ErrorCode.VERSION_CONFLICT, "Extraction configuration changed.")
         return await queue.store_artifact(
-            job, "resolving", resolve_hash, resolved.model_dump_json().encode()
+            job, "resolving", wanted_hash, resolved.model_dump_json().encode()
         )
 
     return (
         PipelineStep(
-            stage="extracting", input_hash=extract_hash, execute=extract, timeout_seconds=300
+            stage="extracting",
+            input_hash=extract_hash,
+            execute=extract,
+            timeout_seconds=300,
+            input_hash_for=current_extract_hash,
         ),
-        PipelineStep(stage="resolving", input_hash=resolve_hash, execute=resolve),
+        PipelineStep(
+            stage="resolving",
+            input_hash=resolve_hash,
+            execute=resolve,
+            input_hash_for=current_resolve_hash,
+        ),
     )
+
+
+def publication_steps(
+    queue: "JobQueue",
+    coordinator: "ProjectionCoordinator",
+    resolve_step: PipelineStep,
+    *,
+    repair: bool = False,
+) -> tuple[PipelineStep, ...]:
+    import hashlib
+
+    from domain_kg.models import SourceVersion
+    from domain_kg.revisions.journal import read_artifact
+    from domain_kg.revisions.models import ProjectionReceipt, PublishRevision, ReadinessReport
+
+    def root(stage: str) -> str:
+        return hashlib.sha256((resolve_step.input_hash + "/" + stage + "-v1").encode()).hexdigest()
+
+    async def current_hash(job: LeasedJob, stage: str) -> str:
+        if repair:
+            raw = await queue._current(job)
+            return hashlib.sha256(
+                (
+                    str(job.id) + str(raw["repair_parent_manifest_id"]) + "/repair/" + stage + "-v1"
+                ).encode()
+            ).hexdigest()
+        return hashlib.sha256(
+            ((await resolve_step.hash_for(job)) + "/" + stage + "-v1").encode()
+        ).hexdigest()
+
+    async def required(job: LeasedJob, step: PipelineStep) -> Checkpoint:
+        checkpoint = await queue.load_checkpoint(job, step.stage, await step.hash_for(job))
+        if checkpoint is None:
+            raise DomainError(
+                ErrorCode.REVISION_NOT_READY,
+                "The prior pipeline stage is not ready.",
+                retryable=True,
+            )
+        return checkpoint
+
+    async def data(job: LeasedJob, checkpoint: Checkpoint) -> bytes:
+        access = await queue.authorize(job)
+        raw = await queue._current(job)
+        source = SourceVersion(
+            org_id=job.org_id,
+            kg_id=job.kg_id,
+            material_id=raw["material_id"],
+            version_id=job.target_id,
+        )
+        return await read_artifact(queue, access, checkpoint, source)
+
+    async def embed_hash(job: LeasedJob) -> str:
+        return await current_hash(job, "embedding")
+
+    async def embed(job: LeasedJob) -> Checkpoint:
+        if repair:
+            from domain_kg.revisions.repair import RepairService
+
+            return await RepairService(queue).embed(job, input_hash=await embed_hash(job))
+        return await coordinator.embed(
+            job, await required(job, resolve_step), input_hash=await embed_hash(job)
+        )
+
+    embedding = PipelineStep(
+        stage="embedding",
+        input_hash=root("embedding"),
+        execute=embed,
+        input_hash_for=embed_hash,
+        timeout_seconds=300,
+    )
+
+    async def project_hash(job: LeasedJob) -> str:
+        return await current_hash(job, "projecting")
+
+    async def project(job: LeasedJob) -> Checkpoint:
+        batch = await coordinator.prepare(job, await required(job, embedding))
+        receipt = await coordinator.stage(await queue.authorize(job), batch)
+        return await queue.store_artifact(
+            job, "projecting", await project_hash(job), receipt.model_dump_json().encode()
+        )
+
+    projecting = PipelineStep(
+        stage="projecting",
+        input_hash=root("projecting"),
+        execute=project,
+        input_hash_for=project_hash,
+    )
+
+    async def verify_hash(job: LeasedJob) -> str:
+        return await current_hash(job, "verifying")
+
+    async def verify(job: LeasedJob) -> Checkpoint:
+        receipt = ProjectionReceipt.model_validate_json(
+            await data(job, await required(job, projecting))
+        )
+        report = await coordinator.verify(await queue.authorize(job), receipt)
+        return await queue.store_artifact(
+            job, "verifying", await verify_hash(job), report.model_dump_json().encode()
+        )
+
+    verifying = PipelineStep(
+        stage="verifying", input_hash=root("verifying"), execute=verify, input_hash_for=verify_hash
+    )
+
+    async def publish_hash(job: LeasedJob) -> str:
+        return await current_hash(job, "publishing")
+
+    async def publish(job: LeasedJob) -> Checkpoint:
+        report = ReadinessReport.model_validate_json(
+            await data(job, await required(job, verifying))
+        )
+        lease = await queue.acquire_publication(job)
+        command = PublishRevision(
+            report=report,
+            lease_token=lease.lease_token,
+            fence=lease.fence,
+            expected_revision=report.batch.expected_revision,
+            idempotency_key=f"publish-{job.id}-{job.attempt_id}",
+        )
+        checkpoint = await queue.store_artifact(
+            job, "publishing", await publish_hash(job), command.model_dump_json().encode()
+        )
+        await coordinator.publish(await queue.authorize(job), command)
+        return checkpoint
+
+    publishing = PipelineStep(
+        stage="publishing",
+        input_hash=root("publishing"),
+        execute=publish,
+        input_hash_for=publish_hash,
+    )
+    return embedding, projecting, verifying, publishing
+
+
+def configured_pipeline(queue: "JobQueue", providers: "ProviderService") -> Pipeline:
+    from domain_kg.revisions.publication import ProjectionCoordinator
+
+    preparation = preparation_steps(queue)
+    extraction = extraction_steps(queue, providers, preparation[-1])
+    publication = publication_steps(queue, ProjectionCoordinator(queue, providers), extraction[-1])
+    repair = publication_steps(
+        queue, ProjectionCoordinator(queue, providers), extraction[-1], repair=True
+    )
+    return Pipeline(preparation + extraction + publication, repair_steps=repair)
