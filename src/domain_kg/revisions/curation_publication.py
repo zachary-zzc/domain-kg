@@ -9,7 +9,8 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.curation import authorize_curation
 from domain_kg.graph.curation_models import ManualNode, NodeFields
-from domain_kg.graph.models import DomainSchema
+from domain_kg.graph.manual_relations import ManualRelation, RelationFields
+from domain_kg.graph.models import AssertionRecord, DomainSchema, SupportRecord
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.models import Checkpoint, LeasedJob, PublicationLease
 from domain_kg.jobs.operations import read_operation_artifact
@@ -30,17 +31,67 @@ from domain_kg.storage.neo4j import inconsistent
 from domain_kg.storage.router import projection_checksum
 
 
-def directive(record: dict[str, Any]) -> ManualNode:
+def directive(record: dict[str, Any]) -> ManualNode | ManualRelation:
     ns = {"org_id": record["org_id"], "kg_id": record["kg_id"]}
-    return ManualNode(
+    common = dict(
         curation=ScopedRef(**ns, id=record["id"]),
-        entity=ScopedRef(**ns, id=record["target_id"]),
-        changes=NodeFields.model_validate(record["after"]),
         provenance=ManualProvenance.model_validate(record["provenance"]),
         revision=record["expected_revision"] + 1,
         created_at=record["created_at"].replace(tzinfo=UTC),
         public=record["public"],
         material_ids=tuple(UUID(value) for value in record["material_ids"]),
+    )
+    if record["kind"] == "node":
+        return ManualNode(
+            **common,
+            entity=ScopedRef(**ns, id=record["target_id"]),
+            changes=NodeFields.model_validate(record["after"]),
+        )
+    if record["kind"] != "relation":
+        raise inconsistent()
+    fields = RelationFields.model_validate(record["after"])
+    fact, support = None, None
+    if any(
+        getattr(fields, key) is not None
+        for key in ("subject_id", "target_id", "predicate", "polarity", "confidence")
+    ):
+        base = AssertionRecord.model_validate(record["base_fact"]) if record["base_fact"] else None
+        subject = fields.subject_id or (base.subject.id if base else None)
+        target = fields.target_id or (base.target.id if base else None)
+        predicate = fields.predicate or (base.predicate if base else None)
+        if subject is None or target is None or predicate is None:
+            raise inconsistent()
+        semantic = {
+            "subject": str(subject),
+            "target": str(target),
+            "predicate": predicate,
+            "polarity": fields.polarity or (base.polarity if base else "positive"),
+            "qualifiers": base.qualifiers if base else (),
+        }
+        fact = AssertionRecord(
+            **ns,
+            id=uuid5(UUID(record["kg_id"]), f"assertion/{digest(semantic)}"),
+            subject=ScopedRef(**ns, id=subject),
+            target=ScopedRef(**ns, id=target),
+            predicate=predicate,
+            polarity=fields.polarity or (base.polarity if base else "positive"),
+            qualifiers=base.qualifiers if base else (),
+        )
+        support = SupportRecord(
+            **ns,
+            id=record["id"],
+            assertion=ScopedRef(**ns, id=fact.id),
+            status="manual",
+            curation=common["curation"],
+            provenance=common["provenance"],
+            confidence=fields.confidence,
+        )
+    return ManualRelation(
+        **common,
+        logical_assertion=ScopedRef(**ns, id=record["target_id"]),
+        fields=fields,
+        fact=fact,
+        support=support,
     )
 
 
@@ -83,7 +134,7 @@ class CurationCoordinator:
         selected = await self.providers.selected(access, job.kg_id)
         return digest(
             {
-                "operation": "manual-node-v1",
+                "operation": "manual-" + record["kind"] + "-v1",
                 "curation": record["id"],
                 "after": record["after"],
                 "schema": record["domain_schema"],
@@ -155,7 +206,8 @@ class CurationCoordinator:
                 kind="curation",
                 manual_text=manual.text,
                 provenance=manual.provenance,
-                manual_node=manual,
+                manual_node=manual if isinstance(manual, ManualNode) else None,
+                manual_relation=manual if isinstance(manual, ManualRelation) else None,
             )
             if manual.text
             else None

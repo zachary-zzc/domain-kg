@@ -41,6 +41,8 @@ from domain_kg.retrieval.models import SearchFilters as SearchFilters
 from domain_kg.retrieval.models import SearchRequest as SearchRequest
 from domain_kg.retrieval.models import SearchResponse as SearchResponse
 from domain_kg.retrieval.models import SubgraphRequest as SubgraphRequest
+from domain_kg.revisions.models import HistoryPage as HistoryPage
+from domain_kg.revisions.models import HistoryRequest as HistoryRequest
 from domain_kg.revisions.models import NodeUpdate as NodeUpdate
 from domain_kg.revisions.models import ProjectionReceipt as ProjectionReceipt
 from domain_kg.revisions.models import PublishedView as PublishedView
@@ -130,6 +132,9 @@ class ProjectionCoordinator(Protocol):
 
 
 class RevisionService(Protocol):
+    async def get_revisions(
+        self, access: AccessContext, request: HistoryRequest
+    ) -> HistoryPage: ...
     async def update_node(self, access: AccessContext, command: NodeUpdate) -> RevisionReceipt: ...
     async def update_relation(
         self, access: AccessContext, command: RelationUpdate

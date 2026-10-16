@@ -6,6 +6,7 @@ from uuid import UUID
 from pymongo.asynchronous.client_session import AsyncClientSession
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
+from domain_kg.graph.models import AssertionRecord, SupportRecord
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.models import ScopedRef
@@ -36,6 +37,16 @@ async def authorize_curation(
     )
     if raw is None or raw.get("state") not in ("pending", "accepted"):
         raise inaccessible_reference()
+    if raw.get("kind") not in ("node", "relation"):
+        raise inaccessible_reference()
+    mirror = await queue.database.curation_access.find_one(
+        {"org_id": raw["org_id"], "kg_id": raw["kg_id"], "id": raw["id"]},
+        session=session,
+    )
+    if mirror is None or any(mirror.get(key) != raw[key] for key in ("public", "material_ids")):
+        raise DomainError(
+            ErrorCode.PROJECTION_INCONSISTENT, "Curation visibility ownership differs."
+        )
     origin = await queue.database.jobs.find_one(
         {
             "org_id": raw["org_id"],
@@ -116,9 +127,38 @@ async def authorize_curation(
             raw["provenance"]["reason"],
         ):
             raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Curation provenance differs.")
-        await stores.authority._require(
-            "entities", ScopedRef(org_id=current.org_id, kg_id=kg, id=raw["target_id"])
+        target_record = await stores.authority._require(
+            "entities" if raw["kind"] == "node" else "assertions",
+            ScopedRef(org_id=current.org_id, kg_id=kg, id=raw["target_id"]),
         )
+        if raw["kind"] == "relation":
+            from domain_kg.graph.manual_relations import ManualRelation
+            from domain_kg.revisions.curation_publication import directive
+
+            target_fact = AssertionRecord.model_validate(
+                {key: value for key, value in target_record.items() if key != "_id"}
+            )
+            if not raw["public"] and target_fact.model_dump(mode="json") != raw["base_fact"]:
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Canonical relationship target differs."
+                )
+            manual = directive(raw)
+            if not isinstance(manual, ManualRelation):
+                raise inaccessible_reference()
+            for claim, collection, model in (
+                (manual.fact, "assertions", AssertionRecord),
+                (manual.support, "supports", SupportRecord),
+            ):
+                if claim is None:
+                    continue
+                value = await stores.authority._require(collection, claim)
+                if (
+                    model.model_validate({key: item for key, item in value.items() if key != "_id"})
+                    != claim
+                ):
+                    raise DomainError(
+                        ErrorCode.PROJECTION_INCONSISTENT, "Canonical manual claim differs."
+                    )
         for material in raw["material_ids"]:
             await stores.authority._require(
                 "materials", ScopedRef(org_id=current.org_id, kg_id=kg, id=material)

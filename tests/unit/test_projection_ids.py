@@ -86,7 +86,7 @@ def test_source_payload_keeps_its_pre_curation_extension_body():
         vector=(1.0, 0.0, 0.0),
     )
     # The older accepted body lacks the new optional manual field entirely.
-    original = row.model_dump(mode="json", exclude={"vector", "manual_node"})
+    original = row.model_dump(mode="json", exclude={"vector", "manual_node", "manual_relation"})
     restored = ProjectionRow.model_validate(original | {"vector": [1.0, 0.0, 0.0]})
     payload = restored.payload(
         attempt=uuid4(),

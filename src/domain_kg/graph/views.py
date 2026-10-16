@@ -5,7 +5,7 @@ from uuid import UUID
 from domain_kg.graph.curation_models import ManualNode
 from domain_kg.ingestion.models import Span
 from domain_kg.ingestion.resolved import ResolvedEntity
-from domain_kg.models import FrozenModel, SourceVersion
+from domain_kg.models import FrozenModel, ManualProvenance, SourceVersion
 
 
 class NodeView(FrozenModel):
@@ -32,8 +32,13 @@ class EdgeView(FrozenModel):
     predicate: str
     polarity: str
     confidence: float | None
-    source: SourceVersion
+    source: SourceVersion | None
     spans: tuple[Span, ...]
+    curation_revision_id: UUID | None = None
+    provenance: ManualProvenance | None = None
+    status: str = "verified"
+    description: str | None = None
+    tags: tuple[str, ...] = ()
 
 
 class SubgraphView(FrozenModel):

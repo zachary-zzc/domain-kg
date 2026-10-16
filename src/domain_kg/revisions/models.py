@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from domain_kg.graph.curation_models import NodeChanges as NodeChanges
+from domain_kg.graph.manual_relations import RelationChanges as RelationChanges
 from domain_kg.identity.models import AccessContext
 from domain_kg.materials.models import MaterialMetadata
 from domain_kg.models import (
@@ -18,6 +19,8 @@ from domain_kg.models import (
     SourceVersion,
 )
 from domain_kg.retrieval.models import SearchFilters
+from domain_kg.revisions.history_models import HistoryPage as HistoryPage
+from domain_kg.revisions.history_models import HistoryRequest as HistoryRequest
 from domain_kg.revisions.projections import AcceptedProjection
 
 Backend = Literal["graph", "vector", "lexical"]
@@ -192,21 +195,6 @@ class RevisionReceipt(Namespace):
             raise ValueError("pending revisions require a job, not a publication claim")
         if self.state == "published" and self.published_revision is None:
             raise ValueError("published revisions require the accepted KG revision")
-        return self
-
-
-class RelationChanges(FrozenModel):
-    predicate: Annotated[str, Field(min_length=1, max_length=200)] | None = None
-    description: Annotated[str, Field(max_length=8000)] | None = None
-    target_id: UUID | None = None
-    tags: tuple[str, ...] | None = None
-
-    @model_validator(mode="after")
-    def nonempty_change(self) -> Self:
-        if not self.model_fields_set or all(
-            getattr(self, key) is None for key in self.model_fields_set
-        ):
-            raise ValueError("at least one typed change is required")
         return self
 
 

@@ -8,7 +8,8 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.curation import authorize_curation
 from domain_kg.graph.curation_models import NodeFields
-from domain_kg.graph.models import DomainSchema
+from domain_kg.graph.manual_relations import RelationFields
+from domain_kg.graph.models import AssertionRecord, DomainSchema
 from domain_kg.graph.schema import schema_for_kg
 from domain_kg.graph.service import GraphService
 from domain_kg.identity.models import AccessContext, Action
@@ -18,7 +19,15 @@ from domain_kg.materials.service import digest
 from domain_kg.models import ManualProvenance, ScopedRef
 from domain_kg.providers.service import ProviderService
 from domain_kg.retrieval.models import SearchFilters, SearchRequest
-from domain_kg.revisions.models import EditCommand, NodeUpdate, RevisionReceipt, RollbackRevision
+from domain_kg.revisions.models import (
+    EditCommand,
+    HistoryPage,
+    HistoryRequest,
+    NodeUpdate,
+    RelationUpdate,
+    RevisionReceipt,
+    RollbackRevision,
+)
 from domain_kg.storage.models import CurationRecord
 
 
@@ -29,6 +38,29 @@ class _NodeRevision(EditCommand):
     changes: NodeFields
     replace_state: bool = False
     rollback_of: UUID | None = None
+
+    @property
+    def target_id(self) -> UUID:
+        return self.entity_id
+
+    @property
+    def kind(self) -> str:
+        return "node"
+
+
+class _RelationRevision(EditCommand):
+    assertion_id: UUID
+    changes: RelationFields
+    replace_state: bool = False
+    rollback_of: UUID | None = None
+
+    @property
+    def target_id(self) -> UUID:
+        return self.assertion_id
+
+    @property
+    def kind(self) -> str:
+        return "relation"
 
 
 class RevisionService:
@@ -41,6 +73,16 @@ class RevisionService:
             await self.database[name].create_index(
                 [("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True
             )
+        await self.database.curation_revisions.create_index(
+            [
+                ("org_id", 1),
+                ("kg_id", 1),
+                ("target_id", 1),
+                ("kind", 1),
+                ("created_at", 1),
+                ("id", 1),
+            ]
+        )
         await self.database.curation_commands.create_index(
             [("org_id", 1), ("kg_id", 1), ("issuer", 1), ("subject", 1), ("key", 1)], unique=True
         )
@@ -48,13 +90,30 @@ class RevisionService:
             [("org_id", 1), ("kg_id", 1), ("target_id", 1), ("scope_key", 1)], unique=True
         )
 
+    async def get_revisions(self, access: AccessContext, request: HistoryRequest) -> HistoryPage:
+        from domain_kg.revisions.history import RevisionHistory
+
+        return await RevisionHistory(self.queue).get(access, request)
+
     async def update_node(self, access: AccessContext, command: NodeUpdate) -> RevisionReceipt:
         command = NodeUpdate.model_validate(command)
-        return await self._submit_node(
+        return await self._submit(
             access,
             _NodeRevision.model_validate(command.model_dump()),
             intent_hash=digest(
                 {"operation": "node_update", "command": command.model_dump(mode="json")}
+            ),
+        )
+
+    async def update_relation(
+        self, access: AccessContext, command: RelationUpdate
+    ) -> RevisionReceipt:
+        command = RelationUpdate.model_validate(command)
+        return await self._submit(
+            access,
+            _RelationRevision.model_validate(command.model_dump()),
+            intent_hash=digest(
+                {"operation": "relation_update", "command": command.model_dump(mode="json")}
             ),
         )
 
@@ -108,7 +167,7 @@ class RevisionService:
         original = await authorize_curation(
             self.queue, current, command.revision_id, kg_id=command.kg_id
         )
-        if original["kg_id"] != str(command.kg_id) or original["kind"] != "node":
+        if original["kg_id"] != str(command.kg_id) or original["kind"] not in ("node", "relation"):
             raise inaccessible_reference()
         if original["state"] != "accepted":
             raise DomainError(
@@ -134,27 +193,30 @@ class RevisionService:
                 restored[field] = original["before"][field]
             else:
                 restored.pop(field, None)
-        return await self._submit_node(
+        revision_type = _NodeRevision if original["kind"] == "node" else _RelationRevision
+        target_field = "entity_id" if original["kind"] == "node" else "assertion_id"
+        return await self._submit(
             current,
-            _NodeRevision(
-                kg_id=command.kg_id,
-                entity_id=original["target_id"],
-                expected_revision=command.expected_current_revision,
-                curation_scope="kg_public" if original["public"] else "source",
-                source_ids=tuple(UUID(value) for value in original["material_ids"]),
-                reason=command.reason,
-                idempotency_key=command.idempotency_key,
-                changes=NodeFields.model_validate(restored),
-                replace_state=True,
-                rollback_of=command.revision_id,
+            revision_type.model_validate(
+                {
+                    "kg_id": command.kg_id,
+                    target_field: UUID(original["target_id"]),
+                    "expected_revision": command.expected_current_revision,
+                    "curation_scope": "kg_public" if original["public"] else "source",
+                    "source_ids": tuple(UUID(value) for value in original["material_ids"]),
+                    "reason": command.reason,
+                    "idempotency_key": command.idempotency_key,
+                    "changes": restored,
+                    "replace_state": True,
+                    "rollback_of": command.revision_id,
+                }
             ),
             intent_hash=fingerprint,
         )
 
-    async def _submit_node(
-        self, access: AccessContext, command: _NodeRevision, *, intent_hash: str
+    async def _submit(
+        self, access: AccessContext, command: _NodeRevision | _RelationRevision, *, intent_hash: str
     ) -> RevisionReceipt:
-        command = _NodeRevision.model_validate(command)
         current = await self.policy.revalidate(access, action=Action.CURATE)
         if command.kg_id not in current.kg_ids or current.principal.kind != "human":
             raise inaccessible_reference()
@@ -174,42 +236,56 @@ class RevisionService:
         await self.initialize()
         stores = await self.queue.router.for_sources(current, command.kg_id)
         schema = await schema_for_kg(self.policy, current, command.kg_id)
-        self._validate_type(command, schema)
+        if isinstance(command, _NodeRevision):
+            self._validate_type(command, schema)
         graph = GraphService(self.queue)
         read_scope = await graph.resolver.resolve(
             current,
             SearchRequest(
                 kg_ids=(command.kg_id,),
-                query=str(command.entity_id),
+                query=str(command.target_id),
                 mode="graph",
                 filters=SearchFilters(material_ids=command.source_ids),
             ),
             command.kg_id,
         )
-        node = graph.repository.node(await graph.repository.open(read_scope), command.entity_id)
-        if node is None:
-            raise inaccessible_reference()
-        if node.truncation and not (command.source_ids or public):
-            raise DomainError(
-                ErrorCode.QUOTA_EXCEEDED, "Choose explicit source targets for this edit."
-            )
-        source_ids = (
-            ()
-            if public
-            else tuple(
-                sorted(
-                    set(command.source_ids) or {item.material_id for item in node.observations},
-                    key=str,
+        data = await graph.repository.open(read_scope)
+        base_fact: AssertionRecord | None = None
+        if isinstance(command, _NodeRevision):
+            node = graph.repository.node(data, command.target_id)
+            if node is None:
+                raise inaccessible_reference()
+            if node.truncation and not (command.source_ids or public):
+                raise DomainError(
+                    ErrorCode.QUOTA_EXCEEDED, "Choose explicit source targets for this edit."
                 )
-            )
-        )
+            owners = {item.material_id for item in node.observations}
+        else:
+            rows = [
+                row
+                for row in data.supports
+                if row.assertion and row.assertion.assertion.id == command.target_id and row.source
+            ]
+            if not rows:
+                raise inaccessible_reference()
+            base_fact = rows[0].assertion.assertion if rows[0].assertion else None
+            owners = {row.source.material_id for row in rows if row.source}
+            if command.source_ids and not set(command.source_ids).issubset(owners):
+                raise inaccessible_reference()
+        source_ids = () if public else tuple(sorted(set(command.source_ids) or owners, key=str))
         if not public and (not source_ids or len(source_ids) > 100):
             raise inaccessible_reference()
         ns = {"org_id": str(current.org_id), "kg_id": str(command.kg_id)}
         key = self.queue.transactions.key(current, command.kg_id, command.idempotency_key)
         fingerprint = intent_hash
-        scope_key = digest({"public": public, "material_ids": list(map(str, source_ids))})
-        target_state_id = uuid5(command.entity_id, f"curation-scope/{scope_key}")
+        scope_identity: dict[str, Any] = {
+            "public": public,
+            "material_ids": list(map(str, source_ids)),
+        }
+        if command.kind == "relation":
+            scope_identity["kind"] = "relation"
+        scope_key = digest(scope_identity)
+        target_state_id = uuid5(command.target_id, f"curation-scope/{scope_key}")
         identifier, job_id = uuid4(), uuid4()
 
         async def admit(session: AsyncClientSession) -> RevisionReceipt:
@@ -246,8 +322,8 @@ class RevisionService:
             if marker is None:
                 raise DomainError(ErrorCode.POLICY_CHANGED, "The curation source view changed.")
             await stores.authority._require(
-                "entities",
-                ScopedRef(org_id=current.org_id, kg_id=command.kg_id, id=command.entity_id),
+                "entities" if command.kind == "node" else "assertions",
+                ScopedRef(org_id=current.org_id, kg_id=command.kg_id, id=command.target_id),
                 session=session,
             )
             sources: dict[str, str] = {}
@@ -277,8 +353,8 @@ class RevisionService:
                 await self.database.curation_targets.insert_one(
                     target_key
                     | {
-                        "kind": "node",
-                        "target_id": str(command.entity_id),
+                        "kind": command.kind,
+                        "target_id": str(command.target_id),
                         "scope_key": scope_key,
                         "revision": 0,
                     },
@@ -286,13 +362,19 @@ class RevisionService:
                 )
                 target = {"revision": 0}
             if target["revision"] != command.expected_revision:
-                raise DomainError(ErrorCode.VERSION_CONFLICT, "The node revision changed.")
+                raise DomainError(
+                    ErrorCode.VERSION_CONFLICT, "The curation target revision changed."
+                )
             scope = await self.database.curation_scopes.find_one(
-                ns | {"target_id": str(command.entity_id), "scope_key": scope_key}, session=session
+                ns | {"target_id": str(command.target_id), "scope_key": scope_key}, session=session
             )
             before = scope["changes"] if scope else {}
             changes = command.changes.model_dump(mode="json", exclude_unset=True, exclude_none=True)
             after = changes if command.replace_state else before | changes
+            if isinstance(command, _RelationRevision):
+                await self._validate_relation(
+                    current, command.kg_id, after, base_fact, public, source_ids, schema
+                )
             member = await self.database.members.find_one(
                 {
                     "org_id": str(current.org_id),
@@ -324,8 +406,8 @@ class RevisionService:
             )
             record: dict[str, Any] = ns | {
                 "id": str(identifier),
-                "kind": "node",
-                "target_id": str(command.entity_id),
+                "kind": command.kind,
+                "target_id": str(command.target_id),
                 "target_state_id": str(target_state_id),
                 "public": public,
                 "material_ids": list(map(str, source_ids)),
@@ -333,6 +415,9 @@ class RevisionService:
                 "scope_key": scope_key,
                 "expected_revision": command.expected_revision,
                 "state": "pending",
+                "base_fact": base_fact.model_dump(mode="json")
+                if base_fact is not None and not public
+                else None,
                 "before": before,
                 "after": after,
                 "rollback_of": str(command.rollback_of) if command.rollback_of else None,
@@ -342,6 +427,29 @@ class RevisionService:
                 "domain_schema": schema.model_dump(mode="json"),
                 "created_at": now(),
             }
+            if command.kind == "relation":
+                from domain_kg.graph.manual_relations import ManualRelation
+                from domain_kg.revisions.curation_publication import directive
+
+                manual = directive(record)
+                if not isinstance(manual, ManualRelation):
+                    raise inaccessible_reference()
+                if manual.fact is not None and manual.support is not None:
+                    existing = await stores.authority._database.assertions.find_one(
+                        ns | {"id": str(manual.fact.id)}, session=session
+                    )
+                    if existing is None:
+                        await stores.authority.insert(manual.fact, session=session)
+                    elif (
+                        AssertionRecord.model_validate(
+                            {key: value for key, value in existing.items() if key != "_id"}
+                        )
+                        != manual.fact
+                    ):
+                        raise DomainError(
+                            ErrorCode.PROJECTION_INCONSISTENT, "Canonical claim identity differs."
+                        )
+                    await stores.authority.insert(manual.support, session=session)
             await self.database.curation_revisions.insert_one(record, session=session)
             await self.database.curation_access.insert_one(
                 ns
@@ -404,3 +512,52 @@ class RevisionService:
     def _validate_type(command: _NodeRevision, schema: DomainSchema) -> None:
         if command.changes.entity_type and command.changes.entity_type not in schema.entity_types:
             raise DomainError(ErrorCode.VALIDATION_ERROR, "Choose a configured entity type.")
+
+    async def _validate_relation(
+        self,
+        access: AccessContext,
+        kg: UUID,
+        after: dict[str, Any],
+        base: AssertionRecord | None,
+        public: bool,
+        source_ids: tuple[UUID, ...],
+        schema: DomainSchema,
+    ) -> None:
+        semantic = {"subject_id", "target_id", "predicate", "polarity", "confidence"}
+        if not semantic.intersection(after):
+            return
+        required = {"subject_id", "target_id", "predicate"}
+        if public and not required.issubset(after):
+            raise DomainError(
+                ErrorCode.VALIDATION_ERROR,
+                "Public relationship claims require explicit subject, predicate and target.",
+            )
+        if not public and base is None:
+            raise inaccessible_reference()
+        subject = UUID(str(after.get("subject_id") or (base.subject.id if base else "")))
+        target = UUID(str(after.get("target_id") or (base.target.id if base else "")))
+        predicate = after.get("predicate") or (base.predicate if base else None)
+        definition = next((item for item in schema.predicates if item.name == predicate), None)
+        if definition is None:
+            raise DomainError(ErrorCode.VALIDATION_ERROR, "Choose a configured predicate.")
+        graph = GraphService(self.queue)
+        scope = await graph.resolver.resolve(
+            access,
+            SearchRequest(
+                kg_ids=(kg,),
+                query=str(subject),
+                mode="graph",
+                filters=SearchFilters(material_ids=source_ids),
+            ),
+            kg,
+        )
+        data = await graph.repository.open(scope)
+        for endpoint, allowed in (
+            (subject, definition.subject_types),
+            (target, definition.target_types),
+        ):
+            node = graph.repository.node(data, endpoint)
+            if node is None:
+                raise inaccessible_reference()
+            if not set(node.entity_types).intersection(allowed):
+                raise DomainError(ErrorCode.VALIDATION_ERROR, "Predicate endpoint type differs.")

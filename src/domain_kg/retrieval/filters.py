@@ -6,19 +6,22 @@ from domain_kg.revisions.projections import ProjectionBody
 
 
 def matches_support(
-    row: ProjectionBody, filters: SearchFilters, *, endpoint_types: tuple[str, str] | None = None
+    row: ProjectionBody, filters: SearchFilters, *, endpoint_types: tuple[str, ...] | None = None
 ) -> bool:
-    if not row.assertion or not row.subject_observation or not row.target_observation:
+    if not row.claim:
         return False
-    fact, support = row.assertion.assertion, row.assertion.support
+    fact, support = row.claim.assertion, row.claim.support
     endpoints = {fact.subject.id, fact.target.id}
     if endpoints.intersection(filters.exclude_entity_ids):
         return False
     if filters.entity_ids and not endpoints.intersection(filters.entity_ids):
         return False
-    types = endpoint_types or (
-        row.subject_observation.entity_type,
-        row.target_observation.entity_type,
+    types = (
+        endpoint_types
+        if endpoint_types is not None
+        else tuple(
+            item.entity_type for item in (row.subject_observation, row.target_observation) if item
+        )
     )
     if filters.entity_types and not set(types).intersection(filters.entity_types):
         return False

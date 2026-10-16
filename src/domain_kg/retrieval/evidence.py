@@ -6,6 +6,7 @@ from typing import Any, Literal
 from domain_kg.engine.scope import EligibilityResolver
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.repository import GraphData
 from domain_kg.graph.service import AcceptedMetadata
 from domain_kg.jobs.queue import JobQueue
@@ -23,7 +24,7 @@ def manual_candidate(
 ) -> EvidenceCandidate:
     from uuid import uuid5
 
-    manual = row.manual_node
+    manual = row.manual_node or row.manual_relation
     if manual is None or row.curation is None or manual.curation != row.curation:
         raise inconsistent()
     return EvidenceCandidate(
@@ -34,7 +35,16 @@ def manual_candidate(
         curation_revision_id=manual.curation.id,
         provenance=manual.provenance,
         citation_ids=(uuid5(row.org_id, f"{row.kg_id}/curation/citation/{manual.curation.id}"),),
-        entity_ids=(manual.entity.id,),
+        entity_ids=(manual.entity.id,)
+        if isinstance(manual, ManualNode)
+        else (
+            tuple(sorted({manual.fact.subject.id, manual.fact.target.id}, key=str))
+            if manual.fact
+            else ()
+        ),
+        assertion_ids=(manual.fact.id,)
+        if isinstance(manual, ManualRelation) and manual.fact
+        else (),
         score=score,
         method_ranks={method: rank},
     )
@@ -60,14 +70,7 @@ class EvidenceData:
             if row.chunk
             and (not self.graph.scope.filters.requires_assertion_support or row.id in eligible)
         }
-        if not self.graph.scope.filters.requires_assertion_support:
-            bodies.update(
-                {
-                    str(row.id): row
-                    for row in self.graph.rows
-                    if row.manual_node and row.manual_node in self.graph.manual_nodes
-                }
-            )
+        bodies.update({str(row.id): row for row in self.graph.manual_rows})
         return {
             payload["projection_id"]: bodies[payload["logical_id"]]
             for payload in self.payloads
@@ -77,7 +80,7 @@ class EvidenceData:
     def candidate(
         self, row: ProjectionBody, method: Literal["vector", "lexical"], score: float, rank: int
     ) -> EvidenceCandidate:
-        if row.manual_node:
+        if row.manual_node or row.manual_relation:
             return manual_candidate(row, method, score, rank)
         if row.chunk is None or row.source is None:
             raise inconsistent()
@@ -122,7 +125,7 @@ class SealedEvidence:
         bodies: list[ProjectionBody] = []
         payloads: list[dict[str, Any]] = []
         spaces = []
-        curations: list[ManualNode] = []
+        curations: list[ManualNode | ManualRelation] = []
         for accepted in scope.projections:
             if (
                 accepted.source not in scope.visible_sources

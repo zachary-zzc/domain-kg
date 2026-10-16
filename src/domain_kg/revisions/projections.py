@@ -8,6 +8,7 @@ from uuid import UUID, uuid5
 from pydantic import Field, model_validator
 
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.ingestion.models import ParsedChunk
 from domain_kg.ingestion.resolved import ResolvedAssertion, ResolvedEntity
 from domain_kg.jobs.models import Checkpoint
@@ -41,6 +42,7 @@ class ProjectionBody(Namespace):
     manual_text: PreservedText | None = None
     provenance: ManualProvenance | None = None
     manual_node: ManualNode | None = None
+    manual_relation: ManualRelation | None = None
 
     @model_validator(mode="after")
     def scoped_evidence(self) -> Self:
@@ -88,6 +90,14 @@ class ProjectionBody(Namespace):
                 raise ValueError("manual display fields must match their curation")
         elif self.source is None or self.curation is not None:
             raise ValueError("generated projections require independent source ownership")
+        if self.manual_relation and (
+            self.kind != "curation"
+            or self.manual_node is not None
+            or self.manual_relation.curation != self.curation
+            or self.manual_relation.provenance != self.provenance
+            or self.manual_relation.text != self.manual_text
+        ):
+            raise ValueError("manual relationship fields must match their curation")
         if self.manual_node and self.kind != "curation":
             raise ValueError("manual fields cannot become source observations")
         if self.chunk and self.chunk.id != self.id:
@@ -112,6 +122,15 @@ class ProjectionBody(Namespace):
         elif self.subject_observation is not None or self.target_observation is not None:
             raise ValueError("only supports have display endpoints")
         return self
+
+    @property
+    def claim(self) -> ResolvedAssertion | None:
+        if self.assertion:
+            return self.assertion
+        manual = self.manual_relation
+        if manual and manual.fact and manual.support:
+            return ResolvedAssertion(assertion=manual.fact, support=manual.support)
+        return None
 
     @property
     def text(self) -> str:
@@ -158,8 +177,9 @@ class ProjectionRow(ProjectionBody):
         value = self.model_dump(mode="json", exclude={"vector"})
         # Existing accepted source payloads predate manual node fields. Omitted
         # optional extensions must keep their sealed backend body/checksum stable.
-        if self.manual_node is None:
-            value.pop("manual_node", None)
+        for extension in ("manual_node", "manual_relation"):
+            if getattr(self, extension) is None:
+                value.pop(extension, None)
         payload = {
             "org_id": str(self.org_id),
             "kg_id": str(self.kg_id),
@@ -190,8 +210,8 @@ class ProjectionRow(ProjectionBody):
             payload["entity_id"] = str(self.observation.entity.id)
         if self.manual_node:
             payload["entity_id"] = str(self.manual_node.entity.id)
-        if self.assertion:
-            fact, support = self.assertion.assertion, self.assertion.support
+        if self.claim:
+            fact, support = self.claim.assertion, self.claim.support
             payload.update(
                 subject_id=str(fact.subject.id),
                 target_id=str(fact.target.id),
@@ -245,7 +265,7 @@ class EmbeddedDocument(SourceVersion):
 
 class CurationEmbeddedDocument(Namespace):
     curation: ScopedRef
-    directive: ManualNode
+    directive: ManualNode | ManualRelation
     profile: EmbeddingProfile
     profile_selection_revision: int
     schema_id: UUID
@@ -267,7 +287,7 @@ class CurationEmbeddedDocument(Namespace):
             if (
                 row.source is not None
                 or row.curation != self.curation
-                or row.manual_node != self.directive
+                or (row.manual_node or row.manual_relation) != self.directive
             ):
                 raise ValueError("manual rows cannot invent source ownership")
             normalized_vector(list(row.vector), self.profile.dimensions)

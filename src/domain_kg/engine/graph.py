@@ -30,7 +30,7 @@ class ScopedLightRAGGraph:
         rows = await self.repository.adjacent(data, (UUID(node_id),), 400)
         await self.repository.resolver.revalidate(self.scope)
         return [
-            (str(row.assertion.assertion.subject.id), str(row.assertion.assertion.target.id))
+            (str(row.claim.assertion.subject.id), str(row.claim.assertion.target.id))
             for row in rows
-            if row.assertion
+            if row.claim
         ]

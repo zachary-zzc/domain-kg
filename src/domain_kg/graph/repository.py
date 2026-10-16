@@ -9,6 +9,7 @@ from neo4j.exceptions import DriverError, Neo4jError
 from domain_kg.engine.scope import EligibilityResolver, ScopePredicates
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.views import EdgeView, NodeView, SubgraphView
 from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.jobs.queue import JobQueue
@@ -33,7 +34,7 @@ ADJACENCY = (
 UNWIND $seed_ids AS seed
 MATCH (a:EntityAnchor {org_id:$org_id,kg_id:$kg_id,entity_id:seed})
  <-[:SUBJECT|TARGET]-(n:ScopedProjection)
-WHERE n.kind='support' AND """
+WHERE n.kind IN ['support','curation'] AND """
     + ACCEPTED
     + """
 AND n.logical_id IN $support_ids
@@ -47,13 +48,15 @@ RETURN n.logical_id AS id
 class GraphData:
     scope: ReadScope
     rows: tuple[ProjectionBody, ...]
-    curations: tuple[ManualNode, ...] = ()
+    curations: tuple[ManualNode | ManualRelation, ...] = ()
 
     def field(self, observation: ResolvedEntity, key: str) -> Any:
         value = getattr(observation, key)
         for manual in sorted(
             self.curations, key=lambda item: (item.created_at, str(item.curation.id))
         ):
+            if not isinstance(manual, ManualNode):
+                continue
             if manual.entity != observation.entity or (
                 not manual.public and observation.material_id not in manual.material_ids
             ):
@@ -71,12 +74,20 @@ class GraphData:
             if matches_support(
                 row,
                 self.scope.filters,
-                endpoint_types=(
-                    self.field(row.subject_observation, "entity_type"),
-                    self.field(row.target_observation, "entity_type"),
-                )
-                if row.subject_observation and row.target_observation
-                else None,
+                endpoint_types=tuple(
+                    self.field(item.observation, "entity_type")
+                    for item in self.rows
+                    if item.observation
+                    and row.claim
+                    and item.observation.entity
+                    in (row.claim.assertion.subject, row.claim.assertion.target)
+                    and (not row.source or item.observation.material_id == row.source.material_id)
+                    and (
+                        not row.manual_relation
+                        or row.manual_relation.public
+                        or item.observation.material_id in row.manual_relation.material_ids
+                    )
+                ),
             )
         )
 
@@ -98,6 +109,17 @@ class GraphData:
             and (
                 not self.scope.filters.requires_assertion_support
                 or row.observation.id in support_observations
+                or any(
+                    support.manual_relation
+                    and support.claim
+                    and row.observation.entity
+                    in (support.claim.assertion.subject, support.claim.assertion.target)
+                    and (
+                        support.manual_relation.public
+                        or row.observation.material_id in support.manual_relation.material_ids
+                    )
+                    for support in self.supports
+                )
             )
         )
 
@@ -105,6 +127,8 @@ class GraphData:
     def manual_nodes(self) -> tuple[ManualNode, ...]:
         result = []
         for manual in self.curations:
+            if not isinstance(manual, ManualNode):
+                continue
             if not any(value is not None for value in manual.changes.model_dump().values()):
                 continue
             if manual.entity.id in self.scope.filters.exclude_entity_ids or (
@@ -124,6 +148,22 @@ class GraphData:
             result.append(manual)
         return tuple(sorted(result, key=lambda item: (item.created_at, str(item.curation.id))))
 
+    @property
+    def manual_rows(self) -> tuple[ProjectionBody, ...]:
+        result = []
+        for row in self.rows:
+            if row.manual_node and row.manual_node in self.manual_nodes:
+                result.append(row)
+            elif row.manual_relation:
+                if row.claim:
+                    if row in self.supports:
+                        result.append(row)
+                elif not self.scope.filters.requires_assertion_support:
+                    if not self.scope.filters.entity_ids and not self.scope.filters.entity_types:
+                        # Annotation-only text cannot invent an endpoint or a support.
+                        result.append(row)
+        return tuple(result)
+
 
 class GraphRepository:
     def __init__(self, queue: JobQueue, resolver: EligibilityResolver) -> None:
@@ -132,7 +172,7 @@ class GraphRepository:
     async def open(self, scope: ReadScope) -> GraphData:
         await self.resolver.revalidate(scope)
         rows: list[ProjectionBody] = []
-        curations: list[ManualNode] = []
+        curations: list[ManualNode | ManualRelation] = []
         if len(scope.visible_sources) + len(scope.visible_curations) > 1000:
             raise DomainError(
                 ErrorCode.QUOTA_EXCEEDED, "This read exceeds the accepted-source budget."
@@ -199,23 +239,28 @@ class GraphRepository:
             key=lambda item: (str(item.material_id), str(item.version_id), str(item.id)),
         )
         manuals = tuple(item for item in data.manual_nodes if item.entity.id == identifier)
-        if not observations and not manuals:
-            return None
         supports = [
             row
             for row in data.supports
-            if row.assertion
+            if row.claim
             and identifier
             in (
-                row.assertion.assertion.subject.id,
-                row.assertion.assertion.target.id,
+                row.claim.assertion.subject.id,
+                row.claim.assertion.target.id,
             )
         ]
+        # Explicit public endpoints retain opaque identities after all source
+        # observations are removed. No deleted names/types/descriptions return.
+        public_endpoint = any(
+            row.manual_relation and row.manual_relation.public for row in supports
+        )
+        if not observations and not manuals and not public_endpoint:
+            return None
         neighbors = {
             endpoint.id
             for row in supports
-            if row.assertion
-            for endpoint in (row.assertion.assertion.subject, row.assertion.assertion.target)
+            if row.claim
+            for endpoint in (row.claim.assertion.subject, row.claim.assertion.target)
         } - {identifier}
         # Counts cover all eligible rows; the response includes at most 50
         # observations and derives every displayed field from those same rows.
@@ -268,9 +313,9 @@ class GraphRepository:
 
     @staticmethod
     def edge(row: ProjectionBody) -> EdgeView:
-        if not row.assertion or not row.source:
+        if not row.claim:
             raise inconsistent()
-        fact, support = row.assertion.assertion, row.assertion.support
+        fact, support = row.claim.assertion, row.claim.support
         return EdgeView(
             subject_id=fact.subject.id,
             target_id=fact.target.id,
@@ -281,6 +326,11 @@ class GraphRepository:
             confidence=support.confidence,
             source=row.source,
             spans=support.spans,
+            curation_revision_id=row.curation.id if row.curation else None,
+            provenance=support.provenance,
+            status=support.status,
+            description=row.manual_relation.fields.description if row.manual_relation else None,
+            tags=row.manual_relation.fields.tags or () if row.manual_relation else (),
         )
 
     async def adjacent(
@@ -304,10 +354,10 @@ class GraphRepository:
             raise BranchUnavailable("The graph backend is unavailable.") from error
         result = tuple(by_id[item["id"]] for item in records)
         if any(
-            not row.assertion
+            not row.claim
             or not {
-                row.assertion.assertion.subject.id,
-                row.assertion.assertion.target.id,
+                row.claim.assertion.subject.id,
+                row.claim.assertion.target.id,
             }.intersection(seeds)
             for row in result
         ):

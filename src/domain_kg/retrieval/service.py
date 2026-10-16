@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from domain_kg.engine.scope import EligibilityResolver
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.curation_models import ManualNode
+from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.repository import GraphData
 from domain_kg.graph.service import AcceptedMetadata
 from domain_kg.identity.models import AccessContext, Action
@@ -209,7 +210,7 @@ class RetrievalService:
         if not items:
             return
         rows: list[ProjectionBody] = []
-        curations: list[ManualNode] = []
+        curations: list[ManualNode | ManualRelation] = []
         for binding in scope.projections:
             if (
                 binding.source not in scope.visible_sources
@@ -224,13 +225,9 @@ class RetrievalService:
             if isinstance(document, CurationEmbeddedDocument):
                 curations.append(document.directive)
         data = GraphData(scope, tuple(rows), tuple(curations))
-        manuals = {
-            row.curation.id: row
-            for row in rows
-            if row.curation and row.manual_node in data.manual_nodes
-        }
+        manuals = {row.curation.id: row for row in rows if row.curation and row in data.manual_rows}
         chunks = {row.id: row for row in rows if row.chunk}
-        supports = {row.id: row for row in data.supports if row.assertion}
+        supports = {row.id: row for row in data.supports if row.claim}
         for item in items:
             if item.kind == "manual":
                 from domain_kg.retrieval.evidence import manual_candidate
@@ -238,7 +235,7 @@ class RetrievalService:
                 manual = (
                     manuals.get(item.curation_revision_id) if item.curation_revision_id else None
                 )
-                if manual is None or scope.filters.requires_assertion_support:
+                if manual is None:
                     raise inconsistent()
                 expected = manual_candidate(manual, "vector", item.score, 1)
                 if item.model_dump(exclude={"score", "method_ranks"}) != expected.model_dump(
@@ -280,9 +277,9 @@ class RetrievalService:
                 previous: set[object] = set()
                 for step in path:
                     support = supports.get(step.support_id)
-                    if support is None or support.assertion is None:
+                    if support is None or support.claim is None:
                         raise inconsistent()
-                    fact = support.assertion.assertion
+                    fact = support.claim.assertion
                     if (step.subject_id, step.assertion_id, step.target_id) != (
                         fact.subject.id,
                         fact.id,
