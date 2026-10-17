@@ -71,7 +71,7 @@ def extraction_payload(
         "and conflict. Use only supplied types/predicates. Return empty arrays when "
         "no supported claims exist. Local entity IDs are temporary labels only."
     )
-    return {
+    payload: dict[str, Any] = {
         "model": profile.extraction_model,
         "store": False,
         "max_completion_tokens": profile.max_completion_tokens,
@@ -99,6 +99,15 @@ def extraction_payload(
             },
         },
     }
+    if profile.extraction_format == "source_refs_v1":
+        from domain_kg.providers.compact import messages, response_schema
+
+        payload["messages"] = messages(chunk, schema)
+        payload["response_format"]["json_schema"]["schema"] = strict_schema(
+            response_schema(schema), profile.schema_string_limit
+        )
+        payload["temperature"] = 0
+    return payload
 
 
 class ExtractionClient:
@@ -177,7 +186,13 @@ class ExtractionClient:
                     or message.get("function_call")
                 ):
                     raise unavailable()
-                content = ExtractionContent.model_validate_json(message["content"])
+                from domain_kg.providers.compact import RefContent
+
+                content = (
+                    RefContent.model_validate_json(message["content"])
+                    if self.profile.extraction_format == "source_refs_v1"
+                    else ExtractionContent.model_validate_json(message["content"])
+                )
                 raw_usage = result["usage"]
                 counts = (raw_usage["prompt_tokens"], raw_usage["completion_tokens"])
                 if any(type(value) is not int or not 0 <= value <= 1_000_000 for value in counts):
@@ -202,4 +217,9 @@ class ExtractionClient:
             ) as exc:
                 raise unavailable() from exc
         await self.authorize(chunk)
+        if self.profile.extraction_format == "source_refs_v1":
+            from domain_kg.providers.compact import expand
+
+            assert isinstance(content, RefContent)
+            content = expand(content, chunk, schema, self.id)
         return content.model_dump(mode="json")

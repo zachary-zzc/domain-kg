@@ -1,5 +1,21 @@
 # Provider profiles
 
+`extraction_format` defaults to `full`. The laptop example opts into
+`source_refs_v1`: exact source spans are sent once as numbered passages, model
+entities/assertions cite `refs`, and the server supplies immutable locations,
+offsets and temporary entity IDs. Names remain literal source text, with no
+automatic case repair or invented aliases. Polarity and source-bound qualifiers
+are retained. The same canonical validator rejects bad references, endpoints,
+names, types and predicates; a valid JSON response alone is not sufficient.
+Changing the format requires a new approved profile revision. Checkpoint hashes
+include the serialized profile and the model-window version.
+
+Model-window-v2 packs consecutive source spans under extraction and embedding
+budgets, retaining a short preceding span where possible. Oversized individual
+spans still split with exact Unicode offsets. The conservative context preflight
+remains active; neither a context fit nor processed-page coverage establishes
+semantic or clinical completeness.
+
 Set `DOMAIN_KG_PROVIDER_CONFIG` to an owner-readable-only JSON file outside Git.
 The file has `connections` and `profiles` arrays validated by
 `providers/profiles.py`. Connections contain a private `ref`, HTTPS `endpoint`

@@ -30,6 +30,8 @@
       "connection_ref": "local-chat",
       "embedding_connection_ref": "local-embedding",
       "extraction_model": "domain-kg-small-llm",
+      "extraction_format": "source_refs_v1",
+      "extraction_revision": "8fea620810c4afa23dd6443f999a48574c1611a3-Q4_0-source-refs-v1",
       "embedding_model": "domain-kg-small-embedding",
       "embedding_dimensions": 1024,
       "embedding_revision": "370f27d7550e0def9b39c1f16d3fbaa13aa67728-Q8_0",
@@ -40,7 +42,7 @@
       "schema_in_context": false,
       "embedding_batch_size": 1,
       "embedding_query_prefix": "Instruct: Retrieve relevant evidence passages.\nQuery: ",
-      "timeout_seconds": 120,
+      "timeout_seconds": 30,
       "allowed_namespaces": [],
       "data_policy_approved": false,
       "allow_restricted": false

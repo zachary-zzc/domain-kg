@@ -122,7 +122,7 @@ def preparation_steps(
         return hashlib.sha256(
             (
                 chunk_hash
-                + "/model-window-v1/"
+                + "/model-window-v2/"
                 + profile.model_dump_json()
                 + schema.model_dump_json()
                 + str(selected["revision"])

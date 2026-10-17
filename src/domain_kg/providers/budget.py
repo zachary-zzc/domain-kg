@@ -15,7 +15,7 @@ from domain_kg.ingestion.models import ParsedChunk, Span
 from domain_kg.providers.extraction import extraction_payload
 from domain_kg.providers.profiles import ProviderProfile
 
-WINDOW_VERSION = "model-window-v1"
+WINDOW_VERSION = "model-window-v2"
 
 
 def extraction_fits(chunk: ParsedChunk, schema: DomainSchema, profile: ProviderProfile) -> bool:
@@ -83,8 +83,11 @@ def fit_source_chunks(
         if fits(chunk):
             result.append(chunk)
             continue
-        produced = 0
+        pieces: list[Span] = []
         for original in chunk.spans:
+            if fits(source_window(chunk, original, 0, len(original.quote))):
+                pieces.append(original)
+                continue
             start = 0
 
             while start < len(original.quote):
@@ -100,9 +103,8 @@ def fit_source_chunks(
                         ErrorCode.QUOTA_EXCEEDED,
                         "Model context cannot hold the schema and one source character.",
                     )
-                result.append(source_window(chunk, original, start, end))
-                produced += 1
-                if produced > 128 or len(result) > 100000:
+                pieces.append(source_window(chunk, original, start, end).spans[0])
+                if len(pieces) > 100000:
                     raise DomainError(
                         ErrorCode.QUOTA_EXCEEDED, "Source exceeds the model-window budget."
                     )
@@ -113,4 +115,37 @@ def fit_source_chunks(
                 while overlap and tokens(original.quote[end - overlap : end]) > 100:
                     overlap -= 1
                 start = max(start + 1, end - overlap)
+
+        def packed(spans: list[Span], parent: ParsedChunk = chunk) -> ParsedChunk:
+            return ParsedChunk.model_validate(
+                parent.model_copy(
+                    update={
+                        "id": uuid5(
+                            parent.id, WINDOW_VERSION + "".join(s.model_dump_json() for s in spans)
+                        ),
+                        "text": "\n".join(s.quote for s in spans),
+                        "spans": tuple(spans),
+                        "chunker_version": parent.chunker_version + "/" + WINDOW_VERSION,
+                    }
+                )
+            )
+
+        pending: list[Span] = []
+        produced = 0
+        for piece in pieces:
+            candidate = [*pending, piece]
+            if pending and not fits(packed(candidate)):
+                result.append(packed(pending))
+                produced += 1
+                # Retain a complete preceding source line for pronouns/headings
+                # where it fits. Never let overlap prevent forward progress.
+                overlap_spans = pending[-1:] if tokens(pending[-1].quote) <= 100 else []
+                pending = overlap_spans if fits(packed([*overlap_spans, piece])) else []
+            pending.append(piece)
+            if produced >= 128 or len(result) > 100000:
+                raise DomainError(
+                    ErrorCode.QUOTA_EXCEEDED, "Source exceeds the model-window budget."
+                )
+        if pending:
+            result.append(packed(pending))
     return result

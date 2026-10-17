@@ -60,6 +60,49 @@ def test_embedding_windows_are_bounded_and_never_split_utf8_characters():
     assert all(len(("Query: " + part).encode()) + 128 <= 256 for part in parts)
 
 
+def test_visual_pdf_lines_are_packed_with_complete_coverage_under_small_model_budget():
+    from uuid import uuid4
+
+    from domain_kg.ingestion.models import SourceLocation, Span
+
+    chunk = chunk_document(document("First line."), ChunkConfig())[0]
+    spans = tuple(
+        Span(
+            location=SourceLocation(kind="pdf", page=2, block_id=uuid4()),
+            start=0,
+            end=len(text),
+            quote=text,
+        )
+        for text in (f"Line {i}: exact 🔬 source text. " * 3 for i in range(20))
+    )
+    chunk = chunk.model_copy(update={"spans": spans, "text": "\n".join(s.quote for s in spans)})
+    profile, _ = configured(chunk)
+    profile = profile.model_copy(
+        update={
+            "extraction_format": "source_refs_v1",
+            "extraction_context_tokens": 4096,
+            "max_completion_tokens": 1024,
+            "schema_in_context": False,
+            "embedding_context_tokens": 2048,
+        }
+    )
+    schema = schema_for(Namespace(org_id=chunk.org_id, kg_id=chunk.kg_id), "general")
+    windows = fit_source_chunks([chunk], schema, profile)
+    assert 1 < len(windows) < 10  # 20 individual visual lines must not become 20 requests.
+    assert windows == fit_source_chunks([chunk], schema, profile)
+    assert all(extraction_fits(w, schema, profile) for w in windows)
+    assert all(len(w.text.encode()) + 128 <= 2048 for w in windows)
+    for original in spans:
+        covered = set()
+        for window in windows:
+            for part in window.spans:
+                if part.location == original.location:
+                    assert part.quote == original.quote[part.start : part.end]
+                    covered.update(range(part.start, part.end))
+        assert covered == set(range(len(original.quote)))
+    assert any(len(w.spans) > 1 for w in windows)
+
+
 async def test_embedding_client_splits_batches_and_pools_to_one_vector_per_source():
     import json
 
