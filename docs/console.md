@@ -1,8 +1,8 @@
-# Administration console in progress
+# Administration console
 
 The session-bound shell at `/admin` uses the configured external OIDC login.
 It lists authorized KGs, accepted/retained materials, scoped search results and
-source/manual citations. Team, curation and operations screens are the next implementation steps. Navigation is connected as those services are verified. No local
+source/manual citations, team/role management, curation/history and owner/operator operations. No local
 password or alternative identity provider is bundled.
 
 Current session membership and KG policy are checked before catalog access and
@@ -99,3 +99,38 @@ IDs and performs selected capability checks with current CSRF and operator acces
 it displays no connection strings, credentials or KG evidence. The four-case
 import/identity/visibility/operator/history regression passed in 220.59 seconds.
 The unit/protocol suite passed 181 cases in 5.49 seconds; Ruff and strict mypy passed.
+
+Browser forms now stop consuming the request stream at the 64 KiB ceiling instead
+of buffering oversized bodies first. Invalid encodings fail before consuming the
+body. The bounded-reader and existing form regression passed 13 checks in 0.06
+seconds. Owner readiness also includes accepted unverified imports; checking their
+projection integrity does not change their fact status.
+
+The repeatable Task 17 laptop gate is:
+
+```bash
+uv run python scripts/smoke.py --task 17 --keep-services
+```
+
+It uses synthetic fixtures and the same four capped databases, with no added
+model or frontend service. `tests/evaluation/test_console_flows.py` exercises five
+current roles, including an organization administrator without a KG grant and an
+operator without KG access. `tests/evaluation/test_console_browser.py` is an
+explicitly opt-in temporary browser fixture: it runs only with
+`DOMAIN_KG_BROWSER_PREVIEW=1`, binds loopback port 28080, uses synthetic namespaces
+and real session records, and disappears with the pytest process. Its helper
+routes are not part of the installed application. It does not establish real
+external OIDC acceptance.
+
+
+The complete Task 17 runner passed 43 checks in 354.84 seconds; 183 unit/protocol
+checks passed in 5.60 seconds. Ruff and strict mypy passed. The real laptop browser
+verified catalog, keyboard search, source citation navigation, source-qualified
+node/edit forms, owner readiness, administrator controls, reader denials and
+logout followed by Back. Tab first focused the visible skip link, whose activation
+moved focus to the main content. The optional browser file-picker walkthrough
+remains unverified: a long browser interaction outlasted the first fixture, and
+the controller then timed out on recovery. That fixture reported a timeout
+failure; its corrected restart stopped cleanly. API upload, checksum verification
+and publication passed their integration flow. No real external OIDC browser
+acceptance is claimed.

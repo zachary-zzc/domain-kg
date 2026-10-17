@@ -1,8 +1,8 @@
 # Domain KG MCP Server
 
-Domain KG is a proposed shared web service for preserving work materials, constructing traceable knowledge graphs, and retrieving evidence through MCP and HTTP. Users manage multiple KGs, control access, add or replace materials, and remove a material without removing evidence supplied by other materials.
+Domain KG is a shared web service under development for preserving work materials, constructing traceable knowledge graphs, and retrieving evidence through MCP and HTTP. Users manage multiple KGs, control access, add or replace materials, and remove a material without removing evidence supplied by other materials.
 
-**Status:** Task 1 compatibility spike is verified: 17 smoke tests pass against real MongoDB, Neo4j, Qdrant, and S3 within the 1.5 GB RAM cap. Team accounts, domain services, and later plan tasks remain pending. See [implementation progress](docs/implementation-progress.md).
+**Status:** Identity, scoped ingestion/retrieval, immutable publication, durable curation, HTTP/MCP and validated legacy imports have local implementations and real-store checks. The team console has passed its local smoke and representative browser checks; backup/restore and release evaluation remain in progress. External identity/client acceptance and live extraction quality are separate release gates. See [implementation progress](docs/implementation-progress.md).
 
 ## Laptop smoke checks
 
@@ -15,7 +15,7 @@ The offline smoke runs lint, strict type checks, mounted MCP transport, source-p
 
 Run `python3 scripts/smoke.py --task 1` for real MongoDB, Neo4j, Qdrant, and S3 checks. The four services have hard limits totalling 1,408 MiB (1.476 GB), below the 1.5 GB RAM cap, with swap disabled and 2.5 CPU cores in total. The runner verifies configured and running limits, generates private local credentials, uses loopback ports, and stops services it started. See [runtime and integration decisions](docs/decisions/0001-runtime-and-lightrag.md) for the unverified gates.
 
-For manual transport inspection, `uv run python -m domain_kg` starts the local probe on port 8000. `GET /healthz` returns coarse health; `/mcp` rejects access until a real external OIDC verifier is implemented in Task 3. No private material endpoint is exposed by this spike.
+`uv run python -m domain_kg` starts the loopback app on port 8000. With a configured external OIDC issuer/client and approved backend/provider configuration, `/admin`, `/api/v1` and `/mcp` use the shared current-policy services. Without identity configuration, the default protected probe denies access. `GET /healthz` reports coarse status. See [identity setup](docs/identity-development.md), [transports](docs/transports.md) and the [console guide](docs/console.md).
 
 ## Recommended design
 
@@ -48,7 +48,7 @@ flowchart LR
 | [Acceptance and evaluation](docs/acceptance.md) | Release gates for permissions, graph quality, retrieval, lifecycle, and recovery |
 | [Research and skills](docs/research-and-skills.md) | Primary sources, current KG alternatives, and planning skills reviewed |
 
-Start implementation with the LightRAG and NoSQL compatibility spike, then identity and namespace isolation. The first useful vertical slice is: an authorized editor uploads a PDF into one KG, a worker publishes its version, and an authorized reader retrieves cited evidence while an unauthorized user cannot discover it.
+The initial vertical slice is: an authorized editor uploads a PDF into one KG, a worker publishes its version, and an authorized reader retrieves cited evidence while an unauthorized user cannot discover it.
 
 ## First release scope
 

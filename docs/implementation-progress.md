@@ -194,3 +194,20 @@ combined Task 16 laptop command passed all 59 checks in 395.61 seconds, completi
 its local implementation gate. Running hard database limits remained 1.476 GB
 with swap disabled and no OOM or restart.
 See [legacy imports](legacy-imports.md) and [the compatibility decision](decisions/0002-lightrag-compatibility.md).
+
+Task 17's local console gate passed all 43 checks in 354.84 seconds, including
+five-role acceptance, source management, durable work, current grants, curation,
+rollback and operator isolation. The unit/protocol suite passed 183 checks in
+5.60 seconds, with Ruff and strict mypy passing. Streaming browser forms enforce
+their 64 KiB budget before buffering; owner readiness detects projection loss in
+accepted unverified imports without promoting their trust. Docker remained at
+1.476 GB hard limits with swap disabled, no OOM and no restart.
+
+The laptop browser verified keyboard focus/skip links, cited search, node/edit
+scope, owner/admin screens, reader denial and logout/back-cache behavior. Its
+optional file-picker walkthrough was interrupted; the original temporary fixture
+timed out, and the corrected restart shut down cleanly. That browser file-picker
+path remains unverified; real API upload/checksum/publication checks passed.
+External OIDC acceptance is still separate. See [console](console.md).
+Task 18 continues with [publication-aware operations](superpowers/plans/2026-10-17-operations.md);
+its checkboxes are future work, and no backup/restore or release readiness is claimed.

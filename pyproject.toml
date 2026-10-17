@@ -39,7 +39,7 @@ packages = ["src/domain_kg"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "tests/integration"]
 markers = ["storage: requires the resource-limited local Compose services", "physical: sequential independent graph/vector deployment drill"]
 
 [tool.ruff]

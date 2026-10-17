@@ -66,18 +66,18 @@ Files: add `console/curation.py`, `console/operations.py`, templates `node.html`
 
 Interfaces: `RevisionService.update_node/update_relation/curate_node/get_revisions/rollback`; `ProjectionManagement.status/repair`; catalog registry inventory/capabilities. Owner backup/export controls are added when Task 18 services exist, without placeholder success.
 
-- [ ] Add tests for escaped before/after diffs, pending/published curation, stale revisions, rollback under current permissions and imported target labels.
-- [ ] Implement node/relation edits, merge/split/suppression, explicit source/public scope, history and compensating rollback review using the existing typed commands.
-- [ ] Add owner projection/readiness/repair screens and a separate operator registered-backend health view. An operator without KG membership cannot view materials, graph names, counts or search results.
-- [ ] Verify the focused serial console and curation/operations permission tests; commit.
+- [x] Add tests for escaped before/after diffs, pending/published curation, stale revisions, rollback under current permissions and imported target labels.
+- [x] Implement node/relation edits, merge/split/suppression, explicit source/public scope, history and compensating rollback review using the existing typed commands.
+- [x] Add owner projection/readiness/repair screens and a separate operator registered-backend health view. An operator without KG membership cannot view materials, graph names, counts or search results.
+- [x] Verify the focused serial console and curation/operations permission tests; commit.
 
 ### Step 5: Browser and local acceptance
 
 Files: `tests/evaluation/test_console_flows.py`, `docs/console.md`; extend `scripts/smoke.py` with Task 17.
 
-- [ ] Add repeatable tiny session-backed end-to-end cases for admin, owner, editor, reader, operator and revoked-session flows. Include CSRF, namespace substitution, HTML escaping, expected revision and pending job cases.
-- [ ] Run `uv run pytest tests/integration/test_console.py tests/evaluation/test_console_flows.py -q`, Ruff and strict mypy; inspect representative rendered pages and keyboard/focus behavior in the laptop browser.
-- [ ] Record measured results and external OIDC acceptance still outstanding, update only verified plan boxes, and commit. Continue to Task 18 without a new permission prompt.
+- [x] Add repeatable tiny session-backed end-to-end cases for admin, owner, editor, reader, operator and revoked-session flows. Include CSRF, namespace substitution, HTML escaping, expected revision and pending job cases.
+- [x] Run `uv run pytest tests/integration/test_console.py tests/evaluation/test_console_flows.py -q`, Ruff and strict mypy; inspect representative rendered pages and keyboard/focus behavior in the laptop browser.
+- [x] Record measured results and external OIDC acceptance still outstanding, update only verified plan boxes, and commit. Continue to Task 18 without a new permission prompt.
 
 Dependency research: the [Jinja2 release page](https://pypi.org/project/Jinja2/)
 identifies 3.1.6; the [official HTMX installation guide](https://htmx.org/docs/)
@@ -85,3 +85,14 @@ provides 2.0.11 and its SHA-384 integrity value. Vendor that exact browser asset
 and its upstream license, verify the published integrity, serve it locally and
 record the checksum. No runtime CDN dependency, JavaScript bundler or browser
 automation package installation is required.
+
+Local verification: the complete Task 17 runner passed 43 checks in 354.84 seconds;
+183 unit/protocol checks passed in 5.60 seconds. The laptop browser verified
+catalog/search/citation/node/edit/owner operations/admin screens, Tab focus and
+skip-link activation, reader denial, and logout/back-cache behavior. Its optional
+file-picker walkthrough was interrupted by a long browser interaction and could
+not be completed after the controller became unavailable. The original temporary
+fixture timed out (915.74 seconds); cleanup was corrected and the restarted
+fixture stopped cleanly (100.67 seconds). File upload/checksum/publication are
+verified by the real API integration flow, not claimed as a completed browser
+file-picker flow. External OIDC acceptance remains separate.
