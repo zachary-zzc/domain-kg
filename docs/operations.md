@@ -142,3 +142,14 @@ lease, source boundary and placement approval are rechecked before work. Profile
 detach serializes with allocation and refuses a referenced profile. Ordinary
 workers leave restore jobs queued, and an unverified restore cannot finish.
 The target assembly/activation handler and public restore controls remain pending.
+
+Private target provisioning now uses the same bounded backend pools as catalog
+provisioning. Only a live restore lease can select its recorded target and
+placement. The target's provider profile requires a separate namespace approval
+and permission for restricted content; restoring data starts owner-only. The
+selected embedding dimensions determine the new collection. Approval and job
+authority are checked again after provisioning. No target grant or fabricated
+access context is used, and no embedding request is needed to create the empty
+stores. The real target/provider test passed in 4.53 seconds; 12 restore/catalog
+regressions passed in 13.91 seconds, seven namespace/storage checks in 1.51 seconds,
+and all 220 unit/protocol checks in 4.23 seconds. Ruff and strict mypy passed.

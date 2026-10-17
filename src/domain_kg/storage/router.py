@@ -256,6 +256,16 @@ class KGStoreRouter:
         if kg is None:
             raise inaccessible_reference()
         profile = await self.registry.profile(UUID(kg["storage_profile_id"]), current.org_id)
+        result = await self._bind_namespace(
+            Namespace(org_id=current.org_id, kg_id=kg_id), profile, UUID(kg["generation"])
+        )
+        await self.policy.revalidate(current)
+        return result
+
+    async def _bind_namespace(
+        self, namespace: Namespace, profile: StorageProfile, generation: UUID
+    ) -> RoutedStores:
+        """Private construction only; callers establish authority before and after."""
         mongo = await self.registry.connection(profile.mongo_id, "mongo")
         graph = await self.registry.connection(profile.neo4j_id, "neo4j")
         vector = await self.registry.connection(profile.qdrant_id, "qdrant")
@@ -289,8 +299,6 @@ class KGStoreRouter:
             if profile.object_store_id not in self._blobs:
                 self._blobs[profile.object_store_id] = s3_client(blob)
                 self._blob_uploads[profile.object_store_id] = asyncio.Semaphore(1)
-        namespace = Namespace(org_id=current.org_id, kg_id=kg_id)
-        generation = UUID(kg["generation"])
         return RoutedStores(
             namespace=namespace,
             authority=NamespaceRepository(self.policy.database.client[mongo.database], namespace),
@@ -298,7 +306,7 @@ class KGStoreRouter:
             vectors=VectorBinding(
                 namespace,
                 self._vectors[profile.qdrant_id],
-                f"kg_{current.org_id.hex}_{kg_id.hex}_{generation.hex}",
+                f"kg_{namespace.org_id.hex}_{namespace.kg_id.hex}_{generation.hex}",
             ),
             blobs=BlobBinding(
                 namespace,
@@ -324,6 +332,13 @@ class KGStoreRouter:
 
     async def provision(self, access: AccessContext, kg_id: UUID) -> None:
         stores = await self._bind(access, kg_id)
+        await self._provision_namespace(stores, self.dimensions)
+        await self.policy.revalidate(access)
+
+    async def _provision_namespace(self, stores: RoutedStores, dimensions: int) -> None:
+        """Provision the already-authorized namespace using the selected vector size."""
+        if type(dimensions) is not int or not 1 <= dimensions <= 4096:
+            raise ValueError("invalid embedding dimensions")
         try:
             await install_mongo_schema(stores.authority._database)
             await stores.graph.driver.execute_query(
@@ -336,7 +351,7 @@ class KGStoreRouter:
                     await stores.vectors.client.create_collection(
                         stores.vectors.collection,
                         vectors_config=models.VectorParams(
-                            size=self.dimensions, distance=models.Distance.COSINE
+                            size=dimensions, distance=models.Distance.COSINE
                         ),
                     )
                 except UnexpectedResponse:
@@ -358,7 +373,7 @@ class KGStoreRouter:
                 )
             result = await stores.vectors.client.get_collection(stores.vectors.collection)
             config = result.config.params.vectors
-            if not isinstance(config, models.VectorParams) or config.size != self.dimensions:
+            if not isinstance(config, models.VectorParams) or config.size != dimensions:
                 raise ValueError("embedding dimension mismatch")
             buckets = await asyncio.to_thread(stores.blobs.client.list_buckets)
             if stores.blobs.bucket not in [bucket["Name"] for bucket in buckets.get("Buckets", [])]:
@@ -371,7 +386,6 @@ class KGStoreRouter:
                 "KG namespace provisioning did not complete.",
                 retryable=True,
             ) from exc
-        await self.policy.revalidate(access)
 
     async def close(self) -> None:
         for graph_client in self._graphs.values():
