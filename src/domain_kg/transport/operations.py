@@ -15,6 +15,7 @@ from domain_kg.operations.downloads import BackupDownloads
 from domain_kg.operations.export import ExportService
 from domain_kg.operations.export_models import ExportManifest
 from domain_kg.operations.jobs import OwnerOperations
+from domain_kg.operations.metrics import ProviderUsage
 from domain_kg.operations.models import BackupCommand, ExportCommand, MaintenanceCommand
 from domain_kg.operations.packages import PackagePage
 from domain_kg.transport.runtime import ServiceRuntime
@@ -74,6 +75,10 @@ def operation_router(runtime: ServiceRuntime) -> APIRouter:
                 "Cache-Control": "no-store",
             },
         )
+
+    @router.get("/kgs/{kg_id}/usage")
+    async def usage(request: Request, kg_id: UUID) -> ProviderUsage:
+        return await runtime.usage.get(await access(request, kg_id, action=Action.CONFIGURE), kg_id)
 
     @router.post("/kgs/{kg_id}/repairs/curations", status_code=202)
     async def repair_curation(

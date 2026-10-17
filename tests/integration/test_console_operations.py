@@ -44,6 +44,13 @@ async def test_owner_readiness_repair_and_operator_health_without_kg_access(
                 status = await browser.get(operations)
                 assert status.status_code == 200 and "Graph ready" in status.text
                 assert "Vector ready" in status.text and "Published revision 1" in status.text
+                assert (
+                    "Daily provider budget (UTC)" in status.text
+                    and "Available in this KG" in status.text
+                )
+                usage = await browser.get(f"/api/v1/kgs/{job.kg_id}/usage")
+                assert usage.status_code == 200 and usage.json()["kg_id"] == str(job.kg_id)
+                assert "organization_usage" not in usage.json()
                 repair = await browser.post(
                     f"{operations}/repair",
                     data={
@@ -57,6 +64,10 @@ async def test_owner_readiness_repair_and_operator_health_without_kg_access(
                 browser.cookies.set("domain_kg_session", reader.session_id)
                 browser.cookies.set("domain_kg_csrf", reader.csrf)
                 assert (await browser.get(operations)).status_code in (403, 404)
+                assert (await browser.get(f"/api/v1/kgs/{job.kg_id}/usage")).status_code in (
+                    403,
+                    404,
+                )
                 assert (await browser.get("/admin/infrastructure")).status_code in (403, 404)
                 operator = await app.state.identity.sessions.create(principals["denied"], org)
                 browser.cookies.set("domain_kg_session", operator.session_id)

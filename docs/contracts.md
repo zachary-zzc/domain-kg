@@ -88,6 +88,7 @@ Optional MCP resources expose authorized schema and material metadata, with opaq
 | `GET/POST /backends`, `POST /backends/{id}/validate`, `PATCH /backends/{id}` | Operator-only registered backend management |
 | `GET/POST /storage-profiles`, `PATCH /storage-profiles/{id}` | Operator-managed MongoDB/Neo4j/Qdrant/object-store bundles |
 | `GET /kgs/{kg_id}/projections`, `POST /kgs/{kg_id}/repair` | Owner projection readiness and repair jobs |
+| `GET /kgs/{kg_id}/usage` | Current-owner KG daily provider counters, reservations, limits and UTC reset; no organization aggregate |
 | `POST /kgs/{kg_id}/repairs/curations` | Current-owner repair of one accepted human revision using sealed vectors; expected publication and idempotency key required |
 | `GET /citations/{citation_id}` | Resolve source location or stream authorized original |
 

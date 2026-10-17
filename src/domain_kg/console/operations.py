@@ -35,6 +35,7 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
                 "title": "Projection operations",
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "status": result,
+                "usage": await runtime.usage.get(access, kg_id),
                 "command_key": str(uuid4()),
                 "curation_repair_key": str(uuid4()),
                 "backup_key": str(uuid4()),

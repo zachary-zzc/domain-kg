@@ -16,6 +16,7 @@ from domain_kg.materials.inspection import MaterialInspection
 from domain_kg.materials.lifecycle import MaterialLifecycle
 from domain_kg.materials.management import MaterialManagement
 from domain_kg.materials.service import MaterialService
+from domain_kg.operations.metrics import UsageMetrics
 from domain_kg.operations.projections import ProjectionManagement
 from domain_kg.providers.service import ProviderService
 from domain_kg.retrieval.service import RetrievalService
@@ -44,6 +45,7 @@ class ServiceRuntime:
         self.grants = GrantManagement(self.policy)
         self.material_grants = MaterialGrantManagement(self.policy)
         self.projections = ProjectionManagement(self.queue)
+        self.usage = UsageMetrics(self.policy, providers.budgets)
         self.imports = Importer(materials, providers)
 
     async def initialize(self) -> None:

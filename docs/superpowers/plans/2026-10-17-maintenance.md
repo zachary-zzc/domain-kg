@@ -7,7 +7,7 @@ Read `docs/revisions-and-publication.md` and preserve its publication rules.
 
 ## 1. Owner maintenance admission
 
-- [ ] Add a typed owner `maintenance` job/command, initially `repair_curation`,
+- [x] Add a typed owner `maintenance` job/command, initially `repair_curation`,
   with KG, expected publication, curation UUID and idempotency key. Reuse current
   verified-owner admission, lease, snapshot and audit; never invent a material
   version or impersonate the historical curator.
@@ -15,7 +15,7 @@ Read `docs/revisions-and-publication.md` and preserve its publication rules.
   history and immutable document under the current namespace. Capture its owner
   key, manifest, content seal and base artifact provenance. Deny reader/editor,
   cross-KG, stale-publication and unresolved/pending history requests.
-- [ ] Keep ordinary source workers and model-free backup/export workers from
+- [x] Keep ordinary source workers and model-free backup/export workers from
   claiming maintenance. A dedicated serial worker handles it.
 
 ## 2. Immutable repair without replaying human intent

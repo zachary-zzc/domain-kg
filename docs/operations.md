@@ -370,3 +370,13 @@ backup/restore and new-owner rollback passed. The two focused end-to-end cases
 passed in 422.90 seconds under the existing Docker limits; three worker checks
 passed in 1.65 seconds. These are synthetic model-free fixtures, not an external
 provider quality or full release acceptance result. No model ran.
+
+Owner daily usage is available at `GET /kgs/{kg_id}/usage` and on the Operations
+page. It reports only that KG's UTC-day settled and held call/token counters,
+effective KG limits, remaining KG allowance and next UTC reset. Shared organization
+limits still apply; organization aggregate usage and other KG counts are omitted.
+Current owner policy is checked before and after the read; revoked actors,
+editors/readers and foreign KG references fail. Pending reservations, settlement,
+foreign org/KG isolation and console/API permissions passed in two focused
+checks (74.45 seconds). Ruff and strict mypy (208 sources) passed. These counters
+are conservative consumption bounds, not monetary billing.
