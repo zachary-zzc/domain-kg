@@ -173,3 +173,16 @@ raw content hashes and origin text stay exact. Prepared and embedded rows keep
 `imported_unverified` status without fabricated extraction provenance or spans.
 Four focused cases passed, and all 233 unit/protocol checks passed in 4.27 seconds;
 Ruff and strict mypy (179 sources) passed. This still does not activate a KG.
+
+The first real sealed-package preparation flow now copies exact original bytes
+into an inactive target and writes the five resealed preparation stages. Complete
+package verification precedes target provisioning. Metadata, parts, rows and
+staged document bytes have explicit bounds; originals stream through the existing
+one-writer spool. Replays reuse only fully checksum-verified immutable objects,
+including after a lost write response. Corrupt retained originals fail before
+target copying/provisioning and leave live originals intact. The initial real
+flow passed in 25.00 seconds; replay and corruption cases passed in 48.18 seconds.
+All 233 unit/protocol checks passed in 4.37 seconds, with Ruff and strict mypy
+(181 sources). No model was called. Target authority, projection publication and
+activation remain pending. The Docker configured/running hard limits were also
+read back at 1.476 GB combined with swap disabled.
