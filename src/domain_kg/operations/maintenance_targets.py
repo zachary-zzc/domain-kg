@@ -45,6 +45,9 @@ class MaintenanceTargets:
         self.queue, self.database = queue, queue.database
 
     async def initialize(self) -> None:
+        await self.database.maintenance_results.create_index(
+            [("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True
+        )
         await self.database.maintenance_targets.create_index(
             [("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True
         )

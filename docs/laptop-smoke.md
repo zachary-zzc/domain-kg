@@ -77,3 +77,25 @@ pending hold. A new UTC day uses a new bucket. These are request/usage limits,
 not a currency billing estimate. A request needs room for its full bound even
 when the requested text is short. No prompt, source text, endpoint or credential
 is stored in the budget ledger.
+
+## Human projection repair
+
+The owner Operations page can submit an accepted human revision ID against the
+shown publication revision. The HTTP equivalent is
+`POST /api/v1/kgs/{kg_id}/repairs/curations` with `kg_id`, `curation_id`,
+`expected_published_revision` and `idempotency_key`. A changed publication is a
+conflict. Cancellation/retry use the usual authorized job controls.
+
+Process one approved curation repair natively with:
+
+```sh
+uv run --no-sync python -m domain_kg.worker --maintenance-only --once
+```
+
+This mode does not load the private provider file. It uses the accepted sealed
+curation document and existing vectors, and never claims source ingestion,
+material repair, backup, export or KG restore jobs. It inserts isolated graph,
+vector and lexical projections, checks them, then switches one publication. It
+preserves the original human actor, reason, scope and target revision counters.
+The API process and this native worker remain outside the Docker database budget;
+no native model is started by this command.

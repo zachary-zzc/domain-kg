@@ -236,6 +236,16 @@ class AuthorityCapture:
                         "stage": "ready"
                     }
                 elif table == "projection_attempts":
+                    if row.get("maintenance_origin"):
+                        from domain_kg.operations.maintenance_results import (
+                            maintenance_artifact_job,
+                        )
+
+                        original = await maintenance_artifact_job(
+                            self.queue, await self.capture.guard(self.job), row
+                        )
+                        row["job"] = original.model_dump(mode="json")
+                        row["maintenance_provenance"] = row.pop("maintenance_origin")
                     # Retain historical identity, never a reusable worker/publication lease.
                     row.pop("lease", None)
                     row["job"] = {

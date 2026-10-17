@@ -9,6 +9,8 @@ from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.models import JobReceipt
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.models import FrozenModel, IdempotencyKey, NonNegative
+from domain_kg.operations.jobs import OwnerOperations
+from domain_kg.operations.models import MaintenanceCommand
 from domain_kg.retrieval.evidence import SealedEvidence
 from domain_kg.retrieval.models import SearchFilters, SearchRequest
 from domain_kg.revisions.repair import RepairService
@@ -81,3 +83,9 @@ class ProjectionManagement:
         return await RepairService(self.queue).request(
             current, kg, material, idempotency_key=idempotency_key
         )
+
+    async def repair_curation(
+        self, access: AccessContext, command: MaintenanceCommand
+    ) -> JobReceipt:
+        current = await self.queue.policy.revalidate(access, action=Action.CONFIGURE)
+        return await OwnerOperations(self.queue).submit(current, command)

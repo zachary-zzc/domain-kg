@@ -13,6 +13,7 @@ from domain_kg.console.workspace import filters_for, read_context
 from domain_kg.errors import inaccessible_reference
 from domain_kg.identity.models import Action
 from domain_kg.models import PageRequest
+from domain_kg.operations.models import MaintenanceCommand
 from domain_kg.operations.projections import RepairCommand
 from domain_kg.transport.runtime import ServiceRuntime
 
@@ -35,6 +36,7 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "status": result,
                 "command_key": str(uuid4()),
+                "curation_repair_key": str(uuid4()),
                 "backup_key": str(uuid4()),
                 "export_key": str(uuid4()),
             },
@@ -51,6 +53,24 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
         result = await runtime.projections.repair(
             access, kg_id, command.material_id, idempotency_key=command.idempotency_key
         )
+        return redirect(f"/admin/kgs/{kg_id}/jobs/{result.job_id}")
+
+    @router.post("/kgs/{kg_id}/operations/repair-curation")
+    async def repair_curation(request: Request, kg_id: UUID) -> RedirectResponse:
+        fields, _, access = await command_context(runtime, request, kg_id, Action.CONFIGURE)
+        try:
+            command = MaintenanceCommand.model_validate(
+                fields
+                | {
+                    "kg_id": kg_id,
+                    "expected_published_revision": int(
+                        fields.get("expected_published_revision", "")
+                    ),
+                }
+            )
+        except (ValueError, ValidationError):
+            raise invalid_form() from None
+        result = await runtime.projections.repair_curation(access, command)
         return redirect(f"/admin/kgs/{kg_id}/jobs/{result.job_id}")
 
     @router.get("/infrastructure")

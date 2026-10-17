@@ -359,3 +359,14 @@ passed in 159.91 seconds. Preparation passed separately in 21.31 seconds; all
 269 existing unit/protocol checks passed in 8.64 seconds. Ruff and strict mypy
 (207 sources) passed. Backup/restore compatibility and public controls are the
 next verification gate, so the complete maintenance group remains open.
+
+The owner Operations screen and `POST /kgs/{kg_id}/repairs/curations` now share
+typed curation-repair admission. CSRF, idempotent API/console replay, cancellation,
+retry, actual serial worker completion and reader denial passed. The dedicated
+`--maintenance-only` mode skips private provider configuration entirely. Backup
+authenticates repair provenance, captures the original artifact job as historical
+data and retains the repair origin without any active lease. A real repaired-KG
+backup/restore and new-owner rollback passed. The two focused end-to-end cases
+passed in 422.90 seconds under the existing Docker limits; three worker checks
+passed in 1.65 seconds. These are synthetic model-free fixtures, not an external
+provider quality or full release acceptance result. No model ran.

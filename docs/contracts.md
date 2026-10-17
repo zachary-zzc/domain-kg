@@ -88,6 +88,7 @@ Optional MCP resources expose authorized schema and material metadata, with opaq
 | `GET/POST /backends`, `POST /backends/{id}/validate`, `PATCH /backends/{id}` | Operator-only registered backend management |
 | `GET/POST /storage-profiles`, `PATCH /storage-profiles/{id}` | Operator-managed MongoDB/Neo4j/Qdrant/object-store bundles |
 | `GET /kgs/{kg_id}/projections`, `POST /kgs/{kg_id}/repair` | Owner projection readiness and repair jobs |
+| `POST /kgs/{kg_id}/repairs/curations` | Current-owner repair of one accepted human revision using sealed vectors; expected publication and idempotency key required |
 | `GET /citations/{citation_id}` | Resolve source location or stream authorized original |
 
 The `...` abbreviations in this table preserve the preceding KG or job prefix; actual OpenAPI paths must be fully expanded. `POST /kgs/{kg_id}/restores` restores a backup into a newly allocated KG with a new ID. Uploads require current editor access and reserve quota; completion verifies hash and length. Unclaimed uploads expire after 24 hours. Do not expose object-store credentials or accept a client-selected object key.

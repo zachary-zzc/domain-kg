@@ -17,6 +17,7 @@ from domain_kg.jobs.runner import JobRunner
 from domain_kg.operations.backup import BackupService
 from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.operations.export import ExportService
+from domain_kg.operations.maintenance import MaintenanceService
 from domain_kg.operations.restore import RestoreService
 from domain_kg.providers.profiles import ProviderRegistry
 from domain_kg.providers.service import ProviderService
@@ -39,11 +40,14 @@ async def serve(
     export_only: bool = False,
     operations_only: bool = False,
     kg_restore_only: bool = False,
+    maintenance_only: bool = False,
 ) -> None:
     runner.pipeline.require_configured()
     while True:
         kinds = (
-            ("restore",)
+            ("maintenance",)
+            if maintenance_only
+            else ("restore",)
             if kg_restore_only
             else ("backup", "export")
             if operations_only
@@ -84,6 +88,7 @@ async def main(
     export_only: bool = False,
     operations_only: bool = False,
     kg_restore_only: bool = False,
+    maintenance_only: bool = False,
 ) -> None:
     settings = Settings()
     client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
@@ -96,11 +101,12 @@ async def main(
         queue = JobQueue(policy, router)
         approved_providers = (
             ProviderRegistry()
-            if backup_only or export_only or operations_only
+            if backup_only or export_only or operations_only or maintenance_only
             else ProviderRegistry.from_file(settings.provider_config)
         )
         if not approved_providers.profiles and not (
-            repair_only
+            maintenance_only
+            or repair_only
             or restore_only
             or curation_only
             or purge_only
@@ -116,7 +122,9 @@ async def main(
         runner = JobRunner(
             queue,
             configured_pipeline(queue, providers),
-            operations=RestoreService(queue, providers)
+            operations=MaintenanceService(queue)
+            if maintenance_only
+            else RestoreService(queue, providers)
             if kg_restore_only
             else OwnerJobExecutor(queue)
             if operations_only
@@ -142,6 +150,7 @@ async def main(
             export_only=export_only,
             operations_only=operations_only,
             kg_restore_only=kg_restore_only,
+            maintenance_only=maintenance_only,
         )
     finally:
         await router.close()
@@ -152,6 +161,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--maintenance-only",
+        action="store_true",
+        help="repair accepted human projections serially without models",
+    )
     mode.add_argument(
         "--kg-restore-only",
         action="store_true",
@@ -207,6 +221,7 @@ if __name__ == "__main__":
                 export_only=args.export_only,
                 operations_only=args.operations_only,
                 kg_restore_only=args.kg_restore_only,
+                maintenance_only=args.maintenance_only,
             )
         )
     except DomainError as exc:

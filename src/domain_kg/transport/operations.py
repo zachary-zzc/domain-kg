@@ -15,7 +15,7 @@ from domain_kg.operations.downloads import BackupDownloads
 from domain_kg.operations.export import ExportService
 from domain_kg.operations.export_models import ExportManifest
 from domain_kg.operations.jobs import OwnerOperations
-from domain_kg.operations.models import BackupCommand, ExportCommand
+from domain_kg.operations.models import BackupCommand, ExportCommand, MaintenanceCommand
 from domain_kg.operations.packages import PackagePage
 from domain_kg.transport.runtime import ServiceRuntime
 
@@ -73,6 +73,16 @@ def operation_router(runtime: ServiceRuntime) -> APIRouter:
                 "X-Content-Type-Options": "nosniff",
                 "Cache-Control": "no-store",
             },
+        )
+
+    @router.post("/kgs/{kg_id}/repairs/curations", status_code=202)
+    async def repair_curation(
+        request: Request, kg_id: UUID, command: MaintenanceCommand
+    ) -> JobReceipt:
+        if command.kg_id != kg_id:
+            raise DomainError(ErrorCode.VALIDATION_ERROR, "Path and command identities must match.")
+        return await runtime.projections.repair_curation(
+            await access(request, kg_id, mutate=True, action=Action.CONFIGURE), command
         )
 
     @router.post("/kgs/{kg_id}/exports", status_code=202)
