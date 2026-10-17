@@ -37,7 +37,7 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
             access,
             "operations.html",
             {
-                "title": "Projection operations",
+                "title": "Search index maintenance",
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "status": result,
                 "projection_work": await ProjectionWorkMetrics(runtime.policy).get(access, kg_id),

@@ -17,7 +17,7 @@ Tasks 3, 9 and 15 retain external gates. The demo does not establish release rea
 | 管理界面中文 / English 切换 | 全部模板的导航、表单、状态、无障碍标签及上传反馈使用本地词表；不调用翻译模型。原文、名称与编辑理由不变。 / Local interface translations preserve original evidence. |
 | 语言设置与权限边界 / Locale boundaries | 请求隔离、浏览器语言权重、偏好 cookie、安全返回路径、原始内容转义、错误页不回显被拒路径。309 项单元及真实数据库控制台检查通过，24.36 秒。 / 309 unit and real-store console checks passed. |
 | 实际双语预览 / Live bilingual preview | 8 个中文页面、英文切换、原始证据及 reader 运维拒绝通过 HTTP 检查；隔离预览正常退出，126.26 秒。 / Eight Chinese pages and English switching verified through HTTP. |
-| 待发布投影指标 / Pending projection work | 当前 owner 专属，显示待处理、失败、需修复数量，以及采样中最早待处理时间。超过 1,000 个任务时计数明确为下限。图/向量就绪继续单独核验。 / Bounded owner-only observability, separate from receipt readiness. |
+| 检索索引更新任务 / Search index update jobs | 当前 owner 专属，显示待处理、失败、需修复数量，以及采样中最早待处理时间。超过 1,000 个任务时计数明确为下限。图谱/向量索引可用性继续单独核验。 / Bounded owner-only observability, separate from receipt readiness. |
 | 指标验证 / Metrics verification | 11 项定向检查通过，16.31 秒，覆盖真实 MongoDB 隔离、溢出、读取后撤权、安全错误和双语页面。308 项完整单元检查通过，6.64 秒。Ruff、严格 mypy 通过。 / Focused storage/API checks and full unit regression passed. |
 
 具体范围：[双语阶段](superpowers/plans/2026-10-18-bilingual-console.md)、

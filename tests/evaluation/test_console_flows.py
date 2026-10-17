@@ -72,11 +72,11 @@ async def test_team_roles_namespace_csrf_and_revoked_session_acceptance(
                     if role == "owner":
                         assert metrics.json()["kg_id"] == str(job.kg_id)
                         assert metrics.headers["cache-control"] == "no-store"
-                        assert "Pending projection work" in operations.text
+                        assert "Search index update jobs" in operations.text
                         chinese = await browser.get(
                             f"{root}/operations", headers={"Accept-Language": "zh-CN"}
                         )
-                        assert chinese.status_code == 200 and "待发布的投影工作" in chinese.text
+                        assert chinese.status_code == 200 and "检索索引更新任务" in chinese.text
                     upload = await browser.get(f"{root}/materials/new")
                     assert (upload.status_code == 200) == (role in ("owner", "editor")), role
                     missing = await browser.get(
