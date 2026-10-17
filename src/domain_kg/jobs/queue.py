@@ -152,7 +152,7 @@ class JobQueue:
 
     @staticmethod
     def _action(kind: str) -> Action:
-        if kind in ("backup", "export", "restore"):
+        if kind in ("backup", "export", "restore", "maintenance"):
             from domain_kg.operations.jobs import operation_action
 
             return operation_action(kind)
@@ -370,6 +370,7 @@ class JobQueue:
                 "backup",
                 "export",
                 "restore",
+                "maintenance",
             }
         ):
             raise ValueError("job kinds require a configured handler")
@@ -451,7 +452,7 @@ class JobQueue:
             org_id=job.org_id,
             session=session,
         )
-        if job.kind in ("backup", "export", "restore"):
+        if job.kind in ("backup", "export", "restore", "maintenance"):
             from domain_kg.operations.jobs import OwnerOperations
 
             await OwnerOperations(self).authorize(access, raw, session)
@@ -761,7 +762,7 @@ class JobQueue:
 
             if await ExportService(self).accepted(job):
                 return
-        if job.kind in ("backup", "export", "restore"):
+        if job.kind in ("backup", "export", "restore", "maintenance"):
             await self.authorize(job)
             raise DomainError(
                 ErrorCode.REVISION_NOT_READY, "The operation has no verified package."
@@ -813,6 +814,8 @@ class JobQueue:
         await self.transactions.transaction(commit)
 
     async def accepted(self, job: LeasedJob) -> bool:
+        if job.kind == "maintenance":
+            return False  # Only a verified maintenance completion may accept this work.
         if job.kind == "restore":
             from domain_kg.operations.restore_results import RestoreResults
 
@@ -894,7 +897,7 @@ class JobQueue:
         )
         if raw is None:
             raise inaccessible_reference()
-        if raw["kind"] in ("backup", "export", "restore"):
+        if raw["kind"] in ("backup", "export", "restore", "maintenance"):
             from domain_kg.operations.jobs import OwnerOperations
 
             await OwnerOperations(self).authorize(current, raw, session)
@@ -1024,7 +1027,7 @@ class JobQueue:
                 },
                 session=session,
             )
-            if raw["kind"] in ("backup", "export", "restore"):
+            if raw["kind"] in ("backup", "export", "restore", "maintenance"):
                 from domain_kg.operations.jobs import OwnerOperations
 
                 operations = OwnerOperations(self)

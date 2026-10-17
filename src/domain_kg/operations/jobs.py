@@ -15,7 +15,7 @@ from domain_kg.models import ScopedRef
 from domain_kg.operations.audit import AuditTrail
 from domain_kg.operations.models import OwnerCommand, OwnerOperation, SnapshotPointer
 
-OWNER_KINDS = frozenset({"backup", "export", "restore"})
+OWNER_KINDS = frozenset({"backup", "export", "restore", "maintenance"})
 
 
 def operation_action(kind: str) -> Action:
@@ -90,6 +90,10 @@ class OwnerOperations:
             from domain_kg.operations.restore_targets import RestoreTargets
 
             await RestoreTargets(self.queue).record(record, session)
+        elif record.command.kind == "maintenance":
+            from domain_kg.operations.maintenance_targets import MaintenanceTargets
+
+            await MaintenanceTargets(self.queue).record(record, session)
         return record
 
     async def submit(self, access: AccessContext, command: OwnerCommand) -> JobReceipt:
@@ -104,6 +108,10 @@ class OwnerOperations:
             from domain_kg.operations.restore_targets import RestoreTargets
 
             await RestoreTargets(self.queue).initialize()
+        elif command.kind == "maintenance":
+            from domain_kg.operations.maintenance_targets import MaintenanceTargets
+
+            await MaintenanceTargets(self.queue).initialize()
         key = self.queue.transactions.key(current, command.kg_id, command.idempotency_key)
         fingerprint = digest(command.model_dump(mode="json"))
         operation_id, job_id = uuid4(), uuid4()
@@ -183,6 +191,10 @@ class OwnerOperations:
                 from domain_kg.operations.restore_targets import RestoreTargets
 
                 await RestoreTargets(self.queue).allocate(record, session)
+            elif command.kind == "maintenance":
+                from domain_kg.operations.maintenance_targets import MaintenanceTargets
+
+                await MaintenanceTargets(self.queue).allocate(current, record, session)
             raw = job.model_dump(mode="json") | {
                 "actor": current.principal.model_dump(mode="json"),
                 "stage": "queued",

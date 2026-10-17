@@ -338,3 +338,11 @@ binding. A subsequent owner rollback of the restored rename returns the original
 observed name without resurrecting the superseded override. The complete focused
 flow passed in 74.85 seconds. Identity bindings retain their established identity
 owner key. Curation repair/generation work is detailed in the maintenance subplan.
+
+Owner curation repair now has a typed maintenance admission record. Only the
+current owner can submit it, against the exact accepted publication, curation
+and stable owner key. Admission verifies the parent accepted attempt seal;
+ordinary source workers skip it, and unfinished maintenance cannot be reported
+as ready. Seven real-store admission, owner-control and audit regressions passed
+in 27.09 seconds; two command checks passed earlier. This is admission only:
+projection reconstruction, publication and public controls remain unfinished.
