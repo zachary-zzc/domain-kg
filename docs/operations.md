@@ -122,3 +122,13 @@ jobs in one serial loop, without loading provider configuration. Ingestion jobs
 remain queued for their own worker. The combined mode passed both real-store
 public flows in 32.29 seconds, plus 211 unit/protocol checks in 4.23 seconds;
 Ruff and strict mypy (173 source files) passed.
+
+Restore implementation now has a pure, bounded typed identity remapper. It
+recomputes identifier-based native entities and semantic assertions for a fresh
+KG, preserves source-local version/observation IDs and evidence locations, and
+maps legacy identities to the same IDs a fresh parse would produce. Human
+node/relation edits and merge/split history retain their independent provenance.
+Unknown references and changed observations are rejected. This is a foundation,
+not an available restore endpoint or a completed restore drill. Projection bodies
+are rebuilt without copying vectors: changed text must obtain a valid embedding
+through a currently approved target profile.
