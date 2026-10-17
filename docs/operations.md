@@ -32,3 +32,13 @@ audit and original-storage quota ledgers remain authoritative for their domains.
 The foundation gate passed 17 real-store checks in 32.26 seconds and 183
 unit/protocol checks in 4.27 seconds. Ruff and strict mypy passed. These are tiny
 synthetic laptop fixtures using the four capped Docker databases.
+
+Retained package objects now use the separate `retained-backups` prefix. Typed
+page/object references bind each object to its organization, KG, operation and
+attempt, and preserve original-file ownership, length and SHA-256 exactly.
+Reads verify the full checksum before yielding bytes. Immutable replay verifies
+existing bytes rather than overwriting them; spooling and multipart chunks keep
+memory bounded. Two package-contract checks passed in 0.04 seconds and a tiny real
+S3 integrity/replay/corruption check passed in 3.28 seconds. The broader
+unit/protocol suite passed 185 checks in 4.04 seconds. Full capture/sealing and
+restore handlers remain in progress.
