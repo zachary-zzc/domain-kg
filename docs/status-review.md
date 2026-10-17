@@ -1,125 +1,77 @@
-# 当前进度与可查看内容
+# 当前进度 / Current progress
 
-管理界面已增加中文 / English 切换：覆盖全部模板的导航、表单、状态和上传反馈。
-使用本地词表，不调用翻译模型；原文、材料/节点名称和人工理由保留原样。
-错误页提供中文提示及可展开的英文诊断，语言链接不回显被拒绝的路径或查询。
-本阶段 309 项单元和真实数据库控制台检查通过（24.36 秒），Ruff 和严格 mypy 通过。
-具体范围见 [双语阶段](superpowers/plans/2026-10-18-bilingual-console.md)。
+核对日期 / Reviewed: 2026-10-18。
 
-核对日期：2026-10-18。这里区分本机验证与上线验收，不把已有代码等同于全部完成。
+主计划 19 阶段中，14 阶段已完成本机验证。第 18、19 阶段仍有开发与验收工作，
+第 3、9、15 阶段仍需外部验证。不能把当前演示或局部测试等同于可上线。
 
-主计划 19 个阶段中，14 个阶段完成了本机验证；3 个阶段仍有外部验收门禁；
-剩余开发集中在第 18、19 阶段。同配置代际重建的核心流程已通过首轮本机验证：失败保留旧代、重试、重复重建及后续人工修复；页面入口、隐藏来源保留、清理保护及权限/配置/提交中断边界已验证；代际重建后的备份恢复、回滚和再次重建也已通过。主计划 57 个粗粒度检查项中，44 项已勾选，
-13 项未勾选。这不是剩余工时比例。
+14 of 19 stages have passed local verification. Tasks 18–19 remain in progress;
+Tasks 3, 9 and 15 retain external gates. The demo does not establish release readiness.
+完整阶段记录见 [implementation progress](implementation-progress.md) 与
+[implementation plan](implementation-plan.md)。
 
-| 已可查看 | 内容 | 验证范围 |
-| --- | --- | --- |
-| KG 目录与权限 | 多组织、多 KG、owner/editor/reader、材料 ACL | 本机真实数据库与签名身份 fixture |
-| 材料与任务 | 上传、原件、来源定位、任务、替换、排除、删除及恢复 | 合成材料；生命周期与并发检查 |
-| 检索与图谱 | fast/deep、过滤、跨 KG、引用、节点和关系查看 | 合成模型响应；真实图与向量存储 |
-| 人工修订 | 节点/关系编辑、合并拆分、抑制、历史及补偿回滚 | 保留来源与当前权限 |
-| 导入 | CSV/GraphML/LightRAG 导入与明确的未验证状态 | 第 16 阶段最终 59 项通过 |
-| 管理控制台 | 目录、检索、材料、任务、修订、授权与运维页面 | 第 17 阶段最终 43 项通过 |
-| HTTP/MCP | 22 个应用工具、受保护的资源与共享服务 | 本地协议/权限验证；外部客户端验收待做 |
+## 本轮完成 / Completed in this run
 
-第 18 阶段有五组工作：操作任务与审计、备份与导出、恢复、修复与代际迁移、
-预算/指标/部署。操作任务、审计基础、保留对象、捕获保护及备份封存已验证：
-14 项相关真实存储检查通过，202 项单元/协议检查通过。控制台和 HTTP 备份入口及无模型备份 worker
-已通过 4 项相关回归；owner 可排队和下载校验后的分片，reader 无权访问。
-JSONL/CSV/GraphML 导出及其页面、专用 worker、筛选和信任检查也已验证；
-默认排除未验证导入内容，撤销或权限变化会使旧导出失效。完整恢复演练尚未通过。
-恢复已验证新目标隔离、单独批准 provider、原件与来源证据账本、目标图/向量重建，
-以及原生材料的原子激活。激活时只为当前恢复操作者新增 owner 授权，旧授权不复制；
-图向量故障、权限撤销或提交中断时目标不可见。人工重命名历史的恢复和恢复后再次备份
-也已通过本机检查。继续编辑、隐藏后恢复显示、身份合并及新 owner 追加撤回修订也已通过；
-变化的关系文本只请求新的目标向量，中途撤销授权会停止恢复。
-原生与导入混合 KG 的恢复、默认信任筛选及未验证引用也已通过（55 秒）；
-拆分历史恢复、恢复后回滚及新 owner 再次拆分已通过（80.24 秒）；
-第二物理配置的备份→恢复→缺向量修复→后续人工编辑已通过串行演练（119.53 秒），
-原件字节、旧权限拒绝、源 KG 不变及主配置恢复均已验证；
-保留/清理和完整历史覆盖仍在推进，
-恢复任务已提供“进入已恢复 KG”的结果入口。备份页现可提交恢复，任务页显示
-新目标 ID 和独立的 provider 审批状态；未审批时目标仍不在目录中。
-公开 HTTP/控制台恢复、显式合成授权后激活及 owner/reader/editor 边界已通过（75 秒）。
-恢复前的组织/KG 原件配额、并发预留、提交回滚与结果页 owner/reader 权限也已通过。所有这一轮检查使用合成模型响应，没有调用真实模型。
-运维页现可查看近 7 天的服务 provider 用量历史，HTTP 可选择最多 31 天的 UTC 窗口。
-历史分别显示已记账与仍预留的调用/输入/输出 token；未知调用沿用保守上限，
-缺少记录的日期不补造为零。299 项单元和小型数据库/API 回归通过（22.76 秒），
-涵盖当前 owner、跨 KG 隔离、读取后撤权、后端安全错误、日期边界和额度保留。
-这里统计本服务的 provider 账本，与 Codex 对话 token 消耗分别记录。
+| 内容 / Feature | 结果 / Evidence |
+| --- | --- |
+| 管理界面中文 / English 切换 | 全部模板的导航、表单、状态、无障碍标签及上传反馈使用本地词表；不调用翻译模型。原文、名称与编辑理由不变。 / Local interface translations preserve original evidence. |
+| 语言设置与权限边界 / Locale boundaries | 请求隔离、浏览器语言权重、偏好 cookie、安全返回路径、原始内容转义、错误页不回显被拒路径。309 项单元及真实数据库控制台检查通过，24.36 秒。 / 309 unit and real-store console checks passed. |
+| 实际双语预览 / Live bilingual preview | 8 个中文页面、英文切换、原始证据及 reader 运维拒绝通过 HTTP 检查；隔离预览正常退出，126.26 秒。 / Eight Chinese pages and English switching verified through HTTP. |
+| 待发布投影指标 / Pending projection work | 当前 owner 专属，显示待处理、失败、需修复数量，以及采样中最早待处理时间。超过 1,000 个任务时计数明确为下限。图/向量就绪继续单独核验。 / Bounded owner-only observability, separate from receipt readiness. |
+| 指标验证 / Metrics verification | 11 项定向检查通过，16.31 秒，覆盖真实 MongoDB 隔离、溢出、读取后撤权、安全错误和双语页面。308 项完整单元检查通过，6.64 秒。Ruff、严格 mypy 通过。 / Focused storage/API checks and full unit regression passed. |
 
-服务侧 provider 日预算已经接入：在每次实际请求前，原子预留组织和 KG 的
-调用/输入/输出 token 预算；不确定是否已消耗的请求按上限保守记账。示例配置
-包含 laptop 与 webserver 两套预算，私有配置和密钥不进 Git。
-人工修订投影修复已验证：新的投影通过读取校验后才发布，保留原修改人、理由和
-修订计数；重复修复、响应丢失重试及四种故障隔离通过。运维页和 HTTP 入口、
-取消/重试、专用无模型 worker、CSRF 与 reader 拒绝也已通过。修复后备份、恢复
-到新 KG 及新 owner 回滚通过；这两条端到端检查共 423 秒，没有调用模型。
-运维页新增每日用量和预算：显示当前 KG 已用、预留、可用额度和 UTC 重置时间，
-已验证不会暴露其他 KG 或组织汇总用量，reader/editor 无权读取（两项检查共 74 秒）。
-代际迁移和完整发布验收仍未完成，因此修复/迁移组整体保持未完成。
-保留对象的底层清理组件已通过真实 S3 小样本：目标版本/上传清除，相邻对象与原件
-保留；到期清理任务已接通 owner 权限、固定目标清单、租约、审计及独立 worker。
-控制台必须明确选择备份、导出或两者；默认到期后再等 24 小时，每次最多 10 份。
-损坏备份会阻止删除，删除后撤权会阻止完成；同一任务可继续核验。
-恢复写入跟踪已验证：取消会等待已发出的写入结束，结果不确定时保留记录；
-任务页显示写入中/不确定数量。失败恢复目标清理已接通 owner 页面、HTTP 和独立无模型 worker：
-先永久封锁原恢复重试，再核验目标对象/图/向量/账本清空，最后原子释放配额。
-异常对象仍存在或事务回滚时不退款；重放不重复退款。300 项检查通过（115 秒）。
-历史未跟踪或写入状态不确定的目标会拒绝自动清理；旧存储位置清理仍待完成。部署文件与只读 CI 已准备，
-离线包检查通过；没有在本机构建镜像或触发远程 CI。当前 293 项单元/协议检查通过；清理和恢复另有真实存储验证。
-运维页现有 owner 操作审计表：失败记录实际 attempt 和安全错误码，包含租约耗尽；
-操作者撤权后仍保留入队归属，不恢复其权限，也不保存异常正文。审计 API 限 owner。
-该阶段 305 项检查通过（55 秒），普通任务取消/恢复回归两项通过（32 秒）。
-第 19 阶段的独立评估集、最终回归和团队试用尚未完成。
+具体范围：[双语阶段](superpowers/plans/2026-10-18-bilingual-console.md)、
+[投影指标阶段](superpowers/plans/2026-10-18-projection-work-metrics.md)。
 
-另外三项验收是：第 3 阶段真实外部 OIDC 登录，第 9 阶段真实模型抽取质量，
-第 15 阶段外部 Inspector/目标客户端。0.8B 小模型只通过过极小事实检查，
-没有通过完整来源跨度抽取。控制台额外的浏览器文件选择器操作也仍未验证。
+## 已可查看 / Available functionality
 
-临时预览使用真实应用页面、隔离的合成 KG 和测试会话；不会展示私有材料，
-不会调用真实模型，也不代表真实 OIDC 登录成功。预览存活 10 分钟并自动清理。
-fixture 登录入口只存在于测试进程，不进入正式应用。
-预览进程提供串行测试 worker，处理备份、导出、人工修订修复、到期副本清理、未激活恢复目标清理和同配置代际重建；普通入库任务不会被它领取。
-默认预览包含原生来源、人工重命名和取消的未激活恢复目标；可从运维页查看预算历史、重建和清理。`tests.preview_restore_demo` 默认为 `false`，需要查看完整已恢复 KG 示例时再显式开启。本轮真实 HTTP 已执行重建至 ready、丢弃取消的未激活目标至 ready，并确认 owner 审计可读、reader 运维页拒绝。
-预览过期期间 localhost 页面不可用，需要重新启动测试预览。
+- 多组织、多图谱、成员/组和材料 ACL；材料原件、处理任务、替换、排除、删除与恢复。
+  / Organizations, KGs, memberships, scoped access and source lifecycle.
+- 有来源的快速/深度检索、引用、节点关系、人工修订、合并/拆分及补偿回滚。
+  / Evidence retrieval, citations, curation, identity changes and compensating rollback.
+- 备份、恢复到新图谱、投影修复、同配置索引重建、到期文件包及失败恢复目标清理。
+  / Backups, fresh-namespace restores, repair, current-configuration index rebuilds and cleanup.
+- 每日预算、7 天 provider 用量历史、任务指标与 owner 操作审计；HTTP 历史可选最多 31 天。
+  / Daily provider budgets, bounded history, work metrics and owner audit.
 
-预览运行时可以使用：
+已经完成的小型真实演练包括：代际重建后备份恢复；合并/拆分历史恢复后的继续编辑；
+不同物理图/向量配置间的串行恢复和真实缺失向量修复。后者 119.53 秒，结束后恢复
+原配置。Task 18 指定的备份/配额/审计回归 14 项通过，203.77 秒。
 
-- [Owner 预览](http://localhost:28080/__smoke__/start/owner?view=search)
-- [Owner 运维与清理](http://localhost:28080/__smoke__/start/owner?view=operations)
-- [Owner 备份与恢复表单](http://localhost:28080/__smoke__/start/owner?view=backup)
-- [Reader 预览](http://localhost:28080/__smoke__/start/reader)
-- [提前结束预览](http://localhost:28080/__smoke__/finish)
+Verified drills include generation-aware backup/restore, restored split history with
+follow-up edits, and serial recovery/repair on separate physical graph/vector volumes.
+The physical drill passed in 119.53 seconds and restored the primary configuration.
+The required backup/quota/audit regression passed 14 cases in 203.77 seconds.
 
-本轮重新核对：Docker 配置和运行中的硬内存上限均为 1.476 GB，禁用 swap；
-本轮没有启动或调用真实本地模型。资源限制和最低消耗的验证命令见 [本机 smoke 配置](laptop-smoke.md)。
-同配置代际重建现已验证原生来源、人工修订和导入未验证记录的混合输入。
-元数据篡改检查在同一个小 fixture 内覆盖 12 种来源/任务/输出引用替换；最终
-292 项单元与针对性真实存储检查通过（47.34 秒），Ruff 和严格 mypy 通过。
-离线 wheel/sdist 已重新构建并检查（259/262 文件），没有构建 Docker 镜像。
-模型/schema 切换、已清理来源的显式退役、完整备份历史、旧代收集和物理配置
-切换演练仍属于第 18 阶段余项；第 19 阶段的质量与发布验收仍未关闭。
-操作说明见 [代际重建](generation-rebuild.md)。
-完整状态与历史测试记录见 [实施进度](implementation-progress.md)。
+## 尚未完成 / Remaining work
 
-冻结预览现固定在已提交的 Git 代码上，页面运行期间可继续修改工作区应用代码；
-数据库测试仍串行。真实冻结预览已通过并清理（385.59 秒，包含查看时间）。
-原生解析子进程明确使用父服务的可信代码目录，实际沙箱/资源回归 7 项通过；
-300 项单元检查通过，Ruff 和严格 mypy 通过，网络限制未放宽。
+| 范围 / Area | 仍需完成 / Remaining |
+| --- | --- |
+| Task 18 历史完整性 | 已清除或退役来源的完整权威历史、仅由人工修订依赖的来源与其他 checkpoint 链。现有重建模式会拒绝不能证明安全的输入。 / Complete retired-source and alternative ancestry coverage. |
+| Task 18 清理与迁移 | 旧/未封存代际及不完整备份的收集、旧存储位置保留许可、明确的 schema/model 迁移模式。不能仅按 TTL 推断写入已结束。 / Generation/capture collection and schema/model migration extensions. |
+| 部署验收 / Deployment | 外部最小权限配置、Linux 镜像与解析隔离、远程 CI 验收。未构建本机镜像、推送或部署。 / External least-privilege and Linux/CI acceptance. |
+| Task 19 评估 / Evaluation | 独立 held-out 集、同预算模式/基线比较、最终适当回归与多图谱团队试用。未执行高资源性能基准。 / Held-out evaluation, comparisons and team pilot. |
+| 外部门禁 / External gates | 真实 OIDC 登录、真实模型完整来源跨度抽取质量、外部 MCP Inspector/目标客户端；浏览器文件选择器操作仍未验收。 / Real IdP, grounded extraction and external-client acceptance. |
 
-本轮收尾核对：主计划指定的备份/配额/审计回归 14 项全部通过（203.77 秒），
-物理演练后已恢复主数据库配置。当前完整单元检查为 300 项通过，原生解析
-沙箱/资源检查 7 项通过，代码通过 Ruff 和严格 mypy（228 个源模块）。
-Docker 硬内存总上限保持 1.476 GB、禁用 swap；本轮真实模型调用为零。
+0.8B 小模型通过过极小事实检查，但未通过完整来源跨度抽取，不能记为抽取质量通过。
+Tiny local facts passed on the 0.8B model; full grounded extraction did not pass.
 
-已完成的细分阶段可查看：
+## 本机资源与预览 / Laptop resources and preview
 
-- [同配置代际重建](superpowers/plans/2026-10-17-generation-rebuild.md)
-- [用量历史](superpowers/plans/2026-10-17-usage-history.md)
-- [拆分历史恢复与后续编辑](superpowers/plans/2026-10-18-restore-split-followup.md)
-- [第二物理配置恢复与修复](superpowers/plans/2026-10-18-physical-recovery.md)
+Docker 数据库配置与运行硬上限均为 **1.476 GB**，禁用 swap，低于 1.5 GB。
+本轮实际模型调用为 **0**；使用合成响应。原生模型预算与 Docker 分开测量。
+配置详见 [laptop smoke](laptop-smoke.md) 和 [operations](operations.md)。
 
-主计划第 18、19 阶段仍未关闭。余项包含已清理来源/完整历史备份、旧代与
-不完整捕获的保留/收集、模型/schema 迁移扩展，以及最终质量评估和发布验收。
-外部 OIDC、真实模型质量和外部 MCP 客户端门禁也仍保留。
+Docker hard limits total **1.476 GB**, with swap disabled. This run made **zero
+actual model calls**. The native model budget is separate.
+
+以下入口仅在手动启动的隔离测试预览存活期间有效（默认 10 分钟）。测试登录不进入
+正式应用，不代表外部 OIDC 通过；过期后需重启预览。新预览使用已提交的冻结源码。
+These links work only while the isolated, ten-minute preview is running; its test
+sessions are absent from the production application.
+
+- [中文 owner 运维 / Chinese owner operations](http://localhost:28080/__smoke__/start/owner?view=operations&lang=zh-CN)
+- [English owner operations](http://localhost:28080/__smoke__/start/owner?view=operations&lang=en)
+- [中文检索 / Chinese search](http://localhost:28080/__smoke__/start/owner?view=search&lang=zh-CN)
+- [Reader](http://localhost:28080/__smoke__/start/reader)
+- [提前结束 / Finish preview](http://localhost:28080/__smoke__/finish)

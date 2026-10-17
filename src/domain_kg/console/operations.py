@@ -17,6 +17,7 @@ from domain_kg.operations.audit import AuditTrail
 from domain_kg.operations.models import GenerationCommand, MaintenanceCommand, RetentionCommand
 from domain_kg.operations.projections import RepairCommand
 from domain_kg.operations.usage_history import UsageHistoryService
+from domain_kg.operations.work_metrics import ProjectionWorkMetrics
 from domain_kg.transport.runtime import ServiceRuntime
 
 
@@ -39,6 +40,7 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
                 "title": "Projection operations",
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "status": result,
+                "projection_work": await ProjectionWorkMetrics(runtime.policy).get(access, kg_id),
                 "usage": await runtime.usage.get(access, kg_id),
                 "usage_history": await UsageHistoryService(runtime.policy).get(access, kg_id),
                 "audit": await AuditTrail(runtime.queue).list(

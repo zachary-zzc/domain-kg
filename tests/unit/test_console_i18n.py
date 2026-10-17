@@ -116,6 +116,7 @@ async def test_header_weight_cookie_fallback_and_api_unchanged():
             ("zh;q=0.9,en;q=1", "en"),
             ("fr,zh;q=bad,en;q=0.1", "en"),
             ("zh-TW", "zh-CN"),
+            ("en;q=0.2, zh; q=0.9", "zh-CN"),
         ]:
             response = await client.get("/admin", headers={"accept-language": header})
             assert response.headers["content-language"] == expected

@@ -503,5 +503,14 @@
   "state.activated": "已激活",
   "state.abandoned": "已放弃",
   "state.visibility": "可见性",
-  "state.identity": "身份"
+  "state.identity": "身份",
+  "Pending projection work": "待发布的投影工作",
+  "Sampled at": "采样时间",
+  "Pending jobs": "待处理任务",
+  "Failed jobs": "失败任务",
+  "Jobs requiring repair": "需修复任务",
+  "Oldest pending admission": "最早待处理任务的准入时间",
+  "seconds": "秒",
+  "More than 1,000 jobs match. Counts describe the oldest 1,000 jobs and are lower bounds.": "匹配任务超过 1,000 个。计数仅涵盖最早的 1,000 个任务，是实际数量的下限。",
+  "Queue age measures unfinished projection work. Accepted graph and vector readiness is checked separately; zero pending jobs does not prove healthy projections.": "等待时间衡量尚未完成的投影工作。已接受图与向量的就绪状态单独检查；没有待处理任务不代表投影健康。"
 }

@@ -13,7 +13,7 @@ is a focused Task 17 follow-up; it does not complete Task 18 or release gates.
   invalid language/return paths, unchanged owner/reader boundaries and full unit
   regression. Use synthetic providers, one storage fixture at a time; no model
   downloads or calls. Recheck the Docker 1.5 GB aggregate hard cap.
-- [ ] Record verification, commit this stage, rebuild distribution, and show a fresh
+- [x] Record verification, commit this stage, rebuild distribution, and show a fresh
   frozen bilingual preview. Continue the remaining operational/release work.
 
 Design: Jinja translates explicit interface literals and a finite state catalogue;

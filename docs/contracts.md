@@ -210,3 +210,14 @@ Domain errors contain `code`, safe message, retryability, and `request_id`. Use 
 HTTP maps unauthenticated to 401, insufficient scopes to 403, inaccessible resource to 404 without resource details, validation to 422, version or cursor conflicts to 409, quota exhaustion to 429, and backend/provider unavailability and an unverifiable published projection to 503. `REVISION_NOT_READY` is 409 when explicitly requesting an unpublished revision; normal asynchronous edits return an accepted job receipt. MCP exposes domain failures as tool errors with the same safe code and structured details, using the selected SDK's supported error mechanism. Do not encode failure as successful empty evidence.
 
 Job stages are `queued`, `validating`, `parsing`, `chunking`, `extracting`, `resolving`, `embedding`, `projecting`, `verifying`, `publishing`, and terminal `ready`, `ready_with_warnings`, `failed`, or `cancelled`. A recoverable cross-store failure can enter nonterminal `repair_required` with a repair job reference. A receipt returns immediately with IDs; clients poll `domain_kg_get_job` or HTTP. MCP request cancellation stops polling or search, not an already accepted durable ingestion job. Job cancellation uses the explicit authorized job operation.
+
+## Owner projection-work metrics
+
+`GET /api/v1/kgs/{kg_id}/operations/metrics` returns a typed `ProjectionWork`
+namespace, observation time, bounded sample count, pending/failed/repair-required
+counts, overflow flag, and optional oldest pending admission time/whole-second age.
+It requires current owner `configure` authorization before and after reading.
+Counts describe at most the oldest 1,000 matching projection-bearing jobs; an
+overflow means lower bounds. It exposes no job inputs or source content. Queue age
+is independent of verified accepted graph/vector readiness. Unknown/corrupt selected
+rows fail closed rather than becoming an empty healthy result. Responses are private.

@@ -158,6 +158,7 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
             view: Literal[
                 "catalog", "search", "operations", "restore_job", "inactive_restore", "backup"
             ] = "catalog",
+            lang: Literal["en", "zh-CN"] | None = None,
         ):
             assert role in ("owner", "editor", "reader")
             ticket = await app.state.identity.sessions.create(principals[role], org)
@@ -177,6 +178,10 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 "domain_kg_session", ticket.session_id, httponly=True, samesite="lax", path="/"
             )
             response.set_cookie("domain_kg_csrf", ticket.csrf, samesite="lax", path="/")
+            if lang is not None:
+                response.set_cookie(
+                    "domain_kg_language", lang, httponly=True, samesite="lax", path="/admin"
+                )
             return response
 
         @app.get("/__smoke__/fixture")

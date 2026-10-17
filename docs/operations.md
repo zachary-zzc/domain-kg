@@ -677,3 +677,24 @@ Ruff and strict mypy pass for 228 source modules. The independently verified
 model, image, deployment or corpus migration was performed. Composite main-plan
 Task 18/19 checkboxes remain open for complete history/retirement/migration and
 release quality/acceptance; focused verified subplans are checked individually.
+
+### Pending projection work / 待发布投影指标
+
+`GET /api/v1/kgs/{kg_id}/operations/metrics` requires current owner configure
+permission before and after the query. It reports pending, failed and
+repair-required projection-bearing jobs, and the oldest pending admission time
+and whole-second age in the sample. It includes at most the oldest 1,000 matches;
+an overflow flag marks all counts as lower bounds. The query projects only typed
+namespace/kind/stage/date fields, has a two-second server deadline, and never
+returns job inputs, source text, provider endpoints or identifiers of other KGs.
+
+The console shows the same scoped sample in Chinese or English. Queue age measures
+unfinished work, not the duration of a database outage or an atomic cross-store
+snapshot. Accepted graph/vector readiness still uses verified receipts separately.
+No pending jobs does not establish healthy projections. Backups, exports and
+inactive-target restores do not count as source-KG projection work. Failed or
+cancelled attempts are not silently counted as successful publications.
+
+中文：指标仅供当前图谱所有者查看，最多采样最早 1,000 个相关任务。溢出时显示
+“数量下限”；最早时间与等待秒数仅对应采样中的待处理任务。图和向量的就绪状态
+继续单独核验，不以任务队列代替证据校验。此检查无需调用模型。

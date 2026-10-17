@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import StreamingResponse
 
 from domain_kg.errors import DomainError, ErrorCode
@@ -31,6 +31,7 @@ from domain_kg.operations.models import (
 from domain_kg.operations.packages import PackagePage
 from domain_kg.operations.restore_management import RestoreInfo
 from domain_kg.operations.usage_history import UsageHistory, UsageHistoryService
+from domain_kg.operations.work_metrics import ProjectionWork, ProjectionWorkMetrics
 from domain_kg.transport.runtime import ServiceRuntime
 
 
@@ -113,6 +114,13 @@ def operation_router(runtime: ServiceRuntime) -> APIRouter:
             kg_id,
             days=days,
             end_date=end_date,
+        )
+
+    @router.get("/kgs/{kg_id}/operations/metrics")
+    async def projection_work(request: Request, kg_id: UUID, response: Response) -> ProjectionWork:
+        response.headers["Cache-Control"] = "no-store"
+        return await ProjectionWorkMetrics(runtime.policy).get(
+            await access(request, kg_id, action=Action.CONFIGURE), kg_id
         )
 
     @router.get("/kgs/{kg_id}/operations/audit")

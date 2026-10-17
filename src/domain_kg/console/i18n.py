@@ -45,7 +45,7 @@ def select_locale(request: Request) -> Locale:
         else:
             continue
         try:
-            quality = float(parameter.removeprefix("q=")) if parameter else 1.0
+            quality = float(parameter.strip().removeprefix("q=")) if parameter else 1.0
         except ValueError:
             continue
         if 0 < quality <= 1:

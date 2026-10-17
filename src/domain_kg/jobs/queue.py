@@ -84,6 +84,9 @@ class JobQueue:
             [("stage", 1), ("available_at", 1), ("created_at", 1)]
         )
         await self.database.jobs.create_index([("stage", 1), ("lease_until", 1)])
+        await self.database.jobs.create_index(
+            [("org_id", 1), ("kg_id", 1), ("kind", 1), ("stage", 1), ("created_at", 1), ("id", 1)]
+        )
         await self.database.job_checkpoints.create_index(
             [
                 ("org_id", 1),
