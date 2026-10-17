@@ -103,6 +103,19 @@ def directive(record: dict[str, Any]) -> ManualNode | ManualRelation | ManualIde
 async def curation_document(
     queue: JobQueue, access: AccessContext, attempt: dict[str, Any], *, leased: bool = False
 ) -> CurationEmbeddedDocument:
+    if attempt.get("maintenance_origin"):
+        if leased:
+            raise inconsistent()
+        from domain_kg.operations.maintenance_origin import MaintenanceOrigin
+        from domain_kg.operations.maintenance_results import maintenance_base
+        from domain_kg.revisions.publication import accepted_document
+
+        await maintenance_base(queue, access, attempt)
+        origin = MaintenanceOrigin.model_validate(attempt["maintenance_origin"])
+        document, _, _ = await accepted_document(queue, access, origin.base)
+        if not isinstance(document, CurationEmbeddedDocument):
+            raise inconsistent()
+        return document
     owner = ScopedRef.model_validate(attempt["curation"])
     checkpoint = Checkpoint.model_validate(attempt["embedded_checkpoint"])
     if attempt.get("restored_origin") and not leased:

@@ -346,3 +346,16 @@ ordinary source workers skip it, and unfinished maintenance cannot be reported
 as ready. Seven real-store admission, owner-control and audit regressions passed
 in 27.09 seconds; two command checks passed earlier. This is admission only:
 projection reconstruction, publication and public controls remain unfinished.
+
+Curation repair now reads the authenticated sealed document without requiring
+healthy derived projections, reuses its vectors, writes isolated graph/vector/
+lexical records and verifies read-back before a fenced Mongo publication. The
+real current owner job is distinct from the original curator. A bounded typed
+origin points to the original artifact even after repeat repairs. Curation history,
+actors, reasons, target counters and scope keys remain unchanged. Two sequential
+repairs and lost-response replay passed, along with vector failure, snapshot
+change, interrupted commit and current-owner revocation: five real-store checks
+passed in 159.91 seconds. Preparation passed separately in 21.31 seconds; all
+269 existing unit/protocol checks passed in 8.64 seconds. Ruff and strict mypy
+(207 sources) passed. Backup/restore compatibility and public controls are the
+next verification gate, so the complete maintenance group remains open.

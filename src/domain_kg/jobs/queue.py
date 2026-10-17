@@ -747,6 +747,11 @@ class JobQueue:
             raise lease_conflict()
 
     async def finish(self, job: LeasedJob) -> None:
+        if job.kind == "maintenance":
+            from domain_kg.operations.maintenance_results import MaintenanceResults
+
+            if await MaintenanceResults(self).accepted(job):
+                return
         if job.kind == "restore":
             from domain_kg.operations.restore_results import RestoreResults
 
@@ -815,7 +820,9 @@ class JobQueue:
 
     async def accepted(self, job: LeasedJob) -> bool:
         if job.kind == "maintenance":
-            return False  # Only a verified maintenance completion may accept this work.
+            from domain_kg.operations.maintenance_results import MaintenanceResults
+
+            return await MaintenanceResults(self).accepted(job)
         if job.kind == "restore":
             from domain_kg.operations.restore_results import RestoreResults
 

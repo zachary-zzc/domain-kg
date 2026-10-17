@@ -20,6 +20,7 @@ class MaintenanceTarget(ScopedRef):
     job: ScopedRef
     view_manifest_id: UUID
     parent: AcceptedProjection
+    base: AcceptedProjection
     owner_key: str
 
     @model_validator(mode="after")
@@ -27,9 +28,12 @@ class MaintenanceTarget(ScopedRef):
         if (
             self.parent.curation is None
             or self.parent.source is not None
+            or self.base.curation != self.parent.curation
+            or self.base.generation != self.parent.generation
+            or self.base.content_hash != self.parent.content_hash
             or any(
                 (value.org_id, value.kg_id) != (self.org_id, self.kg_id)
-                for value in (self.job, self.parent)
+                for value in (self.job, self.parent, self.base)
             )
         ):
             raise ValueError("maintenance must pin a same-KG accepted curation")
@@ -108,6 +112,13 @@ class MaintenanceTargets:
             )
         ):
             raise self.invalid()
+        base = parent
+        if attempt.get("maintenance_origin"):
+            from domain_kg.operations.maintenance_origin import MaintenanceOrigin
+            from domain_kg.operations.maintenance_results import maintenance_base
+
+            await maintenance_base(self.queue, access, attempt)
+            base = MaintenanceOrigin.model_validate(attempt["maintenance_origin"]).base
         target = MaintenanceTarget(
             org_id=operation.org_id,
             kg_id=operation.kg_id,
@@ -115,6 +126,7 @@ class MaintenanceTargets:
             job=operation.job,
             view_manifest_id=operation.snapshot.manifest_id,
             parent=parent,
+            base=base,
             owner_key=owner_key,
         )
         await self.database.maintenance_targets.insert_one(
