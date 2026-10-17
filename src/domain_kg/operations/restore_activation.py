@@ -266,7 +266,14 @@ class RestoreActivation(RestoreAuthority):
                 if source is not None:
                     owner_key = f"source:{source.material_id}"
                 elif part.binding.curation is not None:
-                    owner_key = f"curation:{part.binding.curation.id}"
+                    owner_key = (
+                        f"identity:{part.binding.curation.id}"
+                        if any(
+                            row["id"] == str(part.binding.curation.id) and row["kind"] == "identity"
+                            for row in staged.inventory.rows("curation_revisions")
+                        )
+                        else f"curation:{part.binding.curation.id}"
+                    )
                 else:
                     raise DomainError(
                         ErrorCode.PROJECTION_INCONSISTENT, "Restore owner is missing."
@@ -304,6 +311,7 @@ class RestoreActivation(RestoreAuthority):
                     "state": "ready",
                     "revision": 0,
                     "visibility_revision": metadata[0]["visibility_revision"],
+                    "identity_sequence": metadata[0].get("identity_sequence", 0),
                     "published_revision": 1,
                     "published_manifest_id": str(root),
                     "generation": str(target.generation),

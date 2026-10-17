@@ -6,6 +6,7 @@ from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.models import ScopedRef
 from domain_kg.operations.restore_control import RestoreControl, Row, decoded
 from domain_kg.operations.restore_curations import RestoreCurations
+from domain_kg.operations.restore_identity import RestoreIdentity
 from domain_kg.operations.restore_preparation import PreparedRestore
 from domain_kg.operations.restore_visibility import RestoreVisibility
 
@@ -17,16 +18,29 @@ class RestoreHumanHistory(RestoreControl):
         documents = await inventory.documents(mapping)
         service = RestoreCurations(documents)
         visibility = RestoreVisibility(documents)
+        identity = RestoreIdentity(documents)
         revisions = {
             row["id"]: (
                 visibility.revision(decoded(row))
                 if row["kind"] == "visibility"
+                else identity.revision(decoded(row))
+                if row["kind"] == "identity"
                 else service.revision(decoded(row))
             )
             for row in inventory.rows("curation_revisions")
         }
         original = {row["id"]: row for row in inventory.rows("curation_revisions")}
         states = {row["target_state_id"]: revisions[row["id"]] for row in original.values()}
+        for row in original.values():
+            if row["kind"] == "identity":
+                mapped = revisions[row["id"]]
+                for old, new in zip(
+                    row["target_revisions"], mapped["target_revisions"], strict=True
+                ):
+                    states[old["state_id"]] = mapped | {
+                        "target_state_id": new["state_id"],
+                        "target_id": new["target_id"],
+                    }
         ns = mapping.target.model_dump(mode="json")
         result: list[Row] = [("control", "curation_revisions", row) for row in revisions.values()]
         for row in inventory.rows("curation_access"):
@@ -42,6 +56,10 @@ class RestoreHumanHistory(RestoreControl):
                 raise DomainError(
                     ErrorCode.PROJECTION_INCONSISTENT, "Curation visibility flag is invalid."
                 )
+            if (row.get("kind") == "identity") != (revision["kind"] == "identity"):
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Structural curation ownership differs."
+                )
             result.append(
                 (
                     "control",
@@ -52,7 +70,8 @@ class RestoreHumanHistory(RestoreControl):
                         "public": row["public"],
                         "material_ids": row["material_ids"],
                         "suppressed": row["suppressed"],
-                    },
+                    }
+                    | ({"kind": "identity"} if revision["kind"] == "identity" else {}),
                 )
             )
         for row in inventory.rows("curation_targets"):
@@ -69,7 +88,9 @@ class RestoreHumanHistory(RestoreControl):
                     ns
                     | {
                         "id": revision["target_state_id"],
-                        "kind": "node" if revision["kind"] == "visibility" else revision["kind"],
+                        "kind": "node"
+                        if revision["kind"] in ("visibility", "identity")
+                        else revision["kind"],
                         "target_id": revision["target_id"],
                         "scope_key": revision["scope_key"],
                         "revision": row["revision"],

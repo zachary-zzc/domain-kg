@@ -105,6 +105,7 @@ class AuthorityCapture:
             "generation",
             "published_revision",
             "visibility_revision",
+            "identity_sequence",
             "published_manifest_id",
             "configuration_epoch",
         }

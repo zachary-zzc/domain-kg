@@ -245,3 +245,14 @@ continuing its revision counter. Suppression/re-backup checks passed in 75.53
 seconds; the rename/follow-up edit passed in its preceding focused run. These
 remain internal restore helpers; identity/import/full restore and public controls
 are unfinished. No real provider was called.
+
+Identity history now remaps merge/split partitions, every shared node counter and
+explicit retraction reference, while preserving its sequence and provenance.
+Backup metadata captures the identity counter, and activation preserves it with
+structural curation ownership. A real restored merge retained both original
+observations and alias resolution; a new owner could append a retraction and
+recover the separate original identities. The focused check passed in 72.79
+seconds with synthetic providers. Four pure mapping/corruption cases passed in
+0.24 seconds; the full 250 unit/protocol checks passed in 5.13 seconds, and Ruff
+and strict mypy (195 sources) passed. The full import/physical-placement drill
+and public restore path remain pending.
