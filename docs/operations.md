@@ -1,8 +1,8 @@
 # Operations implementation status
 
 Owner-operation admission and internally sealed backup packages have passed their
-local gates. Public owner backup controls are implemented; restore, export
-downloads, generation migration and deployment acceptance continue under
+local gates. Public owner backup/export controls are implemented; restore,
+generation migration and deployment acceptance continue under
 [the operations plan](superpowers/plans/2026-10-17-operations.md).
 The complete restore drill and release readiness remain unverified.
 
@@ -89,3 +89,29 @@ with request-time construction; all 202 unit/protocol checks then passed in
 4.16 seconds. Ruff and strict mypy passed 167 source files. These controls do not
 establish restore acceptance or physically remove retained backup objects at
 expiry; reads already reject expired manifests.
+
+Scoped exports now have their own typed operation, immutable `retained-exports`
+file and atomic ready/audit seal. They use the same current `ReadScope`, graph
+views, filters, identity mapping and suppression as inspection. Default exports
+exclude imported-unverified content; explicit opt-in preserves that status.
+Formats are JSONL, CSV and GraphML. CSV formula cells are escaped; XML labels are
+escaped and unrepresentable control characters are rejected. Export metadata
+allowlists only org/KG, even if the caller passes a richer context model.
+
+Run `uv run python -m domain_kg.worker --export-only`; this worker reads existing
+evidence without extraction, embedding or query-model calls. Owners use the
+operations form or `POST /api/v1/kgs/{kg_id}/exports`, then inspect
+`/exports/jobs/{job_id}` and download its `/file` beneath the same KG prefix.
+Files expire logically after 24 hours. A policy, visibility, metadata,
+configuration or publication change invalidates the file before subsequent
+downloads. Attachment downloads verify checksums before HTTP success. Physical
+expiry cleanup remains part of the unfinished maintenance work.
+
+Exports fail explicitly beyond 1,000 nodes, 5,000 supports, 50 MiB or a truncated
+node view; they never silently omit eligible evidence. Narrow the source filters
+for a larger graph. These are bounded laptop/service limits, not a large-corpus
+benchmark. Three real-store cases verified filtering/withdrawal, owner revocation
+and explicit import-trust selection. Four focused export/backup/owner transport
+checks then passed in 42.33 seconds. All 210 unit/protocol checks passed in 4.30
+seconds, with Ruff and strict mypy (172 sources). Two further backup expiry and
+concurrent-publication cases passed in 44.08 seconds. No live model was called.

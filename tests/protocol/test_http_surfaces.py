@@ -31,6 +31,7 @@ async def test_http_discovery_includes_search_curation_jobs_and_lifecycle():
         "/api/v1/kgs/{kg_id}/jobs/{job_id}/cancel",
         "/api/v1/kgs/{kg_id}/members",
         "/api/v1/kgs/{kg_id}/backups",
+        "/api/v1/kgs/{kg_id}/exports",
         "/api/v1/kgs/{kg_id}/backups/jobs/{job_id}",
         "/api/v1/kgs/{kg_id}/backups/{backup_id}/pages/{index}",
     ):

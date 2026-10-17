@@ -92,6 +92,10 @@ async def test_backup_worker_seals_verified_originals_authority_and_projection_a
     )
     with pytest.raises(DomainError):
         await service.verify(owner, source.kg_id, manifest.backup_id)
+    monkeypatch.setattr("domain_kg.operations.backup.now", lambda: manifest.expires_at)
+    with pytest.raises(DomainError) as expired:
+        await service.manifest(owner, source.kg_id, receipt.job_id)
+    assert expired.value.code == ErrorCode.RESOURCE_NOT_ACCESSIBLE
 
 
 async def test_backup_keeps_manual_history_and_withdrawal_without_model_calls(
@@ -206,7 +210,7 @@ async def test_backup_rejects_inconsistent_accepted_projection(publishing, team,
 
 
 @pytest.mark.parametrize(
-    "race", ["withdrawal", "revocation", "retained_corruption", "configuration"]
+    "race", ["withdrawal", "revocation", "retained_corruption", "configuration", "publication"]
 )
 async def test_backup_cannot_seal_after_capture_authority_changes(
     publishing, team, monkeypatch, race
@@ -251,6 +255,9 @@ async def test_backup_cannot_seal_after_capture_authority_changes(
                 {"org_id": str(owner.org_id), "id": str(source.kg_id)},
                 {"$inc": {"configuration_epoch": 1}},
             )
+        elif race == "publication":
+            _, next_job, checkpoint = await prepare(publishing, key="publish-during-backup")
+            await coordinator.publish(editor, await ready(publishing, next_job, checkpoint))
         else:
             from domain_kg.operations.packages import PackageObject
 

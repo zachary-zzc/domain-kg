@@ -750,6 +750,11 @@ class JobQueue:
 
             if await BackupService(self).accepted(job):
                 return
+        if job.kind == "export":
+            from domain_kg.operations.export import ExportService
+
+            if await ExportService(self).accepted(job):
+                return
         if job.kind in ("backup", "export"):
             await self.authorize(job)
             raise DomainError(
@@ -806,6 +811,10 @@ class JobQueue:
             from domain_kg.operations.backup import BackupService
 
             return await BackupService(self).accepted(job)
+        if job.kind == "export":
+            from domain_kg.operations.export import ExportService
+
+            return await ExportService(self).accepted(job)
         raw = await self.database.jobs.find_one(
             self._scope(job)
             | {

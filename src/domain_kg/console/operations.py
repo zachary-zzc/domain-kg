@@ -36,6 +36,7 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
                 "status": result,
                 "command_key": str(uuid4()),
                 "backup_key": str(uuid4()),
+                "export_key": str(uuid4()),
             },
             scope=scope,
         )

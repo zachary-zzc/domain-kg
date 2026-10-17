@@ -142,3 +142,11 @@ before HTTP success. Run the model-free native worker with `--backup-only`.
 The focused backup/operations/jobs/worker regression passed four checks in
 55.68 seconds. The synthetic preview also completed a real tiny queued backup
 through its dedicated backup worker, without a model call. Restore remains pending.
+
+Owners can also queue a scoped JSONL, CSV or GraphML export from operations.
+Material selection constrains every field; imported-unverified evidence requires
+an explicit checkbox. A completed export job links to the scope summary and a
+checksum-verified attachment. The native `--export-only` worker calls no model.
+Access, visibility and publication changes invalidate older files. The dedicated
+export/backup/owner transport regression passed four checks in 42.33 seconds;
+source filtering, withdrawal and import trust were verified separately.

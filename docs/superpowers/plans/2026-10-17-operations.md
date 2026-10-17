@@ -51,7 +51,7 @@ Files: `operations/backup.py`, `operations/export.py`, `scripts/backup.py`,
   durable human history, suppression, source ownership and projection checkpoints.
   Do not include private connection/provider credentials or copy active leases.
   Keep backup expiry separate from live source retention and purge.
-- [ ] Export only current, support-qualified evidence under an explicit read
+- [x] Export only current, support-qualified evidence under an explicit read
   scope, including default unverified exclusion and every field's source ACL.
   Revalidate before sealing and download. Never expose arbitrary paths/object
   keys or let a package choose database commands.
