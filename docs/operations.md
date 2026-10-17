@@ -529,3 +529,27 @@ separate new backup/restore case exposed missing rebuild artifact ancestry in
 backup. That compatibility fix and its focused verification remain in progress;
 this checkpoint does not claim a wholly green backup suite. Zero live models.
 See [generation rebuild](generation-rebuild.md) for limits and commands.
+
+
+Generation lineage checkpoint (2026-10-17): backup now authenticates rebuild
+results and records the true source/curation artifact job separately from the
+real generation job. The retained authority envelope keeps explicit generation
+provenance without reusable old leases. A real native/manual backup → fresh
+restore → rollback → restored-KG rebuild drill passed (164.73 seconds). A mixed
+native/manual/imported-unverified rebuild passed (62.29 seconds), including
+default exclusion and explicit inclusion of unverified evidence. An independent
+twelve-substitution fixture exposed source/job namespace/output-owner metadata
+checks; after correction, 292 unit/focused checks passed in 47.34 seconds. The
+prior cohort's sole failure was that new integrity probe, now corrected; the
+already-green restore/import drills were not repeated. Ruff/mypy pass for 227
+source modules. Fixture teardown includes its own old/new generation collections
+and inactive restore namespaces; production retained-generation collection is
+still unfinished. No unrelated storage is erased.
+
+Offline distributions were rebuilt and boundary-checked: wheel 259 entries,
+SHA-256 `1604096fc405a1e12640642166900f414274e576f5e3c14d0ee6d196f5c7754d`;
+source archive 262 entries, SHA-256
+`9ff31431c509582190c36a0c938ef6eac467099f09544d07d3ce02a21a1ece59`.
+No image build or live provider request was performed. This completes the
+explicit `rebuild_current` subplan, not full Task 18 schema/model migration,
+complete backup history, physical-profile recovery or Task 19 acceptance.

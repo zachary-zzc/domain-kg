@@ -116,9 +116,17 @@ async def generation_base(
         or origin.parent_manifest_id != item.parent.manifest_id
         or output.get("origin") != origin.model_dump(mode="json")
         or output.get("input_id") != str(item.id)
+        or output.get("owner_key") != item.owner_key
+        or attempt.get("source")
+        != (binding.source.model_dump(mode="json") if binding.source else None)
+        or attempt.get("curation")
+        != (binding.curation.model_dump(mode="json") if binding.curation else None)
+        or attempt.get("import_origin")
+        != (binding.import_origin.model_dump(mode="json") if binding.import_origin else None)
         or root_binding is None
         or root_binding["binding"] != output["binding"]
-        or (actual.id, actual.target_id, actual.kind) != (origin.job_id, origin.id, "generation")
+        or (actual.org_id, actual.kg_id, actual.id, actual.target_id, actual.kind)
+        != (origin.org_id, origin.kg_id, origin.job_id, origin.id, "generation")
         or attempt["job"].get("attempt_id") != str(origin.attempt_id)
         or attempt["state"] != "accepted"
         or attempt["id"] != str(origin.manifest_id)

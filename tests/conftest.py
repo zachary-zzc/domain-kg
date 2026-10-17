@@ -224,23 +224,47 @@ async def catalog(team, mongo_db, settings):
         ).to_list()
         vector_client = router._vectors.get(profile.qdrant_id)
         cleanup_errors = []
-        try:
-            for kg in owned:
-                if vector_client is not None:
-                    from uuid import UUID
+        from uuid import UUID
 
-                    collection = f"kg_{org.hex}_{UUID(kg['id']).hex}_{UUID(kg['generation']).hex}"
-                    if await vector_client.collection_exists(collection):
-                        await vector_client.delete_collection(collection)
+        namespaces = {UUID(kg["id"]): {UUID(kg["generation"])} for kg in owned}
+        try:
+            async for target in mongo_db.restore_targets.find(
+                {
+                    "org_id": str(org),
+                    "kg_id": {"$in": [kg["id"] for kg in owned]},
+                    "placement.id": str(profile.id),
+                }
+            ):
+                if target["target"]["org_id"] != str(org):
+                    raise ValueError("Fixture restore ownership differs")
+                namespaces.setdefault(UUID(target["target"]["kg_id"]), set()).add(
+                    UUID(target["generation"])
+                )
+            for kg_id, generations in namespaces.items():
+                async for target in mongo_db.generation_targets.find(
+                    {
+                        "org_id": str(org),
+                        "kg_id": str(kg_id),
+                        "profile.id": str(profile.id),
+                    }
+                ):
+                    generations.update(
+                        (UUID(target["generation"]), UUID(target["parent_generation"]))
+                    )
+                if vector_client is not None:
+                    for generation in generations:
+                        collection = f"kg_{org.hex}_{kg_id.hex}_{generation.hex}"
+                        if await vector_client.collection_exists(collection):
+                            await vector_client.delete_collection(collection)
         except Exception as error:
             cleanup_errors.append(error)
         graph_driver = router._graphs.get(profile.neo4j_id)
         try:
-            if graph_driver is not None and owned:
+            if graph_driver is not None and namespaces:
                 await graph_driver.execute_query(
                     "MATCH (n {org_id:$org}) WHERE n.kg_id IN $kgs DETACH DELETE n",
                     org=str(org),
-                    kgs=[kg["id"] for kg in owned],
+                    kgs=[str(kg) for kg in namespaces],
                 )
         except Exception as error:
             cleanup_errors.append(error)

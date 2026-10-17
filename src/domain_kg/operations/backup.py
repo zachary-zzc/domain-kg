@@ -175,7 +175,11 @@ class BackupService:
             )
         checkpoint = Checkpoint.model_validate(attempt["embedded_checkpoint"])
         origin_job: JobCommand
-        if attempt.get("maintenance_origin"):
+        if attempt.get("generation_origin"):
+            from domain_kg.operations.generation_results import generation_artifact_job
+
+            origin_job = await generation_artifact_job(self.queue, access, attempt)
+        elif attempt.get("maintenance_origin"):
             from domain_kg.operations.maintenance_results import maintenance_artifact_job
 
             origin_job = await maintenance_artifact_job(self.queue, access, attempt)

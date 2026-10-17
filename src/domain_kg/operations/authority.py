@@ -55,7 +55,17 @@ class AuthorityCapture:
         if len(attempts) > 10000 or len(curations) > 10000:
             raise DomainError(ErrorCode.QUOTA_EXCEEDED, "Backup history exceeds its record budget.")
         versions = {str(source.version_id) for source in self.view.sources}
-        jobs = {row["job"]["id"] for row in attempts}
+        jobs = set()
+        for row in attempts:
+            if row.get("generation_origin"):
+                from domain_kg.operations.generation_results import generation_artifact_job
+
+                original = await generation_artifact_job(
+                    self.queue, await self.capture.guard(self.job), row
+                )
+                jobs.add(str(original.id))
+            else:
+                jobs.add(row["job"]["id"])
         for row in attempts:
             if row.get("source"):
                 versions.add(row["source"]["version_id"])
@@ -236,7 +246,15 @@ class AuthorityCapture:
                         "stage": "ready"
                     }
                 elif table == "projection_attempts":
-                    if row.get("maintenance_origin"):
+                    if row.get("generation_origin"):
+                        from domain_kg.operations.generation_results import generation_artifact_job
+
+                        original = await generation_artifact_job(
+                            self.queue, await self.capture.guard(self.job), row
+                        )
+                        row["job"] = original.model_dump(mode="json")
+                        row["generation_provenance"] = row.pop("generation_origin")
+                    elif row.get("maintenance_origin"):
                         from domain_kg.operations.maintenance_results import (
                             maintenance_artifact_job,
                         )
