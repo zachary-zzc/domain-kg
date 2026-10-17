@@ -80,11 +80,15 @@ class BackupCapture:
             row.get("generation"),
             row.get("published_manifest_id"),
             row.get("visibility_revision"),
+            row.get("revision", 0),
+            row.get("configuration_epoch", 0),
         ) != (
             pointer.revision,
             str(pointer.generation),
             str(pointer.manifest_id) if pointer.manifest_id else None,
             pointer.visibility_revision,
+            pointer.metadata_revision,
+            pointer.configuration_epoch,
         ):
             raise DomainError(ErrorCode.VERSION_CONFLICT, "The backup capture boundary changed.")
 

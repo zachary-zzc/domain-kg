@@ -745,6 +745,11 @@ class JobQueue:
             raise lease_conflict()
 
     async def finish(self, job: LeasedJob) -> None:
+        if job.kind == "backup":
+            from domain_kg.operations.backup import BackupService
+
+            if await BackupService(self).accepted(job):
+                return
         if job.kind in ("backup", "export"):
             await self.authorize(job)
             raise DomainError(
@@ -797,6 +802,10 @@ class JobQueue:
         await self.transactions.transaction(commit)
 
     async def accepted(self, job: LeasedJob) -> bool:
+        if job.kind == "backup":
+            from domain_kg.operations.backup import BackupService
+
+            return await BackupService(self).accepted(job)
         raw = await self.database.jobs.find_one(
             self._scope(job)
             | {

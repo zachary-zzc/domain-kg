@@ -37,6 +37,8 @@ class SnapshotPointer(Namespace):
     generation: UUID
     manifest_id: UUID | None
     visibility_revision: NonNegative
+    metadata_revision: NonNegative = 0
+    configuration_epoch: NonNegative = 0
 
     @model_validator(mode="after")
     def accepted_pointer(self) -> Self:

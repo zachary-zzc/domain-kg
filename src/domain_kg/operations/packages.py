@@ -19,17 +19,20 @@ class PackageObject(ScopedRef):
 
 class PackagePart(FrozenModel):
     object: PackageObject
-    kind: Literal["authority", "original", "source_projection", "curation_projection"]
+    kind: Literal[
+        "authority", "original", "source_artifact", "source_projection", "curation_projection"
+    ]
     source: SourceVersion | None = None
     curation: ScopedRef | None = None
     original: BlobRef | None = None
+    artifact_blob: BlobRef | None = None
 
     @model_validator(mode="after")
     def exact_owner(self) -> Self:
         namespace = (self.object.org_id, self.object.kg_id)
         if any(
             (ref.org_id, ref.kg_id) != namespace
-            for ref in (self.source, self.curation, self.original)
+            for ref in (self.source, self.curation, self.original, self.artifact_blob)
             if ref is not None
         ):
             raise ValueError("package references must share their exact namespace")
@@ -54,6 +57,19 @@ class PackagePart(FrozenModel):
                 raise ValueError("retained originals must preserve exact ownership and bytes")
         elif self.original is not None:
             raise ValueError("only original parts carry an original file reference")
+        if self.kind == "source_artifact":
+            if (
+                self.artifact_blob is None
+                or any(
+                    getattr(self.artifact_blob, field) != getattr(self.source, field)
+                    for field in SourceVersion.model_fields
+                )
+                or (self.artifact_blob.sha256, self.artifact_blob.size_bytes)
+                != (self.object.sha256, self.object.size_bytes)
+            ):
+                raise ValueError("source artifacts require exact blob ownership and bytes")
+        elif self.artifact_blob is not None:
+            raise ValueError("only source artifact parts carry an artifact blob")
         return self
 
 

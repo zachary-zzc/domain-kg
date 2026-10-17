@@ -1,9 +1,10 @@
 # Operations implementation status
 
-The owner-operation foundation is implemented. Complete backup packages, restore,
-export downloads, generation migration and deployment acceptance are still being
-implemented under [the operations plan](superpowers/plans/2026-10-17-operations.md).
-No backup/restore success or recovery readiness is claimed at this checkpoint.
+Owner-operation admission and internally sealed backup packages have passed their
+local gates. Public backup controls, restore, export downloads, generation
+migration and deployment acceptance continue under
+[the operations plan](superpowers/plans/2026-10-17-operations.md).
+The complete restore drill and release readiness remain unverified.
 
 Backup/export intent has a typed, organization/KG-scoped operation record and a
 real durable job. The record fixes the verified submitting actor and an accepted
@@ -40,8 +41,8 @@ Reads verify the full checksum before yielding bytes. Immutable replay verifies
 existing bytes rather than overwriting them; spooling and multipart chunks keep
 memory bounded. Two package-contract checks passed in 0.04 seconds and a tiny real
 S3 integrity/replay/corruption check passed in 3.28 seconds. The broader
-unit/protocol suite passed 185 checks in 4.04 seconds. Full capture/sealing and
-restore handlers remain in progress.
+unit/protocol suite passed 185 checks in 4.04 seconds. These were the retained
+object foundation checks; complete package verification is recorded below.
 
 Live capture now pins the accepted manifest/generation/visibility boundary against
 source cleanup. The pin is scoped to one real backup job attempt and expires with
@@ -52,3 +53,19 @@ current owner backup context. Ordinary reads of excluded sources remain denied.
 Visibility changes, cancellation, policy changes or a missing pin stop capture.
 The scope/heartbeat/purge/owner-job regression passed ten real-store checks in
 66.85 seconds; 185 unit/protocol checks passed in 3.42 seconds.
+
+The backup worker now copies originals, sealed preparation/projection artifacts,
+the effective KG schema, canonical evidence and accepted human/import history
+into bounded retained pages. Before a Mongo seal it reads the entire package back,
+checks hashes, owners and root counts, and compares metadata, configuration,
+visibility, publication and policy fences. A changed boundary leaves no usable
+result. Historical jobs contain no reusable worker/publication leases; no private
+provider connections, membership collections or credentials are included.
+
+The focused backup/capture/owner-job regression passed 14 checks in 213.73 seconds,
+including source withdrawal, owner revocation, damaged retained objects, missing
+originals, mismatched accepted attempts and lost-response replay. Human history
+and a tombstoned source were preserved without model calls. Four additional
+metadata mismatch tests passed after reproducing the failure. The unit/protocol
+suite passed 202 checks in 4.04 seconds; Ruff and strict mypy passed.
+All are tiny synthetic laptop fixtures; no full restore is implied.

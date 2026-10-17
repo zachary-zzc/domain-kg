@@ -144,6 +144,8 @@ class OwnerOperations:
                 generation=kg["generation"],
                 manifest_id=kg.get("published_manifest_id"),
                 visibility_revision=kg["visibility_revision"],
+                metadata_revision=kg.get("revision", 0),
+                configuration_epoch=kg.get("configuration_epoch", 0),
             )
             job = JobCommand(
                 org_id=current.org_id,
