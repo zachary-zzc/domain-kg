@@ -380,3 +380,15 @@ editors/readers and foreign KG references fail. Pending reservations, settlement
 foreign org/KG isolation and console/API permissions passed in two focused
 checks (74.45 seconds). Ruff and strict mypy (208 sources) passed. These counters
 are conservative consumption bounds, not monetary billing.
+
+Relation repair and zero-vector identity repair now have dedicated real-store
+coverage. Both preserve accepted manual semantics, canonical ownership and target
+counters; a current owner can append a compensating rollback afterward. Both
+checks passed in 294.57 seconds, with embeddings forbidden after the initial
+synthetic curation. These extend node repair coverage without starting a model.
+
+The last focused regression combined 270 unit/protocol checks, a partial vector
+write failure followed by retry under a new immutable attempt, and two scoped
+usage checks including owner withdrawal during the database read: 273 checks
+passed in 68.31 seconds. The abandoned partial attempt remained unaccepted.
+Ruff and strict mypy (208 sources) passed before the storage checks.

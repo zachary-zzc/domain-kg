@@ -79,3 +79,26 @@ async def test_usage_metrics_scope_pending_spend_and_current_grants(team):
     )
     with pytest.raises(DomainError):
         await metrics.get(owner, kg)
+
+
+async def test_usage_metrics_rechecks_owner_after_counter_read(team, monkeypatch):
+    from pymongo.asynchronous.collection import AsyncCollection
+
+    from domain_kg.operations.metrics import UsageMetrics
+
+    _, policy, principals, members, org, kg = team
+    owner = await policy.resolve_access(principals["owner"], [kg], Action.CONFIGURE)
+    read = AsyncCollection.find_one
+
+    async def revoke_after_read(collection, *args, **kwargs):
+        raw = await read(collection, *args, **kwargs)
+        if collection.name == "provider_budget_days":
+            await policy.database.members.update_one(
+                {"org_id": str(org), "id": str(members["owner"].id)},
+                {"$set": {"suspended": True}},
+            )
+        return raw
+
+    monkeypatch.setattr(AsyncCollection, "find_one", revoke_after_read)
+    with pytest.raises(DomainError):
+        await UsageMetrics(policy, ProviderBudgets(policy)).get(owner, kg)

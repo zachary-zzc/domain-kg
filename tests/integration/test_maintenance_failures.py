@@ -87,3 +87,24 @@ async def test_failed_repair_preserves_the_accepted_view(publishing, team, monke
     assert (
         await GraphService(queue).get_node(current_editor, source.kg_id, alpha)
     ).name == "Reviewed Alpha"
+
+    if fault == "vector_write":
+        monkeypatch.undo()
+        await queue.fail(
+            job, DomainError(ErrorCode.BACKEND_UNAVAILABLE, "Synthetic partial attempt.")
+        )
+        await queue.retry(owner, job.id, idempotency_key="retry-partial-maintenance")
+        retried = await queue.claim("recover-partial-maintenance", kinds=("maintenance",))
+        assert retried.id == job.id and retried.attempt_id != job.attempt_id
+        await MaintenanceService(queue).run(retried)
+        assert await queue.accepted(retried)
+        assert (await queue.database.kgs.find_one({"id": str(source.kg_id)}))[
+            "published_revision"
+        ] == 3
+        assert (
+            await GraphService(queue).get_node(editor, source.kg_id, alpha)
+        ).name == "Reviewed Alpha"
+        old = await queue.database.projection_attempts.find_one(
+            ns | {"job.attempt_id": str(job.attempt_id)}
+        )
+        assert old["state"] != "accepted"
