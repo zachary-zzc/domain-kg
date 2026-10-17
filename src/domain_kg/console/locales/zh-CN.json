@@ -512,5 +512,20 @@
   "Search index maintenance": "检索索引维护",
   "Search index update jobs": "检索索引更新任务",
   "Oldest pending job created at": "最早待处理任务的创建时间",
-  "These jobs update search indexes after material or manual changes. Index readiness is checked separately below; an empty queue does not guarantee healthy indexes.": "这些后台任务负责更新材料或人工修改对应的检索索引。图谱索引和向量索引是否可用，会在下方单独检查；没有待处理任务，也不代表索引一定正常。"
+  "These jobs update search indexes after material or manual changes. Index readiness is checked separately below; an empty queue does not guarantee healthy indexes.": "这些后台任务负责更新材料或人工修改对应的检索索引。图谱索引和向量索引是否可用，会在下方单独检查；没有待处理任务，也不代表索引一定正常。",
+  "The interactive graph is unavailable. Use the node and relationship lists below.": "关系图暂不可用，请使用下方的节点链接和关系列表。",
+  "Source evidence": "来源证据",
+  "Human curation": "人工整理",
+  "Unverified import": "未验证导入",
+  "Relationship graph": "节点关系图",
+  "Drag nodes to rearrange, scroll to zoom, and select a node or relationship to inspect its evidence.": "拖动节点调整位置，滚轮缩放；选择节点或关系后，可打开详情查看证据。",
+  "Fit graph": "适应画布",
+  "Zoom in": "放大",
+  "Zoom out": "缩小",
+  "Visible nodes and relationships. Accessible links follow the graph.": "当前可见的节点与关系。图下方提供可用键盘操作的链接。",
+  "Select an item to open its details.": "选择节点或关系以查看详情。",
+  "This view reached its limit of 25 nodes or 40 relationships. Follow a node to explore its neighborhood.": "本视图已达到 25 个节点或 40 条关系的显示上限。可打开某个节点，继续查看它周围的关系。",
+  "Visible nodes as links": "可见节点列表",
+  "Enable JavaScript for the interactive graph, or use these links and the relationship list.": "启用 JavaScript 可查看交互关系图，也可直接使用节点链接和关系列表。",
+  "View node and graph": "查看节点与关系图"
 }

@@ -10,6 +10,15 @@ Tasks 3, 9 and 15 retain external gates. The demo does not establish release rea
 完整阶段记录见 [implementation progress](implementation-progress.md) 与
 [implementation plan](implementation-plan.md)。
 
+节点详情页已接入 neovis.js 节点关系图，可拖动、缩放、选择查看节点与关系详情。
+仅使用当前权限可见的一跳邻域，最多 25 节点 / 40 条关系，保留来源、人工及未验证
+导入的区别，并提供键盘可用的文字链接。当前会话关闭了浏览器自动化；已经验证
+脚本契约与真实数据库页面权限，尚未自动观察实际 canvas 绘制与鼠标操作。
+
+Node pages now embed a bounded neovis.js relationship graph. Script contracts and
+real-store page permissions passed; the rendered canvas still needs visual confirmation
+because browser automation is disabled in this session.
+
 ## 本轮完成 / Completed in this run
 
 | 内容 / Feature | 结果 / Evidence |

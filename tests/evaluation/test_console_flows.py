@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from test_curation import alpha_id
 from test_identity import issuer_fixture as issuer_fixture  # noqa: F401
 from test_publication import prepare, publishing, ready  # noqa: F401
 from test_transport_authorization import settings_for
@@ -22,6 +23,7 @@ async def test_team_roles_namespace_csrf_and_revoked_session_acceptance(
     _, editor, queue, coordinator, _, _ = publishing
     source, job, checkpoint = await prepare(publishing)
     await coordinator.publish(editor, await ready(publishing, job, checkpoint))
+    seed = await alpha_id(queue, editor, job.kg_id)
     identities, _, principals, members, org, _ = team
     await identities.admit(
         members["owner"],
@@ -61,6 +63,17 @@ async def test_team_roles_namespace_csrf_and_revoked_session_acceptance(
                         assert "Skip to content" in search.text and 'tabindex="-1"' in search.text
                     else:
                         assert "Alpha" not in search.text
+                    graph_page = await browser.get(f"{root}/nodes/{seed}")
+                    assert graph_page.status_code == (200 if has_kg else 404), role
+                    if has_kg:
+                        assert (
+                            "data-graph=" in graph_page.text
+                            and "Relationship graph" in graph_page.text
+                        )
+                    else:
+                        assert (
+                            "data-graph=" not in graph_page.text and "Alpha" not in graph_page.text
+                        )
                     team_page = await browser.get("/admin/team")
                     assert (team_page.status_code == 200) == (role in ("owner", "admin")), role
                     operator = await browser.get("/admin/infrastructure")

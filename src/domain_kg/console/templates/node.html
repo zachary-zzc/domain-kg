@@ -1,6 +1,8 @@
 {% extends "base.html" %}
+{% block extra_head %}<script src="/admin/static/vendor/neovis-2.1.0.js" defer></script><script src="/admin/static/graph.js" defer></script>{% endblock %}
 {% block content %}
 <p><code>{{ node.id }}</code></p>
+{% include "graph.html" %}
 {% if node.import_origins %}<p class="badge">{{ _("Unverified legacy import \u00b7 descriptions are not source quotations.") }}</p>{% endif %}
 <nav class="tabs" aria-label="{{ _("Node actions") }}"><a href="/admin/kgs/{{ kg.id }}/nodes/{{ node.id }}/history?include_unverified={{ 'true' if include_unverified else 'false' }}">{{ _("Revision history") }}</a>{% if can_edit %}<a href="/admin/kgs/{{ kg.id }}/nodes/{{ node.id }}/edit{% if material_id %}?source_ids={{ material_id }}{% endif %}">{{ _("Edit node") }}</a>{% endif %}</nav>
 <section class="card"><h2>{{ _("Visible fields") }}</h2><p>{{ node.entity_types|join(', ') }}</p>{% for description in node.descriptions %}<pre>{{ description }}</pre>{% endfor %}<p>{{ _("Aliases:") }} {{ node.aliases|join(', ') }}</p><p>{{ _("Tags:") }} {{ node.tags|join(', ') }}</p><p>{{ node.observation_count }} {{ _("observations \u00b7") }} {{ node.support_count }} {{ _("supports \u00b7") }} {{ node.neighbor_count }} {{ _("neighbors") }}{% if node.truncation %} {{ _("\u00b7 budget reached") }}{% endif %}</p></section>

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 
+from domain_kg.console.graph_data import graph_data
 from domain_kg.console.material_commands import command_context, invalid_form, redirect, tags
 from domain_kg.console.rendering import page
 from domain_kg.console.team import identifiers
@@ -66,6 +67,13 @@ def curation_router(runtime: ServiceRuntime) -> APIRouter:
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "node": value,
                 "graph": neighborhood,
+                "graph_data": graph_data(
+                    neighborhood,
+                    kg_id,
+                    include_unverified=include_unverified,
+                    material_id=material_id,
+                    version_id=version_id,
+                ),
                 "include_unverified": include_unverified,
                 "material_id": material_id,
                 "version_id": version_id,

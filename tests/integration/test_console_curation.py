@@ -41,7 +41,18 @@ async def test_node_edit_pending_history_stale_form_and_owner_compensation(
             ) as browser:
                 root = f"/admin/kgs/{job.kg_id}"
                 node = f"{root}/nodes/{alpha}"
-                assert (await browser.get(node)).status_code == 200
+                graph_page = await browser.get(
+                    node,
+                    params={
+                        "material_id": str(source.material_id),
+                        "version_id": str(source.version_id),
+                    },
+                )
+                assert graph_page.status_code == 200
+                assert "data-graph=" in graph_page.text and "Relationship graph" in graph_page.text
+                assert "neovis-2.1.0.js" in graph_page.text
+                assert "unsafe-inline" not in graph_page.headers["content-security-policy"]
+                assert "bolt://" not in graph_page.text
                 form = await browser.get(f"{node}/edit")
                 assert form.status_code == 200 and 'name="expected_revision" value="0"' in form.text
                 fields = {
@@ -87,4 +98,3 @@ async def test_node_edit_pending_history_stale_form_and_owner_compensation(
                 assert result.status_code == 303 and "/jobs/" in result.headers["location"]
                 history = await browser.get(f"{node}/history")
                 assert "Compensate reviewed field" in history.text and "pending" in history.text
-
