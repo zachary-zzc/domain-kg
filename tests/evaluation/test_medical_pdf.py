@@ -14,11 +14,13 @@ import httpx
 import pytest
 import uvicorn
 from fastapi.responses import RedirectResponse
+from jinja2 import ChoiceLoader, DictLoader
 from medical_fixture import medical_batch
 from test_identity import issuer_fixture as issuer_fixture  # noqa: F401
 from test_publication import make_publishing, ready
 
 from domain_kg.app import create_app
+from domain_kg.console import rendering
 from domain_kg.graph.service import GraphService
 from domain_kg.identity.models import Action
 from domain_kg.ingestion.models import ChunkConfig, ParseOptions
@@ -56,9 +58,36 @@ def load_input():
     return config, path, original
 
 
-async def test_real_medical_pdf_and_scoped_graph(material_service, team, catalog, issuer_fixture):
+async def test_real_medical_pdf_and_scoped_graph(
+    material_service, team, catalog, issuer_fixture, monkeypatch
+):
     started = time.monotonic()
     config, path, original = await asyncio.to_thread(load_input)
+    # This warning belongs only to this synthetic fixture, never to production
+    # graphs. A separate environment also prevents cached templates leaking the
+    # fixture label into another test. monkeypatch restores it after preview exit.
+    templates = rendering.TEMPLATES
+    base, _, _ = templates.loader.get_source(templates, "base.html")
+    notice = (
+        '<section class="card" id="controlled-graph-notice" role="note">'
+        '<p lang="zh-CN"><strong>受控测试图：不是整篇 PDF 的知识抽取结果。</strong>'
+        "这里仅预设匹配 diabetes 和 annual review，得到 2 节点、1 关系。"
+        "解析全部 7 页只验证文档处理；该图的实际模型调用为 0 次。</p>"
+        '<p lang="en"><strong>Controlled fixture, not a full-PDF extraction result.</strong> '
+        "This fixture only matches diabetes and annual review: 2 nodes, 1 edge. "
+        "Parsing all 7 pages verifies document handling; this graph uses zero model calls.</p>"
+        "</section>"
+    )
+    labelled = base.replace(
+        '<main id="content" tabindex="-1">', '<main id="content" tabindex="-1">' + notice
+    )
+    monkeypatch.setattr(
+        rendering,
+        "TEMPLATES",
+        templates.overlay(
+            loader=ChoiceLoader([DictLoader({"base.html": labelled}), templates.loader])
+        ),
+    )
     publishing = await make_publishing(
         material_service,
         team,
@@ -211,6 +240,9 @@ async def test_real_medical_pdf_and_scoped_graph(material_service, team, catalog
                     parser.feed(page.text)
                     assert parser.graph and len(parser.graph["nodes"]) == 2
                     assert "节点关系图" in page.text and "neovis-2.1.0.js" in page.text
+                    assert "controlled-graph-notice" in page.text
+                    assert "不是整篇 PDF 的知识抽取结果" in page.text
+                    assert "not a full-PDF extraction result" in page.text
                     evidence_link = parser.graph["edges"][0]["href"]
                     assert (
                         str(source.version_id) in evidence_link and "/materials/" in evidence_link

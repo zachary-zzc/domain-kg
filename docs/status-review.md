@@ -12,6 +12,24 @@ Tasks 3, 9 and 15 retain external gates. The demo does not establish release rea
 含 2 节点、1 关系，实际模型调用 0 次，医学抽取质量门禁保持未完成。
 来源关系可打开对应的原文版本，人工关系继续查看人工修订历史。
 
+**纠正 / Correction:** 上述 2 节点、1 关系来自只匹配 `diabetes` 和 `annual review`
+的受控测试响应，**不是整篇 PDF 的知识抽取结果**。解析 7 页不等于抽取了 7 页的知识。
+These two nodes and one edge are a controlled pipeline fixture, not the PDF's extracted KG.
+
+2026-10-18 补做真实 0.8B 模型检查：第 4 页 203 个字符、1 次请求、213 tokens、
+3.527 秒；原生峰值 RSS 872,611,840 字节，结束后关闭自有服务。紧凑试验响应的
+5 个实体仅 1 个通过逐字段原文对应检查，关系为 0，整个批次被现有来源校验拒绝，
+发布次数为 0。该试验格式尚未接入正式 provider。现有完整格式在保守的 4096 上下文
+预算下连一个原文字符也无法容纳。**真实医学 PDF 图谱仍未完成**；未扩大语料或
+下载更大的模型。医学预览已增加醒目的中英双语说明；相关 12 项检查通过（21.30 秒）。
+
+A real, single-request 0.8B probe on 203 characters from page 4 failed canonical
+evidence validation: one of five entity names matched its cited passage; no
+relations were returned and nothing was published. It used 213 tokens in 3.527 s,
+with 872.6 MB peak native RSS. The compact experimental format is not integrated
+into the provider; the existing full format cannot fit under the conservative
+4096 context budget. **Full medical-PDF KG extraction remains unverified.**
+
 [本轮医学关系图预览 / Medical graph preview](http://localhost:28080/__smoke__/start/owner?lang=zh-CN)
 （隔离预览存活约 10 分钟；页面顶部切换 English；此精简模式不运行编辑工作进程）。
 

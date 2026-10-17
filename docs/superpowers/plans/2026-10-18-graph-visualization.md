@@ -55,4 +55,25 @@ strict mypy (231 modules) passed. The fresh frozen preview was checked over real
 HTTP for both languages, two nodes/one edge, exact source-version links and pinned
 assets; CSP remained unchanged. Canvas appearance/dragging remains **unobserved**
 because browser automation is disabled in Work settings. The timed viewing
-window's pytest is pending while the preview remains available.
+window's pytest finished: 1 passed in 621.95 seconds, including the intentional
+600-second viewing window; that duration is not extraction runtime.
+
+## Follow-up — Correct the extraction-quality impression
+
+- [x] Inspect the fixture: its only selected terms are `diabetes` and `annual
+  review`. Thus two nodes/one edge establishes plumbing only; parsing all pages
+  never established full-document model coverage.
+- [x] Run one bounded real-model probe on page 4 (203 characters). Compact numbered
+  evidence experiment: 133 prompt + 80 completion tokens, 3.527 s, 872611840-byte
+  peak native RSS; owned process stopped. Existing canonical span validation
+  rejects the batch: only one of five names matches its cited passage, zero
+  relations. Zero publications. The compact experiment is not a production
+  provider integration. The full protocol also fails its conservative 4096
+  context preflight even for one character. No larger model downloaded.
+- [x] Put an explicit bilingual controlled-fixture warning on medical preview
+  pages. The missing-notice regression failed first (25.07 s); the focused
+  rendering/source/access/PDF checks then passed 12 tests (21.30 s). Ruff and
+  diff whitespace checks passed. This change affects only the opt-in fixture's
+  isolated template environment; production templates remain unchanged.
+- [ ] Produce and evaluate a genuine full-PDF KG with an adequate approved
+  extraction provider. Neither this fixture nor the failed probe satisfies it.
