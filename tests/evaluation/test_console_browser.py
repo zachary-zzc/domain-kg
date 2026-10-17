@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+from typing import Literal
 
 import httpx
 import pytest
@@ -15,7 +16,11 @@ from test_identity import issuer_fixture as issuer_fixture  # noqa: F401
 from test_publication import prepare, publishing, ready  # noqa: F401
 
 from domain_kg.app import create_app
+from domain_kg.ingestion.pipeline import configured_pipeline
+from domain_kg.jobs.runner import JobRunner
+from domain_kg.operations.backup import BackupService
 from domain_kg.settings import Settings
+from domain_kg.worker import serve
 
 PROFILE_PATH = Path(__file__).resolve().parents[2] / "config/laptop-smoke.json"
 
@@ -62,10 +67,11 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
 
         # These fixture routes exist only in this opt-in pytest process and synthetic namespace.
         @app.get("/__smoke__/start/{role}")
-        async def start(role: str):
+        async def start(role: str, view: Literal["catalog", "search", "operations"] = "catalog"):
             assert role in ("owner", "editor", "reader")
             ticket = await app.state.identity.sessions.create(principals[role], org)
-            response = RedirectResponse("/admin", status_code=303)
+            target = "/admin" if view == "catalog" else f"/admin/kgs/{job.kg_id}/{view}"
+            response = RedirectResponse(target, status_code=303)
             response.set_cookie(
                 "domain_kg_session", ticket.session_id, httponly=True, samesite="lax", path="/"
             )
@@ -91,6 +97,19 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
         app.router.routes[0:0] = smoke_routes
         async with app.router.lifespan_context(app):
             serving = asyncio.create_task(server.serve())
+            working = asyncio.create_task(
+                serve(
+                    queue,
+                    JobRunner(
+                        queue,
+                        configured_pipeline(queue, coordinator.providers),
+                        operations=BackupService(queue),
+                    ),
+                    once=False,
+                    worker_id="synthetic-preview-backups",
+                    backup_only=True,
+                )
+            )
             try:
                 for _ in range(100):
                     if server.started:
@@ -104,11 +123,13 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 configuration = json.loads(await asyncio.to_thread(PROFILE_PATH.read_bytes))
                 lifetime = int(configuration["tests"]["preview_seconds"])
                 assert 1 <= lifetime <= 900
-                try:
-                    await asyncio.wait_for(asyncio.shield(serving), timeout=lifetime)
-                except TimeoutError:
-                    # Preview expiry is expected; it does not certify browser interactions.
-                    server.should_exit = True
+                done, _ = await asyncio.wait(
+                    (serving, working), timeout=lifetime, return_when=asyncio.FIRST_COMPLETED
+                )
+                if working in done:
+                    await working  # Do not advertise a dead preview worker.
             finally:
                 server.should_exit = True
+                working.cancel()
+                await asyncio.gather(working, return_exceptions=True)
                 await asyncio.wait_for(serving, timeout=10)

@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from domain_kg.console.backups import backup_router
 from domain_kg.console.curation import curation_router
 from domain_kg.console.forms import read_form
 from domain_kg.console.grants import grant_router
@@ -24,6 +25,7 @@ from domain_kg.transport.runtime import ServiceRuntime
 
 def console_router(runtime: ServiceRuntime) -> APIRouter:
     router = APIRouter(prefix="/admin")
+    router.include_router(backup_router(runtime))
     router.include_router(curation_router(runtime))
     router.include_router(node_action_router(runtime))
     router.include_router(operations_router(runtime))

@@ -134,3 +134,11 @@ the controller then timed out on recovery. That fixture reported a timeout
 failure; its corrected restart stopped cleanly. API upload, checksum verification
 and publication passed their integration flow. No real external OIDC browser
 acceptance is claimed.
+
+Owner operations now include retained backup admission with an accepted-revision
+check and bounded retention. A completed backup job links to manifest/part
+inspection and current-owner-only attachment downloads; damaged bytes are denied
+before HTTP success. Run the model-free native worker with `--backup-only`.
+The focused backup/operations/jobs/worker regression passed four checks in
+55.68 seconds. The synthetic preview also completed a real tiny queued backup
+through its dedicated backup worker, without a model call. Restore remains pending.

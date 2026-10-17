@@ -35,6 +35,7 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "status": result,
                 "command_key": str(uuid4()),
+                "backup_key": str(uuid4()),
             },
             scope=scope,
         )

@@ -40,6 +40,7 @@ from domain_kg.revisions.models import (
     RollbackRevision,
 )
 from domain_kg.transport.models import CurationResult
+from domain_kg.transport.operations import operation_router
 from domain_kg.transport.runtime import ServiceRuntime
 
 
@@ -70,6 +71,7 @@ def matching(*pairs: tuple[UUID, UUID]) -> None:
 
 def service_router(runtime: ServiceRuntime) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
+    router.include_router(operation_router(runtime))
 
     async def access(
         request: Request,

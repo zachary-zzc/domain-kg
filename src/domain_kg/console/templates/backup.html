@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="tabs"><a href="/admin/kgs/{{ kg.id }}/operations">Operations</a><a href="/admin/kgs/{{ kg.id }}/jobs/{{ manifest.job_id }}">Job status</a></nav>
+<section class="card"><h2>Sealed backup</h2><p>Published revision {{ manifest.snapshot.revision }} · {{ manifest.source_count }} sources · {{ manifest.curation_count }} curations</p><p>Created {{ manifest.created_at }} · Retained until {{ manifest.expires_at }}</p><p>The original files and authority were checked at capture. Every downloaded part is checked again. Access requires your current owner permission.</p><a download="backup-manifest.json" href="/api/v1/kgs/{{ kg.id }}/backups/jobs/{{ manifest.job_id }}">Download manifest</a></section>
+<section class="card"><h2>Backup parts</h2><p>Page {{ index + 1 }} of {{ manifest.pages|length }}</p><table><thead><tr><th>Content</th><th>Bytes</th><th>Checksum</th><th>Download</th></tr></thead><tbody>{% for part in parts.parts %}<tr><td>{{ part.kind|replace('_',' ')|title }}</td><td>{{ part.object.size_bytes }}</td><td><code title="{{ part.object.sha256 }}">{{ part.object.sha256[:12] }}…</code></td><td><a href="/api/v1/kgs/{{ kg.id }}/backups/{{ manifest.backup_id }}/pages/{{ index }}/objects/{{ part.object.id }}">Download part</a></td></tr>{% endfor %}</tbody></table>
+{% if index > 0 %}<a href="?index={{ index - 1 }}">Previous</a>{% endif %} {% if index + 1 < manifest.pages|length %}<a href="?index={{ index + 1 }}">Next</a>{% endif %}</section>
+{% endblock %}

@@ -14,6 +14,7 @@ from domain_kg.identity.policy import Policy
 from domain_kg.ingestion.pipeline import configured_pipeline
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.jobs.runner import JobRunner
+from domain_kg.operations.backup import BackupService
 from domain_kg.providers.profiles import ProviderRegistry
 from domain_kg.providers.service import ProviderService
 from domain_kg.settings import Settings
@@ -31,11 +32,14 @@ async def serve(
     curation_only: bool = False,
     purge_only: bool = False,
     import_only: bool = False,
+    backup_only: bool = False,
 ) -> None:
     runner.pipeline.require_configured()
     while True:
         kinds = (
-            ("import",)
+            ("backup",)
+            if backup_only
+            else ("import",)
             if import_only
             else ("purge_material",)
             if purge_only
@@ -64,6 +68,7 @@ async def main(
     curation_only: bool = False,
     purge_only: bool = False,
     import_only: bool = False,
+    backup_only: bool = False,
 ) -> None:
     settings = Settings()
     client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
@@ -74,16 +79,24 @@ async def main(
     router = KGStoreRouter(policy, registry, dimensions=settings.embedding_dimensions)
     try:
         queue = JobQueue(policy, router)
-        approved_providers = ProviderRegistry.from_file(settings.provider_config)
+        approved_providers = (
+            ProviderRegistry()
+            if backup_only
+            else ProviderRegistry.from_file(settings.provider_config)
+        )
         if not approved_providers.profiles and not (
-            repair_only or restore_only or curation_only or purge_only
+            repair_only or restore_only or curation_only or purge_only or backup_only
         ):
             raise DomainError(
                 ErrorCode.PROVIDER_UNAVAILABLE,
                 "Configure approved provider profiles before starting a worker.",
             )
         providers = ProviderService(policy, router, approved_providers)
-        runner = JobRunner(queue, configured_pipeline(queue, providers))
+        runner = JobRunner(
+            queue,
+            configured_pipeline(queue, providers),
+            operations=BackupService(queue) if backup_only else None,
+        )
         runner.pipeline.require_configured()
         await queue.initialize()
         await serve(
@@ -96,6 +109,7 @@ async def main(
             curation_only=curation_only,
             purge_only=purge_only,
             import_only=import_only,
+            backup_only=backup_only,
         )
     finally:
         await router.close()
@@ -106,6 +120,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--backup-only", action="store_true", help="seal owner backups without model calls"
+    )
     mode.add_argument(
         "--repair-only", action="store_true", help="repair retained projections without a provider"
     )
@@ -139,6 +156,7 @@ if __name__ == "__main__":
                 curation_only=args.curation_only,
                 purge_only=args.purge_only,
                 import_only=args.import_only,
+                backup_only=args.backup_only,
             )
         )
     except DomainError as exc:

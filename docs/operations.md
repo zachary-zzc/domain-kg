@@ -1,8 +1,8 @@
 # Operations implementation status
 
 Owner-operation admission and internally sealed backup packages have passed their
-local gates. Public backup controls, restore, export downloads, generation
-migration and deployment acceptance continue under
+local gates. Public owner backup controls are implemented; restore, export
+downloads, generation migration and deployment acceptance continue under
 [the operations plan](superpowers/plans/2026-10-17-operations.md).
 The complete restore drill and release readiness remain unverified.
 
@@ -69,3 +69,23 @@ and a tombstoned source were preserved without model calls. Four additional
 metadata mismatch tests passed after reproducing the failure. The unit/protocol
 suite passed 202 checks in 4.04 seconds; Ruff and strict mypy passed.
 All are tiny synthetic laptop fixtures; no full restore is implied.
+
+Current owners can queue a backup from the console's operations page or
+`POST /api/v1/kgs/{kg_id}/backups`. Run a native
+`uv run python -m domain_kg.worker --backup-only` worker; it needs no model/provider
+configuration and leaves ingestion jobs queued. Normal ingestion workers do not
+claim backups. Completed job pages link to the backup manifest and bounded part
+pages. HTTP exposes `/backups/jobs/{job_id}`, `/backups/{backup_id}/pages/{index}`
+and that page's `/objects/{object_id}` under the same KG prefix. Downloads verify
+the selected object before sending success headers, recheck current owner
+authority during streaming, use attachment headers and disable response caching.
+They never accept an object-store key or server file path.
+
+The owner/reader console, download, existing operations/jobs and worker regression
+passed four checks in 55.68 seconds. It covered checksum equality, corrupt bytes
+rejected before HTTP success, CSRF denial, reader denial and backup-only claiming.
+An API schema regression from eager service creation was reproduced and corrected
+with request-time construction; all 202 unit/protocol checks then passed in
+4.16 seconds. Ruff and strict mypy passed 167 source files. These controls do not
+establish restore acceptance or physically remove retained backup objects at
+expiry; reads already reject expired manifests.

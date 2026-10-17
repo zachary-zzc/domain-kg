@@ -48,6 +48,19 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
     async def job(request: Request, kg_id: UUID, job_id: UUID) -> HTMLResponse:
         session, access, scope = await read_context(runtime, request, kg_id, filters_for(False))
         result = await runtime.queue.get(access, job_id)
+        backup_url = None
+        if any(grant.kg_id == kg_id and grant.role == "owner" for grant in access.grants):
+            backup = await runtime.queue.database.jobs.find_one(
+                {
+                    "org_id": str(access.org_id),
+                    "kg_id": str(kg_id),
+                    "id": str(job_id),
+                    "kind": "backup",
+                },
+                {"_id": 0, "id": 1},
+            )
+            if backup:
+                backup_url = f"/admin/kgs/{kg_id}/backups/jobs/{job_id}"
         return await page(
             runtime,
             session,
@@ -57,6 +70,7 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
                 "title": "Processing status",
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "job": result,
+                "backup_url": backup_url,
                 "command_key": str(uuid4()),
             },
             scope=scope,
