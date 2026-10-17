@@ -153,3 +153,14 @@ access context is used, and no embedding request is needed to create the empty
 stores. The real target/provider test passed in 4.53 seconds; 12 restore/catalog
 regressions passed in 13.91 seconds, seven namespace/storage checks in 1.51 seconds,
 and all 220 unit/protocol checks in 4.23 seconds. Ruff and strict mypy passed.
+
+Typed source transforms now preserve raw blob hashes, physical locations and
+historical extraction profile metadata while rebinding parsed/extracted/resolved
+documents. A selected preparation chain can be resealed with new dependency
+hashes and explicit original/restored artifact provenance; active leases are not
+part of that representation. Native source and human projection documents reuse
+vectors only when the embedding space, dimensions, model and text agree. Changed
+text or spaces require fresh validated vectors. These are pure assembly helpers;
+alternative history chains, imported artifact provenance and full activation
+remain unfinished. Their focused tests and the full 229 unit/protocol checks
+passed in 4.19 seconds, with Ruff and strict mypy (178 sources). No model ran.
