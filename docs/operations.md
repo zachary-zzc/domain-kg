@@ -623,3 +623,24 @@ inputs and actual macOS network denial, passed in 6.16 seconds. Ruff/mypy pass f
 228 source modules. The launcher is committed before re-running its frozen HEAD
 so that this parser fix is included. End-to-end launcher startup remains pending
 at this checkpoint. Zero model calls; Docker caps unchanged.
+
+
+Restore split/follow-up checkpoint (2026-10-18 local): a single tiny real-store
+drill backed up accepted merge→split history, restored it into a fresh KG through
+the actual restore service, replayed completion without a second publication,
+verified separate identities and source evidence, and denied the source reader
+and editor access to the target. The current target owner then retracted the
+imported split and published a new split, retaining the original editor's actor
+and reasons alongside new owner provenance. The source KG remained separate and
+unchanged. The case passed in 80.24 seconds; providers were forbidden after the
+initial synthetic source preparation. No application correction was required.
+
+The frozen preview also passed end to end and cleaned its owned temporary tree
+and fixtures (385.59 seconds including viewing; explicitly finished to release
+the serial store lock). The import-root guard and trusted native-parser path
+worked from committed revision `00c6bd3`. Latest offline distributions retain
+260/263 entries and pass the boundary checker: wheel SHA-256
+`1936722edce613def7784059a481763dfab23de5f14045c46d0d308d3017fbc8`,
+source SHA-256 `52d0c31669343ea228d7d275cb50ffe8ced7695351e27783189ec3c5a817d6f7`.
+Second physical-profile recovery, complete purged/history capture, generation
+retirement/model-schema migration and final evaluation remain open.
