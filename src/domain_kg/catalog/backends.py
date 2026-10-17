@@ -513,6 +513,12 @@ class BackendRegistry:
                 raise DomainError(
                     ErrorCode.VERSION_CONFLICT, "A referenced storage profile cannot be detached."
                 )
+            if await self.database.restore_targets.find_one(
+                {"placement.id": str(identifier)}, session=session
+            ):
+                raise DomainError(
+                    ErrorCode.VERSION_CONFLICT, "A restore target still references this profile."
+                )
             await self.database.storage_profiles.delete_one(
                 {"id": str(identifier)}, session=session
             )

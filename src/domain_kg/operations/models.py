@@ -9,7 +9,7 @@ from domain_kg.identity.models import Principal
 from domain_kg.models import SHA256, FrozenModel, IdempotencyKey, Namespace, NonNegative, ScopedRef
 from domain_kg.retrieval.models import SearchFilters
 
-OwnerOperationKind = Literal["backup", "export"]
+OwnerOperationKind = Literal["backup", "export", "restore"]
 
 
 class BackupCommand(FrozenModel):
@@ -29,7 +29,20 @@ class ExportCommand(FrozenModel):
     idempotency_key: IdempotencyKey
 
 
-OwnerCommand = Annotated[BackupCommand | ExportCommand, Field(discriminator="kind")]
+class RestoreCommand(FrozenModel):
+    kind: Literal["restore"] = "restore"
+    kg_id: UUID
+    expected_published_revision: NonNegative
+    backup_job_id: UUID
+    placement_id: UUID
+    provider_profile_id: UUID
+    name: Annotated[str, Field(min_length=1, max_length=200)]
+    idempotency_key: IdempotencyKey
+
+
+OwnerCommand = Annotated[
+    BackupCommand | ExportCommand | RestoreCommand, Field(discriminator="kind")
+]
 
 
 class SnapshotPointer(Namespace):

@@ -152,7 +152,7 @@ class JobQueue:
 
     @staticmethod
     def _action(kind: str) -> Action:
-        if kind in ("backup", "export"):
+        if kind in ("backup", "export", "restore"):
             from domain_kg.operations.jobs import operation_action
 
             return operation_action(kind)
@@ -369,6 +369,7 @@ class JobQueue:
                 "purge_material",
                 "backup",
                 "export",
+                "restore",
             }
         ):
             raise ValueError("job kinds require a configured handler")
@@ -450,7 +451,7 @@ class JobQueue:
             org_id=job.org_id,
             session=session,
         )
-        if job.kind in ("backup", "export"):
+        if job.kind in ("backup", "export", "restore"):
             from domain_kg.operations.jobs import OwnerOperations
 
             await OwnerOperations(self).authorize(access, raw, session)
@@ -755,7 +756,7 @@ class JobQueue:
 
             if await ExportService(self).accepted(job):
                 return
-        if job.kind in ("backup", "export"):
+        if job.kind in ("backup", "export", "restore"):
             await self.authorize(job)
             raise DomainError(
                 ErrorCode.REVISION_NOT_READY, "The operation has no verified package."
@@ -807,6 +808,8 @@ class JobQueue:
         await self.transactions.transaction(commit)
 
     async def accepted(self, job: LeasedJob) -> bool:
+        if job.kind == "restore":
+            return False
         if job.kind == "backup":
             from domain_kg.operations.backup import BackupService
 
@@ -884,7 +887,7 @@ class JobQueue:
         )
         if raw is None:
             raise inaccessible_reference()
-        if raw["kind"] in ("backup", "export"):
+        if raw["kind"] in ("backup", "export", "restore"):
             from domain_kg.operations.jobs import OwnerOperations
 
             await OwnerOperations(self).authorize(current, raw, session)
@@ -1014,11 +1017,17 @@ class JobQueue:
                 },
                 session=session,
             )
-            if raw["kind"] in ("backup", "export"):
+            if raw["kind"] in ("backup", "export", "restore"):
                 from domain_kg.operations.jobs import OwnerOperations
 
                 operations = OwnerOperations(self)
                 record = await operations.authorize(current, result, session)
+                if raw["kind"] == "restore":
+                    await self.database.restore_targets.update_one(
+                        {"org_id": raw["org_id"], "kg_id": raw["kg_id"], "id": raw["target_id"]},
+                        {"$set": {"state": "abandoned" if operation == "cancel" else "allocated"}},
+                        session=session,
+                    )
                 await operations.audit.append(
                     current,
                     record.kg_id,

@@ -15,13 +15,19 @@ from domain_kg.models import ScopedRef
 from domain_kg.operations.audit import AuditTrail
 from domain_kg.operations.models import OwnerCommand, OwnerOperation, SnapshotPointer
 
-OWNER_KINDS = frozenset({"backup", "export"})
+OWNER_KINDS = frozenset({"backup", "export", "restore"})
 
 
 def operation_action(kind: str) -> Action:
     if kind not in OWNER_KINDS:
         raise inaccessible_reference()
-    return Action.BACKUP if kind == "backup" else Action.CONFIGURE
+    return (
+        Action.BACKUP
+        if kind == "backup"
+        else Action.RESTORE
+        if kind == "restore"
+        else Action.CONFIGURE
+    )
 
 
 class OwnerOperations:
@@ -80,6 +86,10 @@ class OwnerOperations:
             raise DomainError(
                 ErrorCode.PROJECTION_INCONSISTENT, "The owner operation reference is inconsistent."
             ) from None
+        if record.command.kind == "restore":
+            from domain_kg.operations.restore_targets import RestoreTargets
+
+            await RestoreTargets(self.queue).record(record, session)
         return record
 
     async def submit(self, access: AccessContext, command: OwnerCommand) -> JobReceipt:
@@ -90,6 +100,10 @@ class OwnerOperations:
         if command.kg_id not in current.kg_ids:
             raise inaccessible_reference()
         await self.initialize()
+        if command.kind == "restore":
+            from domain_kg.operations.restore_targets import RestoreTargets
+
+            await RestoreTargets(self.queue).initialize()
         key = self.queue.transactions.key(current, command.kg_id, command.idempotency_key)
         fingerprint = digest(command.model_dump(mode="json"))
         operation_id, job_id = uuid4(), uuid4()
@@ -165,6 +179,10 @@ class OwnerOperations:
                 intent_hash=fingerprint,
                 snapshot=snapshot,
             )
+            if command.kind == "restore":
+                from domain_kg.operations.restore_targets import RestoreTargets
+
+                await RestoreTargets(self.queue).allocate(record, session)
             raw = job.model_dump(mode="json") | {
                 "actor": current.principal.model_dump(mode="json"),
                 "stage": "queued",

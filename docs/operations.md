@@ -132,3 +132,13 @@ Unknown references and changed observations are rejected. This is a foundation,
 not an available restore endpoint or a completed restore drill. Projection bodies
 are rebuilt without copying vectors: changed text must obtain a valid embedding
 through a currently approved target profile.
+
+Internal restore admission now reserves a server-generated inactive target under
+a real source-KG owner job. A completed, unexpired, same-KG backup and an approved
+placement are required. The reservation creates no catalog entry, grant or
+provider selection; even the source owner cannot read the target. Cancellation
+abandons the reservation and retry retains its target identity. Current owner,
+lease, source boundary and placement approval are rechecked before work. Profile
+detach serializes with allocation and refuses a referenced profile. Ordinary
+workers leave restore jobs queued, and an unverified restore cannot finish.
+The target assembly/activation handler and public restore controls remain pending.
