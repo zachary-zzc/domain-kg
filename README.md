@@ -6,6 +6,12 @@ Domain KG is a shared web service under development for preserving work material
 
 ## Laptop smoke checks
 
+For the lowest-cost checks, use `python3 scripts/smoke.py --quick --offline`.
+The checked-in [laptop profile](config/laptop-smoke.json) fixes Docker RAM,
+native model RSS monitoring, serial execution and opt-in small-model budgets.
+Ordinary tests make zero live model calls. See [budget details](docs/laptop-smoke.md)
+and [the current feature review](docs/status-review.md).
+
 ```bash
 uv sync --locked
 python3 scripts/smoke.py --offline

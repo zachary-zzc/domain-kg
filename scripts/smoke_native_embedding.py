@@ -4,6 +4,7 @@ Starts one owned native process, measures RSS, checks real provider-client vecto
 and stops it afterwards. Docker and other processes are never modified.
 """
 
+import argparse
 import asyncio
 import hashlib
 import json
@@ -18,6 +19,7 @@ from uuid import uuid4
 
 import httpx
 from pydantic import SecretStr
+from smoke import load_laptop_profile
 
 from domain_kg.models import Namespace
 from domain_kg.providers.embeddings import EmbeddingClient, EmbeddingProfile
@@ -25,15 +27,19 @@ from domain_kg.providers.profiles import ProviderConnection, ProviderProfile, em
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = Path.home() / ".cache/domain-kg"
-MODEL = CACHE / "models/Qwen3-Embedding-0.6B-Q8_0.gguf"
-SHA256 = "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439"
-LIMIT = 1_250_000_000
 
 
-async def main() -> None:
-    with MODEL.open("rb") as source:
-        assert hashlib.file_digest(source, "sha256").hexdigest() == SHA256
-    assert MODEL.stat().st_size == 639150592
+async def main(profile_path: Path, *, bilingual: bool = False) -> None:
+    configuration = load_laptop_profile(profile_path)
+    native = configuration["native"]
+    pinned = json.loads((ROOT / native["model_manifest"]).read_bytes())["embeddings"]
+    model = CACHE / "models" / pinned["filename"]
+    with model.open("rb") as source:
+        if hashlib.file_digest(source, "sha256").hexdigest() != pinned["sha256"]:
+            raise RuntimeError("The approved model checksum differs; no model was started.")
+    if model.stat().st_size != pinned["size_bytes"]:
+        raise RuntimeError("The approved model length differs; no model was started.")
+    limit = native["rss_cap_per_process_bytes"]
     with socket.socket() as check:
         if check.connect_ex(("127.0.0.1", 29500)) == 0:
             raise RuntimeError("Pause the chat model first; this smoke runs sequentially.")
@@ -55,7 +61,7 @@ async def main() -> None:
                 "10",
                 "/opt/homebrew/bin/llama-server",
                 "--model",
-                str(MODEL),
+                str(model),
                 "--alias",
                 "domain-kg-small-embedding",
                 "--host",
@@ -67,19 +73,19 @@ async def main() -> None:
                 "--gpu-layers",
                 "0",
                 "--threads",
-                "2",
+                str(native["threads"]),
                 "--threads-batch",
-                "2",
+                str(native["threads"]),
                 "--threads-http",
-                "2",
+                str(native["threads"]),
                 "--parallel",
-                "1",
+                str(native["parallel_slots"]),
                 "--ctx-size",
-                "2048",
+                str(native["embedding_context_tokens"]),
                 "--batch-size",
-                "2048",
+                str(native["embedding_batch_tokens"]),
                 "--ubatch-size",
-                "2048",
+                str(native["embedding_microbatch_tokens"]),
                 "--embedding",
                 "--pooling",
                 "last",
@@ -115,24 +121,24 @@ async def main() -> None:
                 )
                 if measured.returncode == 0 and measured.stdout.strip():
                     peak = max(peak, int(measured.stdout.strip()) * 1024)
-                    if peak > LIMIT:
+                    if peak > limit:
                         exceeded.set()
                         process.terminate()
                         return
-                time.sleep(0.25)
+                time.sleep(native["rss_sample_interval_seconds"])
 
         threading.Thread(target=watch, daemon=True).start()
         report: dict[str, object] = {
-            "sha256": SHA256,
-            "context_tokens": 2048,
-            "threads": 2,
+            "sha256": pinned["sha256"],
+            "context_tokens": native["embedding_context_tokens"],
+            "threads": native["threads"],
             "dimensions": 1024,
             "status": "failed",
         }
         try:
             token = (CACHE / "llm-api-key").read_text().strip()
             async with httpx.AsyncClient(trust_env=False, timeout=2) as http:
-                deadline = time.monotonic() + 90
+                deadline = time.monotonic() + native["startup_timeout_seconds"]
                 while True:
                     if process.poll() is not None:
                         raise RuntimeError("Embedding server exited during startup.")
@@ -153,8 +159,9 @@ async def main() -> None:
                 embedding_dimensions=1024,
                 allowed_namespaces=(namespace,),
                 data_policy_approved=True,
-                embedding_context_tokens=2048,
+                embedding_context_tokens=native["embedding_context_tokens"],
                 embedding_batch_size=1,
+                timeout_seconds=native["request_timeout_seconds"],
                 embedding_query_prefix="Instruct: Retrieve relevant evidence passages.\nQuery: ",
             )
             connection = ProviderConnection(
@@ -169,6 +176,9 @@ async def main() -> None:
                 space_id=embedding_space_id(approved, connection),
             )
             usage = []
+            max_calls = native[
+                "embedding_bilingual_requests" if bilingual else "embedding_tiny_requests"
+            ]
 
             async def authorize() -> None:
                 if process.poll() is not None or exceeded.is_set():
@@ -176,21 +186,23 @@ async def main() -> None:
 
             async def record(value: object) -> None:
                 usage.append(value)
+                if len(usage) > max_calls:
+                    raise RuntimeError("The explicit native smoke request budget was exceeded.")
 
             client = EmbeddingClient(approved, connection, authorize=authorize, record_usage=record)
             started = time.monotonic()
             try:
-                docs = await client.embed(
-                    [
-                        "A cat is sitting on a mat.",
-                        "A spaceship explores distant galaxies.",
-                        "一只猫坐在垫子上。",
-                        "飞船探索遥远的星系。",
-                    ],
-                    profile,
-                )
+                texts = [
+                    "A cat is sitting on a mat.",
+                    "A spaceship explores distant galaxies.",
+                    "一只猫坐在垫子上。",
+                    "飞船探索遥远的星系。",
+                ]
+                questions = ["Where is the cat?", "飞船在探索哪里？"]
+                # Default: two short documents + one query (three requests total).
+                docs = await client.embed(texts if bilingual else texts[:2], profile)
                 queries = await client.embed(
-                    ["Where is the cat?", "飞船在探索哪里？"], profile, query=True
+                    questions if bilingual else questions[:1], profile, query=True
                 )
             finally:
                 await client.close()
@@ -203,9 +215,10 @@ async def main() -> None:
                 for query in queries
             ]
             assert similarities[0][0] > similarities[0][1]
-            assert similarities[0][2] > similarities[0][3]
-            assert similarities[1][1] > similarities[1][0]
-            assert similarities[1][3] > similarities[1][2]
+            if bilingual:
+                assert similarities[0][2] > similarities[0][3]
+                assert similarities[1][1] > similarities[1][0]
+                assert similarities[1][3] > similarities[1][2]
             assert not exceeded.is_set()
             report.update(
                 status="passed",
@@ -222,7 +235,7 @@ async def main() -> None:
                 process.wait(timeout=5)
             report.update(
                 peak_rss_bytes=peak,
-                rss_watchdog_bytes=LIMIT,
+                rss_watchdog_bytes=limit,
                 limit_exceeded=exceeded.is_set(),
                 server_stopped=True,
             )
@@ -231,4 +244,10 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--profile", type=Path, default=ROOT / "config/laptop-smoke.json")
+    parser.add_argument(
+        "--bilingual", action="store_true", help="six requests instead of the default three"
+    )
+    args = parser.parse_args()
+    asyncio.run(main(args.profile, bilingual=args.bilingual))

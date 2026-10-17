@@ -19,8 +19,21 @@ Updated 17 October 2026. Execution is native in this chat, following the current
 | 13: Federated fast/deep search | Complete locally | 34 smoke checks; regular regression 202 passed, one physical skip; native mix, two-KG fusion, partial failure rules and model-specific source windows verified. |
 | 14: Persistent edits and material changes | Local verification passed | Required combined regression: 17 tests in 618.31 seconds. Dedicated reversible identity regression: 11 tests in 521.58 seconds; 128 unit checks. Docker database cap remains 1.476 GB. |
 | 15: Shared MCP and HTTP surfaces | Verified initial transport milestone; remaining gates open | 24 signed-identity/transport/owner-operation integration checks in 112.15 seconds; 139 unit/protocol checks in 3.99 seconds; Ruff and strict mypy (124 source files). Current/retained source chunks and suppression: 3 additional checks in 46.74 seconds. Later operation routes remain. |
-| 16: Legacy import and upstream compatibility | Decoder, planning and private admission verified; worker pending | Nine format tests and six real MongoDB/S3 plan checks pass (12.34 seconds); unit/protocol regression 148 passed in 4.99 seconds; strict mypy 130 sources. Provenance guards/native publication compatibility: 16 checks in 203.37 seconds; 152 unit/protocol checks. Private atomic admission/native submission: 17 checks in 40.70 seconds. No public execution, imported publication or actual corpus migration yet. |
-| 17–19 | Pending | Continue in dependency order; external acceptance gates stay recorded separately. |
+| 16: Legacy import and upstream compatibility | Complete locally | Final combined laptop smoke: 59 passed in 395.61 seconds. Worker, HTTP admission, recovery, trust, stable identities and purge verified with synthetic data. No real corpus migration performed. |
+| 17: Team console | Complete locally | Final console smoke: 43 passed in 354.84 seconds; representative browser flows observed. Optional file-picker walkthrough remains unverified; external OIDC remains separate. |
+| 18: Consistent backup, repair and deployment | In progress | Owner-operation/audit, retained object storage and capture pins committed. Backup assembly and newly found failure guards remain uncommitted and need a fresh integration regression. Restore, export, generation migration, budgets and deployment artifacts remain. |
+| 19: Evaluation and release candidate | Not started | Held-out evaluation, final release checks and team pilot follow Task 18. No production readiness claim. |
+
+The main plan has 19 tasks: 14 have completed their local task gates; Tasks 3,
+9 and 15 retain external identity/model/client acceptance gates; Tasks 18 and 19
+remain development work. Its 57 coarse checklist items contain 44 verified and
+13 unchecked items. These counts are checklist status, not a percentage of work
+or an estimate of time remaining. See [the current review](status-review.md).
+
+The active laptop budget is [config/laptop-smoke.json](../config/laptop-smoke.json).
+Ordinary checks use deterministic synthetic providers and make zero live model
+calls. Use `python3 scripts/smoke.py --quick --offline` for changed budget/window
+checks; a quick smoke does not replace a task's integration acceptance gate.
 
 Implemented the locked Python environment, protected mounted MCP transport, source-preserving LightRAG extraction boundary, explicit scoped projection probe, real-store test fixtures, resource-limited Compose stack, private development environment generator, and reproducible smoke runner. The default MCP verifier denies tokens until external OIDC is implemented.
 

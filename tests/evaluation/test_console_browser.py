@@ -2,7 +2,9 @@
 # ruff: noqa: F811
 
 import asyncio
+import json
 import os
+from pathlib import Path
 
 import httpx
 import pytest
@@ -14,6 +16,8 @@ from test_publication import prepare, publishing, ready  # noqa: F401
 
 from domain_kg.app import create_app
 from domain_kg.settings import Settings
+
+PROFILE_PATH = Path(__file__).resolve().parents[2] / "config/laptop-smoke.json"
 
 pytestmark = [
     pytest.mark.storage,
@@ -97,7 +101,14 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                     "Browser preview ready: http://localhost:28080/__smoke__/start/owner",
                     flush=True,
                 )
-                await asyncio.wait_for(asyncio.shield(serving), timeout=900)
+                configuration = json.loads(await asyncio.to_thread(PROFILE_PATH.read_bytes))
+                lifetime = int(configuration["tests"]["preview_seconds"])
+                assert 1 <= lifetime <= 900
+                try:
+                    await asyncio.wait_for(asyncio.shield(serving), timeout=lifetime)
+                except TimeoutError:
+                    # Preview expiry is expected; it does not certify browser interactions.
+                    server.should_exit = True
             finally:
                 server.should_exit = True
                 await asyncio.wait_for(serving, timeout=10)

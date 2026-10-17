@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "docker": {
+    "memory_cap_bytes": 1500000000,
+    "service_memory_bytes": {
+      "mongo": 536870912,
+      "neo4j": 536870912,
+      "qdrant": 201326592,
+      "object-store": 201326592
+    },
+    "swap_enabled": false,
+    "cpu_cap_cores": 2.5
+  },
+  "tests": {
+    "provider_mode": "synthetic",
+    "parallel_workers": 1,
+    "quick_timeout_seconds": 180,
+    "task_timeout_seconds": 1800,
+    "preview_seconds": 600,
+    "auto_download_models": false,
+    "ocr_enabled": false,
+    "load_test_enabled": false
+  },
+  "native": {
+    "model_manifest": "config/model-runtime.proposed.json",
+    "autostart": false,
+    "max_concurrent_models": 1,
+    "rss_cap_per_process_bytes": 1250000000,
+    "rss_sample_interval_seconds": 0.25,
+    "threads": 2,
+    "parallel_slots": 1,
+    "gpu_layers": 0,
+    "prompt_cache_mib": 0,
+    "startup_timeout_seconds": 90,
+    "request_timeout_seconds": 30,
+    "chat_context_tokens": 4096,
+    "chat_batch_tokens": 128,
+    "chat_microbatch_tokens": 32,
+    "chat_tiny_requests": 2,
+    "chat_tiny_max_input_tokens": 512,
+    "chat_tiny_max_output_tokens": 128,
+    "embedding_context_tokens": 2048,
+    "embedding_batch_tokens": 2048,
+    "embedding_microbatch_tokens": 2048,
+    "embedding_dimensions": 1024,
+    "embedding_tiny_requests": 3,
+    "embedding_bilingual_requests": 6,
+    "stop_owned_process_after_smoke": true
+  }
+}

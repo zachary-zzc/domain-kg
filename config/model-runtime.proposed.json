@@ -1,5 +1,6 @@
 {
-  "status": "approved_smoke_passed_native_background_running",
+  "status": "approved_smoke_measurements_recorded_current_process_state_not_assumed",
+  "execution_profile": "config/laptop-smoke.json",
   "autostart": false,
   "download_permitted": true,
   "local_service_memory_budget_bytes": 1500000000,
