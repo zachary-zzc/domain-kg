@@ -205,11 +205,12 @@ class RestoreControl(RestoreAuthority):
                     }
                     if any(value.get(key) != item for key, item in ns.items()):
                         raise self.invalid()
-                    query = ns | (
-                        {"id": value["id"]}
-                        if "id" in value
-                        else {key: value[key] for key in ("job_id", "stage", "input_hash")}
-                    )
+                    if "id" in value:
+                        query = ns | {"id": value["id"]}
+                    elif table == "curation_scopes":
+                        query = ns | {key: value[key] for key in ("target_id", "scope_key")}
+                    else:
+                        query = ns | {key: value[key] for key in ("job_id", "stage", "input_hash")}
                     database = (
                         self.queue.database
                         if area == "control"

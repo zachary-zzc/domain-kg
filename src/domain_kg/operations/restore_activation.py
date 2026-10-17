@@ -8,7 +8,7 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.invariants import assert_active_owners
 from domain_kg.identity.models import Action, Principal
-from domain_kg.jobs.models import LeasedJob
+from domain_kg.jobs.models import JobArtifact, LeasedJob
 from domain_kg.jobs.queue import JobQueue, now
 from domain_kg.models import SourceVersion
 from domain_kg.operations.jobs import OwnerOperations
@@ -21,7 +21,12 @@ from domain_kg.operations.restore_results import RestoreResult, RestoreResults
 from domain_kg.providers.service import ProviderService
 from domain_kg.revisions.journal import PublicationJournal
 from domain_kg.revisions.models import RevisionReceipt
-from domain_kg.revisions.projections import EmbeddedDocument, digest
+from domain_kg.revisions.projections import (
+    CurationEmbeddedDocument,
+    EmbeddedDocument,
+    ProjectionDocument,
+    digest,
+)
 from domain_kg.revisions.publication import verify_document
 from domain_kg.storage.blobs import BlobStore
 from domain_kg.storage.router import projection_checksum
@@ -40,35 +45,47 @@ class RestoreActivation(RestoreAuthority):
                 await self._actor(job), [job.kg_id], Action.RESTORE, org_id=job.org_id
             )
             return await self.results.get(access, job.kg_id, job.id)
-        if staged.curations or any(
-            staged.inventory.rows(table)
-            for table in ("curation_revisions", "node_visibility", "import_plans")
-        ):
+        if staged.inventory.rows("import_plans"):
             raise DomainError(
                 ErrorCode.UNSUPPORTED_FORMAT,
                 "This restore history requires its dedicated activation path.",
             )
         if await self.bindings.approved(job) != (staged.binding.target, staged.binding.embedding):
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Restore configuration changed.")
-        if len(parts) != len(staged.sources) or {part.binding.source for part in parts} != {
-            SourceVersion(
-                **{key: getattr(item.document, key) for key in SourceVersion.model_fields}
+        if (
+            len(parts) != len(staged.sources) + len(staged.curations)
+            or (
+                {part.binding.source for part in parts if part.binding.source is not None}
+                != {
+                    SourceVersion(
+                        **{key: getattr(item.document, key) for key in SourceVersion.model_fields}
+                    )
+                    for item in staged.sources
+                }
             )
-            for item in staged.sources
-        }:
+            or (
+                {part.binding.curation for part in parts if part.binding.curation is not None}
+                != {item.curation for item in staged.curations}
+            )
+        ):
             raise DomainError(
-                ErrorCode.PROJECTION_INCONSISTENT, "Restore source readiness set differs."
+                ErrorCode.PROJECTION_INCONSISTENT, "Restore readiness owner set differs."
             )
         for part in parts:
-            body = b"".join(
-                [
-                    chunk
-                    async for chunk in BlobStore(staged.binding.stores.blobs).open(
-                        part.artifact.blob
-                    )
-                ]
-            )
-            document = EmbeddedDocument.model_validate_json(body)
+            document: ProjectionDocument
+            if isinstance(part.artifact, JobArtifact):
+                body = b"".join(
+                    [
+                        chunk
+                        async for chunk in BlobStore(staged.binding.stores.blobs).open(
+                            part.artifact.blob
+                        )
+                    ]
+                )
+                document = EmbeddedDocument.model_validate_json(body)
+            else:
+                body = part.artifact.body.encode()
+                document = CurationEmbeddedDocument.model_validate_json(body)
             if (
                 hashlib.sha256(body).hexdigest() != part.binding.content_hash
                 or (await verify_document(staged.binding.stores, document, part.report.batch))
@@ -120,12 +137,30 @@ class RestoreActivation(RestoreAuthority):
             if await self.bindings.approved(job) != (target, staged.binding.embedding):
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "Restore configuration changed.")
             source_ns = {"org_id": str(job.org_id), "kg_id": str(job.kg_id)}
-            if await self.queue.database.node_visibility.find_one(source_ns, session=session) or (
-                await self.queue.database.curation_revisions.find_one(source_ns, session=session)
-            ):
+            visibility_rows = staged.inventory.rows("node_visibility")
+            captured_visibility = {row["id"]: row for row in visibility_rows}
+            current_visibility = {
+                row["id"]: {key: value for key, value in row.items() if key != "_id"}
+                async for row in self.queue.database.node_visibility.find(
+                    source_ns, session=session
+                )
+            }
+            if current_visibility != captured_visibility:
                 raise DomainError(
-                    ErrorCode.UNSUPPORTED_FORMAT,
-                    "Current human history requires its dedicated restore path.",
+                    ErrorCode.VERSION_CONFLICT,
+                    "Current visibility history changed since this backup.",
+                )
+            current_history = {
+                row["id"]
+                async for row in self.queue.database.curation_revisions.find(
+                    source_ns | {"state": "accepted"}, session=session
+                )
+            }
+            if current_history != {
+                row["id"] for row in staged.inventory.rows("curation_revisions")
+            }:
+                raise DomainError(
+                    ErrorCode.VERSION_CONFLICT, "Accepted human history changed since this backup."
                 )
             member = await self.queue.database.members.find_one(
                 {
@@ -155,28 +190,31 @@ class RestoreActivation(RestoreAuthority):
             )
             for part in parts:
                 source = part.binding.source
-                if source is None:
-                    raise DomainError(
-                        ErrorCode.PROJECTION_INCONSISTENT, "Restore source owner is missing."
+                if source is not None:
+                    current = await self.queue.database.material_access.find_one(
+                        source_ns | {"id": str(source.material_id)}, session=session
                     )
-                current = await self.queue.database.material_access.find_one(
-                    source_ns | {"id": str(source.material_id)}, session=session
-                )
-                material_key = ns | {"id": str(source.material_id)}
-                captured = await self.queue.database.material_access.find_one(
-                    material_key, session=session
-                )
-                if captured is None:
-                    raise DomainError(
-                        ErrorCode.PROJECTION_INCONSISTENT, "Restored material metadata is missing."
+                    material_key = ns | {"id": str(source.material_id)}
+                    captured = await self.queue.database.material_access.find_one(
+                        material_key, session=session
                     )
-                update = material_fences(captured, current)
-                await self.queue.database.material_access.update_one(
-                    material_key, {"$set": update}, session=session
-                )
-                await self.queue.database.job_artifacts.insert_one(
-                    part.artifact.model_dump(mode="json"), session=session
-                )
+                    if captured is None:
+                        raise DomainError(
+                            ErrorCode.PROJECTION_INCONSISTENT,
+                            "Restored material metadata is missing.",
+                        )
+                    update = material_fences(captured, current)
+                    await self.queue.database.material_access.update_one(
+                        material_key, {"$set": update}, session=session
+                    )
+                if isinstance(part.artifact, JobArtifact):
+                    await self.queue.database.job_artifacts.insert_one(
+                        part.artifact.model_dump(mode="json"), session=session
+                    )
+                else:
+                    await self.queue.database.operation_artifacts.insert_one(
+                        part.artifact.model_dump(mode="json"), session=session
+                    )
                 await self.queue.database.job_checkpoints.insert_one(
                     part.checkpoint.model_dump(mode="json"), session=session
                 )
@@ -197,8 +235,10 @@ class RestoreActivation(RestoreAuthority):
                             [str(ref.id) for ref in batch.records]
                         ),
                         "job": part.job.model_dump(mode="json"),
-                        "source": source.model_dump(mode="json"),
-                        "curation": None,
+                        "source": source.model_dump(mode="json") if source else None,
+                        "curation": part.binding.curation.model_dump(mode="json")
+                        if part.binding.curation
+                        else None,
                         "embedded_checkpoint": part.checkpoint.model_dump(mode="json"),
                         "receipts": [r.model_dump(mode="json") for r in part.report.receipts],
                         "state": "accepted",
@@ -223,11 +263,19 @@ class RestoreActivation(RestoreAuthority):
                         ],
                         session=session,
                     )
+                if source is not None:
+                    owner_key = f"source:{source.material_id}"
+                elif part.binding.curation is not None:
+                    owner_key = f"curation:{part.binding.curation.id}"
+                else:
+                    raise DomainError(
+                        ErrorCode.PROJECTION_INCONSISTENT, "Restore owner is missing."
+                    )
                 await self.queue.database.publication_bindings.insert_one(
                     ns
                     | {
                         "view_manifest_id": str(root),
-                        "owner_key": f"source:{source.material_id}",
+                        "owner_key": owner_key,
                         "binding": part.binding.model_dump(mode="json"),
                     },
                     session=session,
@@ -255,7 +303,7 @@ class RestoreActivation(RestoreAuthority):
                     "domain_profile_id": metadata[0]["domain_profile_id"],
                     "state": "ready",
                     "revision": 0,
-                    "visibility_revision": 0,
+                    "visibility_revision": metadata[0]["visibility_revision"],
                     "published_revision": 1,
                     "published_manifest_id": str(root),
                     "generation": str(target.generation),
@@ -268,6 +316,8 @@ class RestoreActivation(RestoreAuthority):
                 | {
                     "profile_id": str(staged.binding.embedding.id),
                     "profile_revision": staged.binding.embedding.revision,
+                    "embedding_model": staged.binding.embedding.model,
+                    "embedding_dimensions": staged.binding.embedding.dimensions,
                     "revision": 1,
                     "embedding_space_id": staged.binding.embedding.space_id,
                 },

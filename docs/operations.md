@@ -232,3 +232,16 @@ target/owner regressions passed in 33.87 seconds; 239 unit/protocol checks passe
 in 4.32 seconds, with Ruff and strict mypy (189 sources). This prototype still
 rejects human/identity/visibility/import history pending its dedicated transforms;
 no public restore control or full Task 18 acceptance is claimed.
+
+Accepted node/relation history now has typed target, scope and source-version
+mapping, preserving actor/reason and raw field text. Source-scoped human renames
+restore with original observations; a subsequent target edit passed after fixing
+the target provider selection to include model and dimensions. Restored accepted
+attempts use a typed durable restore origin and accepted root proof rather than
+copied worker leases; a later backup verifies them. Suppression history, receipts
+and current masks are mapped together, and changed live masks reject activation.
+A restored hidden node stayed hidden until a new owner-authorized reversal,
+continuing its revision counter. Suppression/re-backup checks passed in 75.53
+seconds; the rename/follow-up edit passed in its preceding focused run. These
+remain internal restore helpers; identity/import/full restore and public controls
+are unfinished. No real provider was called.

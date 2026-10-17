@@ -14,7 +14,7 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.identity.models import AccessContext, Action, Principal
 from domain_kg.imports.provenance import check_import_origin
-from domain_kg.jobs.models import Checkpoint, JobArtifact, LeasedJob
+from domain_kg.jobs.models import Checkpoint, JobArtifact, JobCommand, LeasedJob
 from domain_kg.jobs.operations import OperationArtifact
 from domain_kg.jobs.queue import JobQueue, now
 from domain_kg.materials.models import BlobRef
@@ -26,6 +26,7 @@ from domain_kg.operations.jobs import OwnerOperations
 from domain_kg.operations.models import BackupCommand, OwnerOperation
 from domain_kg.operations.package_reader import PackageReader
 from domain_kg.operations.packages import PackageObject, PackagePage, PackagePart
+from domain_kg.operations.restored_attempts import restored_job
 from domain_kg.operations.storage import PackageStore
 from domain_kg.revisions.curation_publication import directive
 from domain_kg.revisions.journal import PublicationJournal, read_artifact
@@ -173,16 +174,24 @@ class BackupService:
                 ErrorCode.PROJECTION_INCONSISTENT, "Backup accepted projection ownership differs."
             )
         checkpoint = Checkpoint.model_validate(attempt["embedded_checkpoint"])
-        origin_job = LeasedJob.model_validate(attempt["job"])
+        origin_job: JobCommand
+        if attempt.get("restored_origin"):
+            origin_job = await restored_job(self.queue, access, attempt)
+        else:
+            leased_origin = LeasedJob.model_validate(attempt["job"])
+            if leased_origin.attempt_id != binding.attempt_id:
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Backup artifact attempt differs."
+                )
+            origin_job = leased_origin
         if (checkpoint.org_id, checkpoint.kg_id, checkpoint.job_id, checkpoint.stage) != (
             binding.org_id,
             binding.kg_id,
             origin_job.id,
             "embedding",
-        ) or (origin_job.org_id, origin_job.kg_id, origin_job.attempt_id) != (
+        ) or (origin_job.org_id, origin_job.kg_id) != (
             binding.org_id,
             binding.kg_id,
-            binding.attempt_id,
         ):
             raise DomainError(
                 ErrorCode.PROJECTION_INCONSISTENT, "Backup artifact job ownership differs."

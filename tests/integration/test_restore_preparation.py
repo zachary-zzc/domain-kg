@@ -16,17 +16,22 @@ from domain_kg.storage.blobs import BlobStore
 pytestmark = pytest.mark.storage
 
 
-async def setup_restore(publishing, team, catalog):
+async def setup_restore(publishing, team, catalog, before_backup=None):
     _, editor, queue, coordinator, _, _ = publishing
     source, native, checkpoint = await prepare(publishing)
     await coordinator.publish(editor, await ready(publishing, native, checkpoint))
+    if before_backup is not None:
+        await before_backup(source)
+    published_revision = (
+        await queue.database.kgs.find_one({"org_id": str(source.org_id), "id": str(source.kg_id)})
+    )["published_revision"]
     owner = await queue.policy.resolve_access(team[2]["owner"], [source.kg_id], Action.RESTORE)
     operations = OwnerOperations(queue)
     backup = await operations.submit(
         owner,
         BackupCommand(
             kg_id=source.kg_id,
-            expected_published_revision=1,
+            expected_published_revision=published_revision,
             idempotency_key="prepare-source-backup",
         ),
     )
@@ -37,7 +42,7 @@ async def setup_restore(publishing, team, catalog):
         owner,
         RestoreCommand(
             kg_id=source.kg_id,
-            expected_published_revision=1,
+            expected_published_revision=published_revision,
             backup_job_id=backup.job_id,
             placement_id=catalog[3].id,
             provider_profile_id=profile.id,

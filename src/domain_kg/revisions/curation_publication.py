@@ -105,8 +105,16 @@ async def curation_document(
 ) -> CurationEmbeddedDocument:
     owner = ScopedRef.model_validate(attempt["curation"])
     checkpoint = Checkpoint.model_validate(attempt["embedded_checkpoint"])
-    job = LeasedJob.model_validate(attempt["job"])
-    if job.kind != "curate" or job.target_id != owner.id:
+    if attempt.get("restored_origin") and not leased:
+        from domain_kg.operations.restored_attempts import restored_job
+
+        history = await restored_job(queue, access, attempt)
+        if history.kind != "curate" or history.target_id != owner.id:
+            raise inconsistent()
+        job = None
+    else:
+        job = LeasedJob.model_validate(attempt["job"])
+    if job is not None and (job.kind != "curate" or job.target_id != owner.id):
         raise inconsistent()
     data = await read_operation_artifact(
         queue, access, owner, checkpoint, job=job if leased else None

@@ -3,16 +3,15 @@
 import hashlib
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Self
-from uuid import UUID, uuid5
-
-from pydantic import model_validator
+from uuid import uuid5
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.jobs.models import Checkpoint, JobArtifact, JobCommand, LeasedJob
+from domain_kg.jobs.operations import OperationArtifact
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.materials.models import BlobRef
-from domain_kg.models import SHA256, Namespace, ScopedRef, SourceVersion
+from domain_kg.models import ScopedRef, SourceVersion
+from domain_kg.operations.restore_origin import RestoredProjectionOrigin
 from domain_kg.operations.restore_preparation import PreparedRestore, RestorePreparation
 from domain_kg.operations.restore_stores import RestoreStores
 from domain_kg.providers.service import ProviderService
@@ -24,38 +23,12 @@ from domain_kg.storage.neo4j import GraphProjection
 from domain_kg.storage.qdrant import VectorProjection
 
 
-class RestoredProjectionOrigin(Namespace):
-    operation_id: UUID
-    job_id: UUID
-    source_kg_id: UUID
-    source_backup_id: UUID
-    source_header_sha: SHA256
-    attempt_id: UUID
-    root_manifest_id: UUID
-    manifest_id: UUID
-    projection_attempt_id: UUID
-    generation: UUID
-    content_hash: SHA256
-    source: SourceVersion
-
-    @model_validator(mode="after")
-    def distinct_scoped_origin(self) -> Self:
-        if self.source_kg_id == self.kg_id or (self.source.org_id, self.source.kg_id) != (
-            self.org_id,
-            self.kg_id,
-        ):
-            raise ValueError(
-                "restored projection requires a distinct source KG and exact target owner"
-            )
-        return self
-
-
 @dataclass(frozen=True)
 class RestoredProjection:
     binding: AcceptedProjection
     report: ReadinessReport
     checkpoint: Checkpoint
-    artifact: JobArtifact
+    artifact: JobArtifact | OperationArtifact
     job: JobCommand
     origin: RestoredProjectionOrigin
 
@@ -69,11 +42,6 @@ class RestoreProjections:
     async def stage(
         self, job: LeasedJob, staged: PreparedRestore
     ) -> tuple[RestoredProjection, ...]:
-        if staged.curations:
-            raise DomainError(
-                ErrorCode.UNSUPPORTED_FORMAT,
-                "Manual projection history requires its dedicated restore stage.",
-            )
         if await self.bindings.approved(job) != (staged.binding.target, staged.binding.embedding):
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Restore configuration changed.")
         inventory, binding = staged.inventory, staged.binding
@@ -244,6 +212,134 @@ class RestoreProjections:
             result.append(
                 RestoredProjection(accepted, report, checkpoint, artifact, history, provenance)
             )
+        result.extend(await self._curations(job, staged))
         if await self.bindings.approved(job) != (binding.target, binding.embedding):
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Restore configuration changed.")
+        return tuple(result)
+
+    async def _curations(
+        self, job: LeasedJob, staged: PreparedRestore
+    ) -> tuple[RestoredProjection, ...]:
+        binding, inventory = staged.binding, staged.inventory
+        ns = binding.target.target.model_dump()
+        snapshots = {row["id"]: row for row in inventory.rows("projection_attempts")}
+        result = []
+        for document in staged.curations:
+            original = next(
+                (
+                    part
+                    for part in inventory.root.projections
+                    if part.curation and part.curation.id == document.curation.id
+                ),
+                None,
+            )
+            attempt = snapshots.get(str(original.manifest_id)) if original else None
+            if attempt is None:
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Original human projection is missing."
+                )
+            old = Checkpoint.model_validate(attempt["embedded_checkpoint"])
+            old_job = JobCommand.model_validate(
+                {
+                    key: attempt["job"][key]
+                    for key in JobCommand.model_fields
+                    if key in attempt["job"]
+                }
+            )
+            if (
+                old_job.org_id,
+                old_job.kg_id,
+                old_job.target_id,
+                old_job.kind,
+                old.job_id,
+                old.stage,
+            ) != (
+                inventory.manifest.org_id,
+                inventory.manifest.kg_id,
+                document.curation.id,
+                "curate",
+                old_job.id,
+                "embedding",
+            ):
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Human projection job ownership differs."
+                )
+            body = document.model_dump_json()
+            checksum = hashlib.sha256(body.encode()).hexdigest()
+            input_hash = digest(
+                {
+                    "restore_operation": str(job.target_id),
+                    "origin": old.model_dump(mode="json"),
+                    "profile": binding.embedding.model_dump(mode="json"),
+                }
+            )
+            artifact = OperationArtifact(
+                **ns,
+                id=old.artifact_id,
+                job_id=old.job_id,
+                owner=document.curation,
+                stage="embedding",
+                input_hash=input_hash,
+                output_hash=checksum,
+                body=body,
+            )
+            checkpoint = Checkpoint(
+                **ns,
+                job_id=old.job_id,
+                stage="embedding",
+                artifact_id=old.artifact_id,
+                input_hash=input_hash,
+                output_hash=checksum,
+            )
+            identifier = uuid5(job.attempt_id, f"curation/{document.curation.id}")
+            batch = RevisionBatch(
+                **ns,
+                revision_id=uuid5(identifier, "revision"),
+                attempt_id=identifier,
+                generation=binding.target.generation,
+                manifest_id=uuid5(identifier, "manifest"),
+                content_hash=checksum,
+                expected_revision=0,
+                records=tuple(ScopedRef(**ns, id=row.id) for row in document.rows),
+            )
+            rows = projection_rows(document, batch)
+            await GraphProjection(binding.stores.graph).write(rows)
+            await self.preparation.targets.guard(job)
+            await VectorProjection(binding.stores.vectors).write(
+                rows, [list(row.vector) for row in document.rows]
+            )
+            report = ReadinessReport(
+                batch=batch,
+                receipts=await verify_document(binding.stores, document, batch),
+                ready=True,
+            )
+            accepted = AcceptedProjection(
+                **ns,
+                curation=document.curation,
+                attempt_id=batch.attempt_id,
+                generation=batch.generation,
+                manifest_id=batch.manifest_id,
+                content_hash=checksum,
+            )
+            history = JobCommand.model_validate(old_job.model_dump() | ns)
+            provenance = RestoredProjectionOrigin(
+                **ns,
+                operation_id=job.target_id,
+                job_id=job.id,
+                source_kg_id=job.kg_id,
+                source_backup_id=inventory.manifest.backup_id,
+                source_header_sha=hashlib.sha256(
+                    inventory.manifest.model_dump_json().encode()
+                ).hexdigest(),
+                attempt_id=job.attempt_id,
+                root_manifest_id=uuid5(job.attempt_id, "restore-root"),
+                manifest_id=batch.manifest_id,
+                projection_attempt_id=batch.attempt_id,
+                generation=batch.generation,
+                content_hash=checksum,
+                curation=document.curation,
+            )
+            result.append(
+                RestoredProjection(accepted, report, checkpoint, artifact, history, provenance)
+            )
         return tuple(result)
