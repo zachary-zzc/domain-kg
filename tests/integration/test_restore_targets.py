@@ -129,6 +129,16 @@ async def test_restore_admission_reserves_fresh_target_without_grants_and_pins_p
     await queue.database.storage_profiles.update_one(
         {"id": str(second.id)}, {"$inc": {"revision": -1}}
     )
+    target_query = {"org_id": str(owner.org_id), "kg_id": str(kg), "id": str(target.id)}
+    await queue.database.restore_targets.update_one(
+        target_query,
+        {"$set": {"target": other.model_dump(mode="json", include={"org_id", "kg_id"})}},
+    )
+    with pytest.raises(DomainError):
+        await RestoreTargets(queue).guard(successor)
+    await queue.database.restore_targets.update_one(
+        target_query, {"$set": {"target": target.target.model_dump(mode="json")}}
+    )
     await queue.database.members.update_one(
         {"org_id": str(org), "id": str(members["owner"].id)}, {"$set": {"suspended": True}}
     )

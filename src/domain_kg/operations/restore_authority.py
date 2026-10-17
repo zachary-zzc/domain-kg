@@ -32,6 +32,12 @@ class RestoreAuthority:
             access, await self.queue._current(job, session), session
         )
         target = await self.targets.record(operation, session)
+        if await self.queue.database.kgs.find_one(
+            {"org_id": str(target.target.org_id), "id": str(target.target.kg_id)}, session=session
+        ):
+            raise DomainError(
+                ErrorCode.VERSION_CONFLICT, "Restore requires a fresh inactive target."
+            )
         if (
             target != staged.binding.target
             or target.state not in ("allocated", "preparing", "verified")

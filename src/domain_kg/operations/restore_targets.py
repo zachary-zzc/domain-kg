@@ -205,6 +205,12 @@ class RestoreTargets:
         target = await self.record(operation)
         if target.state not in ("allocated", "preparing", "verified"):
             raise inaccessible_reference()
+        if await self.database.kgs.find_one(
+            {"org_id": str(target.target.org_id), "id": str(target.target.kg_id)}
+        ):
+            raise DomainError(
+                ErrorCode.VERSION_CONFLICT, "Restore requires a fresh inactive target."
+            )
         current = await self.queue.router.registry.profile(target.placement.id, job.org_id)
         if current != target.placement:
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Approved restore placement changed.")

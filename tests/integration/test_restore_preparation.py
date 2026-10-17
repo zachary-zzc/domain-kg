@@ -129,6 +129,12 @@ async def test_prepare_copies_verified_originals_and_reseals_actual_native_artif
             {"org_id": str(target.target.org_id), "kg_id": str(target.target.kg_id)}
         )
         assert chunk and chunk["version_id"] == str(source.version_id)
+        from domain_kg.operations.restore_projections import RestoreProjections
+
+        projected = await RestoreProjections(queue, coordinator.providers).stage(job, staged)
+        assert len(projected) == 1 and projected[0].report.ready
+        assert {r.backend for r in projected[0].report.receipts} == {"graph", "vector", "lexical"}
+        assert projected[0].binding.source.kg_id == target.target.kg_id
         document = staged.sources[0].document
         assert document.kg_id == target.target.kg_id and document.material_id == source.material_id
         assert all(row.source.kg_id == target.target.kg_id for row in document.rows)
@@ -146,3 +152,10 @@ async def test_prepare_copies_verified_originals_and_reseals_actual_native_artif
         )
         if client is not None and await client.collection_exists(collection):
             await client.delete_collection(collection)
+        graph = queue.router._graphs.get(target.placement.neo4j_id)
+        if graph is not None:
+            await graph.execute_query(
+                "MATCH (n {org_id:$org,kg_id:$kg}) DETACH DELETE n",
+                org=str(target.target.org_id),
+                kg=str(target.target.kg_id),
+            )

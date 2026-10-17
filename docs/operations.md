@@ -207,3 +207,14 @@ unit/protocol checks passed in 4.29 seconds, with Ruff and strict mypy (185 sour
 Import admission and curation history still require dedicated control transforms;
 the current stage rejects unsupported import history explicitly. No target
 publication, new grant or full restore acceptance is implied.
+
+Native restored source projections now use new attempt/manifest keys in the target
+generation. Rewritten embedding artifacts are stored and hash-read back; Neo4j,
+Qdrant and lexical read-back checks produce exact receipts. The real flow passed
+in 71.81 seconds. Vector failure after graph writes and owner revocation after
+graph writes both left the target inactive and source publication intact (two
+checks in 56.48 seconds). A corrupted reservation pointing at an existing KG was
+reproduced and rejected before binding and inside staging transactions; three
+target/store regressions passed in 11.65 seconds. All 237 unit/protocol checks
+passed in 4.30 seconds, with Ruff and strict mypy (186 sources). Atomic activation
+is still pending; projection receipts alone establish no application access.
