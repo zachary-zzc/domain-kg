@@ -73,6 +73,9 @@ async def test_prepare_copies_verified_originals_and_reseals_actual_native_artif
     async def forbidden(*args, **kwargs):
         pytest.fail("unchanged native restore preparation must make no provider call")
 
+    import httpx
+
+    monkeypatch.setattr(coordinator.providers, "transport", httpx.MockTransport(forbidden))
     monkeypatch.setattr(coordinator.providers, "embeddings", forbidden)
     monkeypatch.setattr(coordinator.providers, "extract", forbidden)
     try:

@@ -256,3 +256,14 @@ seconds with synthetic providers. Four pure mapping/corruption cases passed in
 0.24 seconds; the full 250 unit/protocol checks passed in 5.13 seconds, and Ruff
 and strict mypy (195 sources) passed. The full import/physical-placement drill
 and public restore path remain pending.
+
+Private restore preparation now requests fresh embeddings when mapped text or
+embedding compatibility changes. Its client checks the actual restore lease,
+current source owner and explicit restricted target approval before and after each
+batch; usage belongs to the target namespace. It never invents target grants or
+reruns extraction. A changed manual relation used exactly one mock embedding
+request and restored its graph semantics/provenance; revoking approval during the
+request left no active target. Both cases passed in 73.02 seconds. The unchanged
+native preparation/replay regression also passed with provider HTTP forbidden.
+Pre-call durable provider budgets and target storage quota admission still need
+completion before this helper is exposed as a public restore handler.

@@ -13,6 +13,7 @@ from domain_kg.operations.jobs import OwnerOperations
 from domain_kg.operations.models import RestoreCommand
 from domain_kg.operations.package_reader import PackageReader
 from domain_kg.operations.resealing import RestoreArtifactLedger, RewrittenArtifact
+from domain_kg.operations.restore_embeddings import RestoreEmbeddings
 from domain_kg.operations.restore_inventory import MAX_METADATA, RestoreInventory
 from domain_kg.operations.restore_stores import RestoreBinding, RestoreStores
 from domain_kg.operations.restore_targets import RestoreTargets
@@ -140,14 +141,32 @@ class RestorePreparation:
                 document = EmbeddedDocument.model_validate_json(
                     await reader.body(part.object, maximum=50 * 1024 * 1024)
                 )
-                sources.append(
-                    StagedSource(documents.embedded(document, binding.embedding, ledger.checkpoint))
-                )
+                try:
+                    restored = documents.embedded(document, binding.embedding, ledger.checkpoint)
+                except DomainError as error:
+                    if error.code != ErrorCode.REVISION_NOT_READY:
+                        raise
+                    vectors = await RestoreEmbeddings(self.queue, self.providers).embed(
+                        job, binding, [mapping.projection_body(row).text for row in document.rows]
+                    )
+                    restored = documents.embedded(
+                        document, binding.embedding, ledger.checkpoint, vectors=vectors
+                    )
+                sources.append(StagedSource(restored))
             elif part.kind == "curation_projection":
                 manual = CurationEmbeddedDocument.model_validate_json(
                     await reader.body(part.object, maximum=50 * 1024 * 1024)
                 )
-                curations.append(documents.curation(manual, binding.embedding))
+                try:
+                    restored_manual = documents.curation(manual, binding.embedding)
+                except DomainError as error:
+                    if error.code != ErrorCode.REVISION_NOT_READY:
+                        raise
+                    vectors = await RestoreEmbeddings(self.queue, self.providers).embed(
+                        job, binding, [mapping.projection_body(row).text for row in manual.rows]
+                    )
+                    restored_manual = documents.curation(manual, binding.embedding, vectors=vectors)
+                curations.append(restored_manual)
         if len(sources) != manifest.source_count or len(curations) != manifest.curation_count:
             raise DomainError(
                 ErrorCode.PROJECTION_INCONSISTENT, "Restore accepted owner counts differ."
