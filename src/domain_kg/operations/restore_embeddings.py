@@ -4,9 +4,11 @@ from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.jobs.models import LeasedJob
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.operations.restore_stores import RestoreBinding, RestoreStores
+from domain_kg.providers.call_budget import CallBudget
 from domain_kg.providers.embeddings import EmbeddingClient
 from domain_kg.providers.extraction import Usage
 from domain_kg.providers.service import ProviderService
+from domain_kg.providers.usage_budget import BudgetBounds
 
 
 class RestoreEmbeddings:
@@ -64,6 +66,17 @@ class RestoreEmbeddings:
             authorize=authorize,
             record_usage=usage,
             transport=self.providers.transport,
+            budget=CallBudget(
+                self.providers.budgets,
+                binding.target.target,
+                profile.id,
+                BudgetBounds(
+                    input_tokens=min(
+                        128000, profile.embedding_context_tokens * profile.embedding_batch_size
+                    )
+                ),
+                authorize=authorize,
+            ),
         )
         try:
             vectors = await client.embed(texts, binding.embedding)

@@ -58,3 +58,22 @@ permission, publication or recovery checks from their task gates.
 Private provider credentials remain in the owner-only local configuration outside
 Git. Examples do not enable corpus access: namespace approval and data-policy
 approval must be explicit. This profile does not grant either permission.
+
+Provider request budgets are a separate `budgets` section in the approved provider
+configuration. Both examples keep corpus access disabled. The laptop example caps
+one KG at 128,000 input tokens, 8,192 output tokens and ten calls per UTC day; its
+organization ceiling is 512,000 input tokens, 32,768 output tokens and 40 calls.
+Omitting this section uses the documented webserver example limits. Use the same
+approved configuration for API and worker processes; restart them after changes.
+These limits do not download/start a model or change the Docker/native RAM caps.
+
+The service reserves both organization and KG capacity in Mongo before provider
+HTTP. Each embedding batch reserves at most its configured context times its
+actual batch size; extraction reserves its configured context/output bounds.
+Successful validated usage returns unused capacity. A denied request that has not
+started returns its entire hold. A timeout, malformed response or other uncertain
+attempt retains the full bound; an interrupted process leaves a conservative
+pending hold. A new UTC day uses a new bucket. These are request/usage limits,
+not a currency billing estimate. A request needs room for its full bound even
+when the requested text is short. No prompt, source text, endpoint or credential
+is stored in the budget ledger.

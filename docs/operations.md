@@ -314,3 +314,19 @@ backup/export/restore links are inside the status fragment so status refreshes
 show them. Reader access to the owner restore job and its target ID is denied.
 The public restore submission form remains pending provider pre-call budgets and
 the remaining retention/physical-placement acceptance checks.
+
+Provider HTTP now has durable daily organization and KG reservations before any
+embedding or extraction request, including private restore reembedding. Current
+source/target authority is checked after reservation and before sending data.
+Validated usage settles once and returns proven unused capacity; an unattempted
+denial refunds its hold, while uncertain attempts charge the configured bound.
+Crashed pending holds remain conservative. The counters and request records store
+scoped identifiers/counts only. Limits are typed root `budgets` fields in the
+approved provider file; examples document the laptop and webserver policies.
+The five real budget/permission/race checks passed in 10.96 seconds. Normal source
+extraction, restored manual vectors, activation and console permissions passed in
+two focused regressions (85.36 seconds). All 267 unit/protocol checks passed in
+4.54 seconds; Ruff and strict mypy (202 sources) passed. Both example configs
+validate with corpus approval disabled. No real model ran. Budget-history cleanup,
+inactive-target/retained-package cleanup and the remaining full restore/operations
+gates remain unfinished.

@@ -1,4 +1,16 @@
 {
+  "budgets": {
+    "organization": {
+      "input_tokens": 512000,
+      "output_tokens": 32768,
+      "calls": 40
+    },
+    "knowledge_base": {
+      "input_tokens": 128000,
+      "output_tokens": 8192,
+      "calls": 10
+    }
+  },
   "connections": [
     {
       "ref": "local-chat",

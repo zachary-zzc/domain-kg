@@ -11,6 +11,7 @@ from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.models import FrozenModel, Namespace
+from domain_kg.providers.usage_budget import BudgetPolicy
 
 
 class ProviderConnection(FrozenModel):
@@ -51,6 +52,7 @@ class ProviderProfile(FrozenModel):
 
 
 class ProviderConfig(FrozenModel):
+    budgets: BudgetPolicy = BudgetPolicy()
     connections: tuple[ProviderConnection, ...] = ()
     profiles: tuple[ProviderProfile, ...] = ()
 
@@ -72,6 +74,7 @@ def embedding_space_id(profile: ProviderProfile, connection: ProviderConnection)
 class ProviderRegistry:
     def __init__(self, config: ProviderConfig | None = None) -> None:
         config = config or ProviderConfig()
+        self.budgets = config.budgets
         self.profiles = {profile.id: profile for profile in config.profiles}
         self.connections = {connection.ref: connection for connection in config.connections}
         if len(self.profiles) != len(config.profiles) or len(self.connections) != len(

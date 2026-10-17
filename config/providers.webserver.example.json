@@ -1,4 +1,16 @@
 {
+  "budgets": {
+    "organization": {
+      "input_tokens": 8000000,
+      "output_tokens": 2048000,
+      "calls": 4000
+    },
+    "knowledge_base": {
+      "input_tokens": 2000000,
+      "output_tokens": 512000,
+      "calls": 1000
+    }
+  },
   "connections": [
     {
       "ref": "approved-webserver",

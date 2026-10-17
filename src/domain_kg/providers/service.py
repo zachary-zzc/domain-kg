@@ -15,8 +15,11 @@ from domain_kg.ingestion.models import ExtractionBatch, ParsedChunk
 from domain_kg.materials.models import ReprocessReadPermit
 from domain_kg.materials.repository import MaterialRepository
 from domain_kg.models import IdempotencyKey, Namespace, NonNegative, SourceVersion
+from domain_kg.providers.budget_store import ProviderBudgets
+from domain_kg.providers.call_budget import CallBudget
 from domain_kg.providers.extraction import ExtractionClient, Usage
 from domain_kg.providers.profiles import ProviderRegistry, embedding_space_id
+from domain_kg.providers.usage_budget import BudgetBounds
 from domain_kg.storage.router import KGStoreRouter
 
 if TYPE_CHECKING:
@@ -36,6 +39,7 @@ class ProviderService:
         self.policy, self.router, self.registry = policy, router, registry
         self.database, self.transactions = policy.database, MaterialRepository(policy)
         self.transport = transport
+        self.budgets = ProviderBudgets(policy, registry.budgets)
 
     async def bind(
         self,
@@ -268,6 +272,18 @@ class ProviderService:
             authorize=authorize,
             record_usage=usage,
             transport=self.transport,
+            budget=CallBudget(
+                self.budgets,
+                namespace,
+                profile.id,
+                BudgetBounds(
+                    input_tokens=min(
+                        128000,
+                        configured.embedding_context_tokens * configured.embedding_batch_size,
+                    )
+                ),
+                authorize=authorize,
+            ),
         )
         try:
             return profile, await client.embed(
@@ -381,8 +397,26 @@ class ProviderService:
         profile, connection = self.registry.resolve(
             UUID(selected["profile_id"]), namespace, restricted=False
         )
+
+        async def budget_authorize() -> None:
+            await authorize(chunk)
+
         client = ExtractionClient(
-            profile, connection, authorize=authorize, record_usage=usage, transport=self.transport
+            profile,
+            connection,
+            authorize=authorize,
+            record_usage=usage,
+            transport=self.transport,
+            budget=CallBudget(
+                self.budgets,
+                namespace,
+                profile.id,
+                BudgetBounds(
+                    input_tokens=profile.extraction_context_tokens,
+                    output_tokens=profile.max_completion_tokens,
+                ),
+                authorize=budget_authorize,
+            ),
         )
         try:
             return await Extractor(client).extract(chunk, schema)

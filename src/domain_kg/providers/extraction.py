@@ -3,6 +3,7 @@
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
+from contextlib import nullcontext
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +14,7 @@ from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.graph.models import DomainSchema
 from domain_kg.ingestion.models import ExtractionContent, ParsedChunk
 from domain_kg.models import FrozenModel
+from domain_kg.providers.call_budget import CallBudget
 from domain_kg.providers.profiles import ProviderConnection, ProviderProfile
 
 
@@ -108,8 +110,10 @@ class ExtractionClient:
         authorize: Callable[[ParsedChunk], Awaitable[None]],
         record_usage: Callable[[Usage], Awaitable[None]],
         transport: httpx.AsyncBaseTransport | None = None,
+        budget: CallBudget | None = None,
     ) -> None:
         self.id = profile.id
+        self.budget = budget
         self.profile, self.connection = profile, connection
         self.authorize, self.record_usage = authorize, record_usage
         self.client = httpx.AsyncClient(
@@ -142,55 +146,60 @@ class ExtractionClient:
                 ErrorCode.QUOTA_EXCEEDED,
                 "Source exceeds the selected extraction context; split it first.",
             )
-        try:
-            async with asyncio.timeout(self.profile.timeout_seconds):
-                async with self.client.stream(
-                    "POST",
-                    self.connection.endpoint + "/chat/completions",
-                    json=request,
-                    headers={
-                        "Authorization": "Bearer " + self.connection.api_key.get_secret_value()
-                    },
-                ) as response:
-                    if response.status_code != 200:
-                        raise unavailable()
-                    body = bytearray()
-                    async for part in response.aiter_bytes():
-                        body.extend(part)
-                        if len(body) > 2 * 1024**2:
+        context = self.budget.call() if self.budget is not None else nullcontext(None)
+        async with context as charge:
+            try:
+                async with asyncio.timeout(self.profile.timeout_seconds):
+                    if charge is not None:
+                        charge.attempted = True
+                    async with self.client.stream(
+                        "POST",
+                        self.connection.endpoint + "/chat/completions",
+                        json=request,
+                        headers={
+                            "Authorization": "Bearer " + self.connection.api_key.get_secret_value()
+                        },
+                    ) as response:
+                        if response.status_code != 200:
                             raise unavailable()
-            result = json.loads(body)
-            choice = result["choices"][0]
-            message = choice["message"]
-            if (
-                choice["finish_reason"] != "stop"
-                or message.get("refusal")
-                or message.get("tool_calls")
-                or message.get("function_call")
-            ):
-                raise unavailable()
-            content = ExtractionContent.model_validate_json(message["content"])
-            raw_usage = result["usage"]
-            counts = (raw_usage["prompt_tokens"], raw_usage["completion_tokens"])
-            if any(type(value) is not int or not 0 <= value <= 1_000_000 for value in counts):
-                raise unavailable()
-            await self.record_usage(
-                Usage(
+                        body = bytearray()
+                        async for part in response.aiter_bytes():
+                            body.extend(part)
+                            if len(body) > 2 * 1024**2:
+                                raise unavailable()
+                result = json.loads(body)
+                choice = result["choices"][0]
+                message = choice["message"]
+                if (
+                    choice["finish_reason"] != "stop"
+                    or message.get("refusal")
+                    or message.get("tool_calls")
+                    or message.get("function_call")
+                ):
+                    raise unavailable()
+                content = ExtractionContent.model_validate_json(message["content"])
+                raw_usage = result["usage"]
+                counts = (raw_usage["prompt_tokens"], raw_usage["completion_tokens"])
+                if any(type(value) is not int or not 0 <= value <= 1_000_000 for value in counts):
+                    raise unavailable()
+                used = Usage(
                     org_id=chunk.org_id,
                     kg_id=chunk.kg_id,
                     profile_id=self.id,
                     input_tokens=counts[0],
                     output_tokens=counts[1],
                 )
-            )
-        except (
-            httpx.HTTPError,
-            ValueError,
-            TypeError,
-            KeyError,
-            IndexError,
-            ValidationError,
-        ) as exc:
-            raise unavailable() from exc
+                if charge is not None:
+                    await charge.report(used)
+                await self.record_usage(used)
+            except (
+                httpx.HTTPError,
+                ValueError,
+                TypeError,
+                KeyError,
+                IndexError,
+                ValidationError,
+            ) as exc:
+                raise unavailable() from exc
         await self.authorize(chunk)
         return content.model_dump(mode="json")

@@ -4,6 +4,7 @@ import asyncio
 import json
 import math
 from collections.abc import Awaitable, Callable
+from contextlib import nullcontext
 from typing import Annotated
 from uuid import UUID
 
@@ -11,8 +12,10 @@ import httpx
 from pydantic import Field
 
 from domain_kg.models import SHA256, Namespace, NonNegative
+from domain_kg.providers.call_budget import CallBudget
 from domain_kg.providers.extraction import Usage, unavailable
 from domain_kg.providers.profiles import ProviderConnection, ProviderProfile, embedding_space_id
+from domain_kg.providers.usage_budget import BudgetBounds
 
 
 class EmbeddingProfile(Namespace):
@@ -45,8 +48,10 @@ class EmbeddingClient:
         authorize: Callable[[], Awaitable[None]],
         record_usage: Callable[[Usage], Awaitable[None]],
         transport: httpx.AsyncBaseTransport | None = None,
+        budget: CallBudget | None = None,
     ) -> None:
         self.approved, self.connection = approved, connection
+        self.budget = budget
         self.authorize, self.record_usage = authorize, record_usage
         self.client = httpx.AsyncClient(
             transport=transport,
@@ -100,9 +105,40 @@ class EmbeddingClient:
         for start in range(0, len(inputs), size):
             batch = inputs[start : start + size]
             await self.authorize()
+            result.extend(await self._batch(batch, profile))
+            await self.authorize()
+        pooled, offset = [], 0
+        for parts in windows:
+            vectors = result[offset : offset + len(parts)]
+            offset += len(parts)
+            weights = [len(part.encode()) for part in parts]
+            pooled.append(
+                list(
+                    normalized_vector(
+                        [
+                            sum(
+                                vector[dimension] * weight
+                                for vector, weight in zip(vectors, weights, strict=True)
+                            )
+                            for dimension in range(profile.dimensions)
+                        ],
+                        profile.dimensions,
+                    )
+                )
+            )
+        return pooled
+
+    async def _batch(self, batch: list[str], profile: EmbeddingProfile) -> list[list[float]]:
+        bounds = BudgetBounds(
+            input_tokens=min(128000, self.approved.embedding_context_tokens * len(batch))
+        )
+        context = self.budget.call(bounds) if self.budget is not None else nullcontext(None)
+        async with context as charge:
             request = {"input": batch, "model": profile.model, "encoding_format": "float"}
             try:
                 async with asyncio.timeout(self.approved.timeout_seconds):
+                    if charge is not None:
+                        charge.attempted = True
                     async with self.client.stream(
                         "POST",
                         self.connection.endpoint + "/embeddings",
@@ -130,15 +166,16 @@ class EmbeddingClient:
                 tokens = raw["usage"]["prompt_tokens"]
                 if type(tokens) is not int or not 0 <= tokens <= 128000:
                     raise unavailable()
-                await self.record_usage(
-                    Usage(
-                        org_id=profile.org_id,
-                        kg_id=profile.kg_id,
-                        profile_id=profile.id,
-                        input_tokens=tokens,
-                        output_tokens=0,
-                    )
+                used = Usage(
+                    org_id=profile.org_id,
+                    kg_id=profile.kg_id,
+                    profile_id=profile.id,
+                    input_tokens=tokens,
+                    output_tokens=0,
                 )
+                if charge is not None:
+                    await charge.report(used)
+                await self.record_usage(used)
             except (
                 httpx.HTTPError,
                 TimeoutError,
@@ -148,25 +185,4 @@ class EmbeddingClient:
                 IndexError,
             ) as exc:
                 raise unavailable() from exc
-            await self.authorize()
-            result.extend(list(positions[index]) for index in range(len(batch)))
-        pooled, offset = [], 0
-        for parts in windows:
-            vectors = result[offset : offset + len(parts)]
-            offset += len(parts)
-            weights = [len(part.encode()) for part in parts]
-            pooled.append(
-                list(
-                    normalized_vector(
-                        [
-                            sum(
-                                vector[dimension] * weight
-                                for vector, weight in zip(vectors, weights, strict=True)
-                            )
-                            for dimension in range(profile.dimensions)
-                        ],
-                        profile.dimensions,
-                    )
-                )
-            )
-        return pooled
+            return [list(positions[index]) for index in range(len(batch))]
