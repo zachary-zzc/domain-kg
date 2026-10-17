@@ -3,7 +3,7 @@
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import Field, JsonValue, model_validator
+from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from domain_kg.models import FrozenModel, Namespace, NonNegative, UTCDateTime
 from domain_kg.operations.models import SnapshotPointer
@@ -46,6 +46,8 @@ AuthorityTable = Literal[
 
 
 class AuthoritySection(Namespace):
+    model_config = ConfigDict(str_strip_whitespace=False)
+
     backup_id: UUID
     area: Literal["control", "authority"]
     table: AuthorityTable
