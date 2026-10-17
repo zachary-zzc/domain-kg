@@ -41,6 +41,14 @@ async def test_console_login_catalog_session_revocation_and_private_headers(
                 assert catalog_page.headers["cache-control"] == "no-store"
                 assert "frame-ancestors 'none'" in catalog_page.headers["content-security-policy"]
                 assert 'hx-history="false"' in catalog_page.text
+                switched = await browser.get("/admin/language/zh-CN", params={"next": "/admin"})
+                assert switched.status_code == 303
+                translated = await browser.get("/admin")
+                assert translated.status_code == 200 and "知识图谱" in translated.text
+                assert translated.headers["content-language"] == "zh-CN"
+                assert str(kg) in translated.text and "跳至正文" in translated.text
+                invalid = await browser.get("/admin/language/not-a-language")
+                assert invalid.status_code == 422 and "请求字段无效" in invalid.text
                 await identities.database.members.update_one(
                     {"_id": str(members["reader"].id)},
                     {"$set": {"suspended": True}},
@@ -48,6 +56,8 @@ async def test_console_login_catalog_session_revocation_and_private_headers(
                 revoked = await browser.get(f"/admin/kgs/{kg}")
                 assert revoked.status_code in (401, 403) and str(kg) not in revoked.text
                 assert revoked.headers["cache-control"] == "no-store"
+                assert revoked.headers["content-language"] == "zh-CN"
+                assert "诊断详情（英文）" in revoked.text
 
 
 async def test_console_logout_csrf_and_untrusted_catalog_labels(team, catalog, issuer_fixture):

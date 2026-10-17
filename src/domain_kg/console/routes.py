@@ -10,6 +10,7 @@ from domain_kg.console.curation import curation_router
 from domain_kg.console.exports import export_router
 from domain_kg.console.forms import read_form
 from domain_kg.console.grants import grant_router
+from domain_kg.console.i18n import language_router
 from domain_kg.console.jobs import job_router
 from domain_kg.console.material_commands import material_command_router
 from domain_kg.console.material_management import management_router
@@ -26,6 +27,7 @@ from domain_kg.transport.runtime import ServiceRuntime
 
 def console_router(runtime: ServiceRuntime) -> APIRouter:
     router = APIRouter(prefix="/admin")
+    router.include_router(language_router())
     router.include_router(backup_router(runtime))
     router.include_router(export_router(runtime))
     router.include_router(curation_router(runtime))

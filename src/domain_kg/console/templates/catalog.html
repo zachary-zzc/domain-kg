@@ -1,4 +1,4 @@
 {% extends "base.html" %}
-{% block content %}<p class="muted">Choose a knowledge graph to browse its sources and evidence.</p>
-<div class="cards">{% for item in catalog["items"] %}<article class="card"><span class="badge">{{ item.state }}</span><h2><a href="/admin/kgs/{{ item.id }}">{{ item.name }}</a></h2><p>Published revision {{ item.published_revision }}</p></article>{% else %}<p>No knowledge graphs are available for this membership.</p>{% endfor %}</div>
-{% if catalog.next_cursor %}<a class="button" href="/admin?cursor={{ catalog.next_cursor|urlencode }}">Next page</a>{% endif %}{% endblock %}
+{% block content %}<p class="muted">{{ _("Choose a knowledge graph to browse its sources and evidence.") }}</p>
+<div class="cards">{% for item in catalog["items"] %}<article class="card"><span class="badge">{{ label(item.state) }}</span><h2><a href="/admin/kgs/{{ item.id }}">{{ item.name }}</a></h2><p>{{ _("Published revision") }} {{ item.published_revision }}</p></article>{% else %}<p>{{ _("No knowledge graphs are available for this membership.") }}</p>{% endfor %}</div>
+{% if catalog.next_cursor %}<a class="button" href="/admin?cursor={{ catalog.next_cursor|urlencode }}">{{ _("Next page") }}</a>{% endif %}{% endblock %}

@@ -8,6 +8,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
+from domain_kg.console.i18n import LANGUAGE, RETURN_TO, label, language_url, translate
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import AccessContext, Member, Principal
 from domain_kg.revisions.models import ReadScope
@@ -19,6 +20,8 @@ TEMPLATES = Environment(
     autoescape=select_autoescape(default=True),
     undefined=StrictUndefined,
 )
+TEMPLATES.globals.update(_=translate, label=label, language_url=language_url)
+TEMPLATES.filters["label"] = label
 PRIVATE_HEADERS = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
@@ -56,13 +59,22 @@ async def browser_session(
 
 
 def html(template: str, context: dict[str, Any], *, status: int = 200) -> HTMLResponse:
+    if template not in {"kg.html", "node.html", "material.html"}:
+        context = context | {"title": translate(context["title"])}
     return HTMLResponse(
         TEMPLATES.get_template(template).render(
-            {"member": None, "csrf": "", "kg": None, "can_team": False, "can_operator": False}
+            {
+                "member": None,
+                "csrf": "",
+                "kg": None,
+                "can_team": False,
+                "can_operator": False,
+                "locale": LANGUAGE.get(),
+            }
             | context
         ),
         status_code=status,
-        headers=PRIVATE_HEADERS,
+        headers=PRIVATE_HEADERS | {"Content-Language": LANGUAGE.get()},
     )
 
 
@@ -99,6 +111,10 @@ async def page(
 
 
 def error_page(error: DomainError, status: int) -> HTMLResponse:
-    return html(
-        "error.html", {"title": "Request could not be completed", "error": error}, status=status
-    )
+    token = RETURN_TO.set("/admin")
+    try:
+        return html(
+            "error.html", {"title": "Request could not be completed", "error": error}, status=status
+        )
+    finally:
+        RETURN_TO.reset(token)

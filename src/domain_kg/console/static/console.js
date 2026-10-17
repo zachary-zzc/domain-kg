@@ -21,16 +21,16 @@ document.addEventListener("submit", async function(event) {
   const message = text => { if (status) status.textContent = text; };
   const file = input.files[0];
   if (file.size === 0 || file.size > 50 * 1024 * 1024) {
-    message("Choose a nonempty file up to 50 MiB."); return;
+    message(form.dataset.emptyMessage || "Choose a nonempty file up to 50 MiB."); return;
   }
   if (form.elements.namedItem("inline_text").value.length) {
-    message("Choose one source input before continuing."); return;
+    message(form.dataset.sourceMessage || "Choose one source input before continuing."); return;
   }
   form.dataset.uploading = "true";
   const button = form.querySelector("button[type=submit]");
   if (button) button.disabled = true;
   try {
-    message("Checking and uploading the original…");
+    message(form.dataset.uploadMessage || "Checking and uploading the original…");
     const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
     const sha = Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2, "0")).join("");
     const type = file.type || "application/octet-stream";
@@ -44,10 +44,10 @@ document.addEventListener("submit", async function(event) {
     if (!response.ok) throw new Error("upload failed");
     const uploaded = await response.json();
     form.elements.namedItem("upload_id").value = uploaded.upload_id;
-    message("Original preserved. Starting processing…");
+    message(form.dataset.preservedMessage || "Original preserved. Starting processing…");
     form.submit();
   } catch (_) {
-    message("Upload could not be completed. Refresh your session or retry the file.");
+    message(form.dataset.failureMessage || "Upload could not be completed. Refresh your session or retry the file.");
     form.dataset.uploading = "false";
     if (button) button.disabled = false;
   }

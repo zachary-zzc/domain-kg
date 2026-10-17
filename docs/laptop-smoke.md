@@ -205,3 +205,16 @@ interruption signals stop only the launcher's owned process group.
 Parser children receive only the server's trusted code root in `PYTHONPATH`,
 independently of an ambient editable installation. Native parser network denial,
 write restrictions, resource limits and offline decoder settings remain active.
+
+### Console language / 控制台语言
+
+The header's **中文 / English** switch sets only a display preference under
+`/admin`. Without a preference, supported browser language settings apply, then
+English. `Content-Language` and the document language follow that choice. API
+payloads and original evidence do not change. 中文提示保留可展开的英文诊断；
+原始证据、名称与编辑理由不会被翻译。语言切换不更改权限或表单提交值。
+
+Language regression uses the local catalogue and synthetic providers; it makes no
+model calls. Run `uv run pytest tests/unit/test_console_i18n.py
+ tests/integration/test_console.py tests/evaluation/test_console_flows.py -q`
+as one serial process against the already capped databases.

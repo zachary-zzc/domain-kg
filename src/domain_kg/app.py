@@ -22,6 +22,7 @@ from pymongo.errors import PyMongoError
 from domain_kg.catalog.backends import BackendRegistry, approved_from_settings
 from domain_kg.catalog.routes import catalog_router
 from domain_kg.catalog.service import CatalogService
+from domain_kg.console.i18n import ConsoleLocaleMiddleware
 from domain_kg.console.rendering import ROOT as CONSOLE_ROOT
 from domain_kg.console.rendering import error_page
 from domain_kg.console.routes import console_router
@@ -163,6 +164,7 @@ def create_app(
 
     app = FastAPI(title="Domain KG", lifespan=lifespan)
     app.add_middleware(RequestBodyLimit)
+    app.add_middleware(ConsoleLocaleMiddleware)
     app.state.identity = identity
     app.state.catalog = catalog
     app.state.materials = materials

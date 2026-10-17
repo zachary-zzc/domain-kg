@@ -1,2 +1,2 @@
 {% extends "base.html" %}
-{% block content %}<section class="card" role="alert"><p>{{ error.message }}</p><p class="muted">{{ error.code }}</p><a href="/admin">Return to knowledge graphs</a></section>{% endblock %}
+{% block content %}<section class="card" role="alert">{% if locale == 'zh-CN' %}<p>{{ _('error.' ~ error.code) }}</p><details><summary>{{ _('Diagnostic details (English)') }}</summary><p>{{ error.message }}</p></details>{% else %}<p>{{ error.message }}</p>{% endif %}<p class="muted">{{ error.code }}</p><a href="/admin">{{ _("Return to knowledge graphs") }}</a></section>{% endblock %}

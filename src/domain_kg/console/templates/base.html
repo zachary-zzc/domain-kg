@@ -1,20 +1,21 @@
 <!doctype html>
-<html lang="en" hx-history="false">
+<html lang="{{ locale }}" hx-history="false">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="htmx-config" content='{"historyCacheSize":0,"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"selfRequestsOnly":true}'>
-  <title>{{ title }} · Domain KG</title>
+  <title>{{ title }} {{ _("\u00b7 Domain KG") }}</title>
   <link rel="stylesheet" href="/admin/static/console.css">
   <script src="/admin/static/vendor/htmx-2.0.11.min.js" defer></script>
   <script src="/admin/static/console.js" defer></script>
 </head>
 <body>
-<a class="skip" href="#content">Skip to content</a>
-<header><a class="brand" href="/admin">Domain KG</a><span>Team knowledge, with evidence</span>
-{% if member %}<form method="post" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="quiet" type="submit">Sign out</button></form>{% endif %}</header>
+<a class="skip" href="#content">{{ _("Skip to content") }}</a>
+<header><a class="brand" href="/admin">{{ _("Domain KG") }}</a><span>{{ _("Team knowledge, with evidence") }}</span>
+<nav class="languages" aria-label="{{ _('Interface language') }}"><a href="{{ language_url('zh-CN') }}" lang="zh-CN" hreflang="zh-CN" {% if locale == 'zh-CN' %}aria-current="true"{% endif %}>中文</a><a href="{{ language_url('en') }}" lang="en" hreflang="en" {% if locale == 'en' %}aria-current="true"{% endif %}>English</a></nav>
+{% if member %}<form method="post" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="quiet" type="submit">{{ _("Sign out") }}</button></form>{% endif %}</header>
 <div class="shell">
-{% if member %}<aside aria-label="Primary"><nav><a href="/admin">Knowledge graphs</a>{% if can_team %}<a href="/admin/team">Team</a>{% endif %}{% if can_operator %}<a href="/admin/infrastructure">Infrastructure</a>{% endif %}</nav><p class="muted">Signed in as<br>{{ member.subject }}</p></aside>{% endif %}
+{% if member %}<aside aria-label="{{ _("Primary") }}"><nav><a href="/admin">{{ _("Knowledge graphs") }}</a>{% if can_team %}<a href="/admin/team">{{ _("Team") }}</a>{% endif %}{% if can_operator %}<a href="/admin/infrastructure">{{ _("Infrastructure") }}</a>{% endif %}</nav><p class="muted">{{ _("Signed in as") }}<br>{{ member.subject }}</p></aside>{% endif %}
 <main id="content" tabindex="-1"><h1>{{ title }}</h1>{% block content %}{% endblock %}</main>
 </div>
-<footer>Results follow your current access. Source and human evidence remain distinguishable.</footer>
+<footer>{{ _("Results follow your current access. Source and human evidence remain distinguishable.") }}</footer>
 </body></html>
