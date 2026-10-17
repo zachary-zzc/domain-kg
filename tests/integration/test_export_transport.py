@@ -13,7 +13,7 @@ from test_transport_authorization import settings_for
 from domain_kg.app import create_app
 from domain_kg.ingestion.pipeline import configured_pipeline
 from domain_kg.jobs.runner import JobRunner
-from domain_kg.operations.export import ExportService
+from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.worker import serve
 
 pytestmark = pytest.mark.storage
@@ -66,11 +66,11 @@ async def test_owner_exports_selected_evidence_through_console_and_reader_is_den
                     JobRunner(
                         queue,
                         configured_pipeline(queue, coordinator.providers),
-                        operations=ExportService(queue),
+                        operations=OwnerJobExecutor(queue),
                     ),
                     once=True,
                     worker_id="export-only",
-                    export_only=True,
+                    operations_only=True,
                 )
                 job_id = admitted.headers["location"].rsplit("/", 1)[1]
                 detail = f"/admin/kgs/{source.kg_id}/exports/jobs/{job_id}"

@@ -15,6 +15,7 @@ from domain_kg.ingestion.pipeline import configured_pipeline
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.jobs.runner import JobRunner
 from domain_kg.operations.backup import BackupService
+from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.operations.export import ExportService
 from domain_kg.providers.profiles import ProviderRegistry
 from domain_kg.providers.service import ProviderService
@@ -35,11 +36,14 @@ async def serve(
     import_only: bool = False,
     backup_only: bool = False,
     export_only: bool = False,
+    operations_only: bool = False,
 ) -> None:
     runner.pipeline.require_configured()
     while True:
         kinds = (
-            ("export",)
+            ("backup", "export")
+            if operations_only
+            else ("export",)
             if export_only
             else ("backup",)
             if backup_only
@@ -74,6 +78,7 @@ async def main(
     import_only: bool = False,
     backup_only: bool = False,
     export_only: bool = False,
+    operations_only: bool = False,
 ) -> None:
     settings = Settings()
     client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
@@ -86,11 +91,17 @@ async def main(
         queue = JobQueue(policy, router)
         approved_providers = (
             ProviderRegistry()
-            if backup_only or export_only
+            if backup_only or export_only or operations_only
             else ProviderRegistry.from_file(settings.provider_config)
         )
         if not approved_providers.profiles and not (
-            repair_only or restore_only or curation_only or purge_only or backup_only or export_only
+            repair_only
+            or restore_only
+            or curation_only
+            or purge_only
+            or backup_only
+            or export_only
+            or operations_only
         ):
             raise DomainError(
                 ErrorCode.PROVIDER_UNAVAILABLE,
@@ -100,7 +111,9 @@ async def main(
         runner = JobRunner(
             queue,
             configured_pipeline(queue, providers),
-            operations=ExportService(queue)
+            operations=OwnerJobExecutor(queue)
+            if operations_only
+            else ExportService(queue)
             if export_only
             else BackupService(queue)
             if backup_only
@@ -120,6 +133,7 @@ async def main(
             import_only=import_only,
             backup_only=backup_only,
             export_only=export_only,
+            operations_only=operations_only,
         )
     finally:
         await router.close()
@@ -130,6 +144,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--operations-only",
+        action="store_true",
+        help="process backups and exports serially without models",
+    )
     mode.add_argument(
         "--export-only",
         action="store_true",
@@ -173,6 +192,7 @@ if __name__ == "__main__":
                 import_only=args.import_only,
                 backup_only=args.backup_only,
                 export_only=args.export_only,
+                operations_only=args.operations_only,
             )
         )
     except DomainError as exc:

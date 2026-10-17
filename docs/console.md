@@ -150,3 +150,8 @@ checksum-verified attachment. The native `--export-only` worker calls no model.
 Access, visibility and publication changes invalidate older files. The dedicated
 export/backup/owner transport regression passed four checks in 42.33 seconds;
 source filtering, withdrawal and import trust were verified separately.
+
+The synthetic laptop preview now uses one `--operations-only` worker for both
+backup and export. Both controls progress to their result pages without a model
+call; ingestion work is left for a separate worker. The preview remains a bounded
+synthetic fixture and expires after ten minutes.

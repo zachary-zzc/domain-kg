@@ -14,7 +14,7 @@ from domain_kg.identity.models import Action
 from domain_kg.ingestion.pipeline import configured_pipeline
 from domain_kg.jobs.runner import JobRunner
 from domain_kg.materials.models import AddMaterial
-from domain_kg.operations.backup import BackupService
+from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.worker import serve
 
 pytestmark = pytest.mark.storage
@@ -88,11 +88,11 @@ async def test_owner_can_queue_and_download_verified_backup_while_reader_is_deni
                     JobRunner(
                         queue,
                         configured_pipeline(queue, coordinator.providers),
-                        operations=BackupService(queue),
+                        operations=OwnerJobExecutor(queue),
                     ),
                     once=True,
                     worker_id="backup-only",
-                    backup_only=True,
+                    operations_only=True,
                 )
                 owner = await queue.policy.resolve_access(
                     principals["owner"], [source.kg_id], Action.BACKUP

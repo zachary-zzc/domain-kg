@@ -115,3 +115,10 @@ and explicit import-trust selection. Four focused export/backup/owner transport
 checks then passed in 42.33 seconds. All 210 unit/protocol checks passed in 4.30
 seconds, with Ruff and strict mypy (172 sources). Two further backup expiry and
 concurrent-publication cases passed in 44.08 seconds. No live model was called.
+
+For a laptop serving both controls, run
+`uv run python -m domain_kg.worker --operations-only`. It claims backup and export
+jobs in one serial loop, without loading provider configuration. Ingestion jobs
+remain queued for their own worker. The combined mode passed both real-store
+public flows in 32.29 seconds, plus 211 unit/protocol checks in 4.23 seconds;
+Ruff and strict mypy (173 source files) passed.

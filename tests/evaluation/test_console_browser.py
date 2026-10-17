@@ -18,7 +18,7 @@ from test_publication import prepare, publishing, ready  # noqa: F401
 from domain_kg.app import create_app
 from domain_kg.ingestion.pipeline import configured_pipeline
 from domain_kg.jobs.runner import JobRunner
-from domain_kg.operations.backup import BackupService
+from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.settings import Settings
 from domain_kg.worker import serve
 
@@ -103,11 +103,11 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                     JobRunner(
                         queue,
                         configured_pipeline(queue, coordinator.providers),
-                        operations=BackupService(queue),
+                        operations=OwnerJobExecutor(queue),
                     ),
                     once=False,
-                    worker_id="synthetic-preview-backups",
-                    backup_only=True,
+                    worker_id="synthetic-preview-operations",
+                    operations_only=True,
                 )
             )
             try:
