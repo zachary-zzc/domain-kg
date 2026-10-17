@@ -100,9 +100,8 @@ async def test_prepare_copies_verified_originals_and_reseals_actual_native_artif
             assert stored == item.body
         replay = await RestorePreparation(queue, coordinator.providers).prepare(job)
         assert replay.originals == staged.originals and replay.artifacts == staged.artifacts
-        from domain_kg.operations.restore_authority import RestoreAuthority
-
         from domain_kg.models import ScopedRef
+        from domain_kg.operations.restore_authority import RestoreAuthority
 
         await RestoreAuthority(queue, coordinator.providers).stage(job, staged)
         await RestoreAuthority(queue, coordinator.providers).stage(job, staged)
@@ -111,6 +110,25 @@ async def test_prepare_copies_verified_originals_and_reseals_actual_native_artif
             ScopedRef(**target.target.model_dump(), id=source.version_id)
         )
         assert version.material.id == source.material_id
+        from domain_kg.operations.restore_control import RestoreControl
+
+        await RestoreControl(queue, coordinator.providers).stage(job, staged)
+        await RestoreControl(queue, coordinator.providers).stage(job, staged)
+        acl = await queue.database.material_access.find_one(
+            {
+                "org_id": str(target.target.org_id),
+                "kg_id": str(target.target.kg_id),
+                "id": str(source.material_id),
+            }
+        )
+        assert (
+            acl["acl_mode"] == "restricted" and acl["member_ids"] == [] and acl["group_ids"] == []
+        )
+        assert acl["metadata"]["version_id"] == str(source.version_id)
+        chunk = await staged.binding.stores.authority._database.source_chunks.find_one(
+            {"org_id": str(target.target.org_id), "kg_id": str(target.target.kg_id)}
+        )
+        assert chunk and chunk["version_id"] == str(source.version_id)
         document = staged.sources[0].document
         assert document.kg_id == target.target.kg_id and document.material_id == source.material_id
         assert all(row.source.kg_id == target.target.kg_id for row in document.rows)

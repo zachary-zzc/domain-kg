@@ -195,3 +195,15 @@ the real prepared target passed, including a repeated staging call, in 30.10
 seconds. The target remained absent from the catalog and unreadable. All 235
 unit/protocol checks passed in 4.42 seconds; Ruff and strict mypy (183 sources)
 passed. Control metadata, source ledgers and final projection activation are next.
+
+Native source control staging now restores private material access and metadata,
+version snapshots without upload authority, effective schemas, sanitized ready
+historical jobs, resealed artifact/checkpoint rows, observations and source
+blocks/chunks. Rebuilt block/chunk records must match the captured ledger.
+Technical engine names are regenerated for the target namespace. Immutable
+metadata replays compare normalized BSON dates and complete values. The expanded
+real flow passed in 63.04 seconds, including repeated control staging; all 237
+unit/protocol checks passed in 4.29 seconds, with Ruff and strict mypy (185 sources).
+Import admission and curation history still require dedicated control transforms;
+the current stage rejects unsupported import history explicitly. No target
+publication, new grant or full restore acceptance is implied.
