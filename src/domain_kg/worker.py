@@ -17,6 +17,7 @@ from domain_kg.jobs.runner import JobRunner
 from domain_kg.operations.backup import BackupService
 from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.operations.export import ExportService
+from domain_kg.operations.restore import RestoreService
 from domain_kg.providers.profiles import ProviderRegistry
 from domain_kg.providers.service import ProviderService
 from domain_kg.settings import Settings
@@ -37,11 +38,14 @@ async def serve(
     backup_only: bool = False,
     export_only: bool = False,
     operations_only: bool = False,
+    kg_restore_only: bool = False,
 ) -> None:
     runner.pipeline.require_configured()
     while True:
         kinds = (
-            ("backup", "export")
+            ("restore",)
+            if kg_restore_only
+            else ("backup", "export")
             if operations_only
             else ("export",)
             if export_only
@@ -79,6 +83,7 @@ async def main(
     backup_only: bool = False,
     export_only: bool = False,
     operations_only: bool = False,
+    kg_restore_only: bool = False,
 ) -> None:
     settings = Settings()
     client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
@@ -111,7 +116,9 @@ async def main(
         runner = JobRunner(
             queue,
             configured_pipeline(queue, providers),
-            operations=OwnerJobExecutor(queue)
+            operations=RestoreService(queue, providers)
+            if kg_restore_only
+            else OwnerJobExecutor(queue)
             if operations_only
             else ExportService(queue)
             if export_only
@@ -134,6 +141,7 @@ async def main(
             backup_only=backup_only,
             export_only=export_only,
             operations_only=operations_only,
+            kg_restore_only=kg_restore_only,
         )
     finally:
         await router.close()
@@ -144,6 +152,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--kg-restore-only",
+        action="store_true",
+        help="restore owner-approved backups to fresh KGs with approved target embeddings",
+    )
     mode.add_argument(
         "--operations-only",
         action="store_true",
@@ -193,6 +206,7 @@ if __name__ == "__main__":
                 backup_only=args.backup_only,
                 export_only=args.export_only,
                 operations_only=args.operations_only,
+                kg_restore_only=args.kg_restore_only,
             )
         )
     except DomainError as exc:

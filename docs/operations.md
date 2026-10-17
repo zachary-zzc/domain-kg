@@ -282,3 +282,15 @@ ledger text, nested quotes and reasons now survive byte-faithful round trips.
 Previously inconsistent packages continue to fail integrity checks. Full retention,
 second physical placement, repair/generation work and public restore acceptance
 remain open.
+
+The integrated native restore handler now runs preparation, canonical/control/
+human history staging, immutable projections and verified activation through one
+serial `JobRunner`. `python -m domain_kg.worker --kg-restore-only --once` claims
+only KG backup restore jobs and requires configured approved target providers.
+The existing `--restore-only` still handles material restoration; `--operations-only`
+continues to handle only model-free backups/exports. The actual KG worker restored
+an accessible target, finished its source job, and replayed a lost response in
+33.91 seconds with all provider HTTP forbidden. All 257 unit/protocol checks
+passed in 4.58 seconds; Ruff and strict mypy (198 sources) passed. Public restore
+admission/console controls still await storage/provider budgets and the remaining
+full restore gates.
