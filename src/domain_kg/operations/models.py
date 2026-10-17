@@ -10,7 +10,7 @@ from domain_kg.models import SHA256, FrozenModel, IdempotencyKey, Namespace, Non
 from domain_kg.retrieval.models import SearchFilters
 
 OwnerOperationKind = Literal[
-    "backup", "export", "restore", "maintenance", "retention", "restore_cleanup"
+    "backup", "export", "restore", "maintenance", "retention", "restore_cleanup", "generation"
 ]
 
 
@@ -67,13 +67,22 @@ class RestoreCleanupCommand(FrozenModel):
     idempotency_key: IdempotencyKey
 
 
+class GenerationCommand(FrozenModel):
+    kind: Literal["generation"] = "generation"
+    mode: Literal["rebuild_current"] = "rebuild_current"
+    kg_id: UUID
+    expected_published_revision: NonNegative
+    idempotency_key: IdempotencyKey
+
+
 OwnerCommand = Annotated[
     BackupCommand
     | ExportCommand
     | RestoreCommand
     | MaintenanceCommand
     | RetentionCommand
-    | RestoreCleanupCommand,
+    | RestoreCleanupCommand
+    | GenerationCommand,
     Field(discriminator="kind"),
 ]
 

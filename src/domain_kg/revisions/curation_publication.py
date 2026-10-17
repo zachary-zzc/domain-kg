@@ -103,6 +103,19 @@ def directive(record: dict[str, Any]) -> ManualNode | ManualRelation | ManualIde
 async def curation_document(
     queue: JobQueue, access: AccessContext, attempt: dict[str, Any], *, leased: bool = False
 ) -> CurationEmbeddedDocument:
+    if attempt.get("generation_origin"):
+        if leased:
+            raise inconsistent()
+        from domain_kg.operations.generation_origin import GenerationOrigin
+        from domain_kg.operations.generation_results import generation_base
+        from domain_kg.revisions.publication import accepted_document
+
+        await generation_base(queue, access, attempt)
+        generation_origin = GenerationOrigin.model_validate(attempt["generation_origin"])
+        document, _, _ = await accepted_document(queue, access, generation_origin.base)
+        if not isinstance(document, CurationEmbeddedDocument):
+            raise inconsistent()
+        return document
     if attempt.get("maintenance_origin"):
         if leased:
             raise inconsistent()

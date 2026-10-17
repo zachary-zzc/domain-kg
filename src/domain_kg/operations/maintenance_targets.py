@@ -29,7 +29,6 @@ class MaintenanceTarget(ScopedRef):
             self.parent.curation is None
             or self.parent.source is not None
             or self.base.curation != self.parent.curation
-            or self.base.generation != self.parent.generation
             or self.base.content_hash != self.parent.content_hash
             or any(
                 (value.org_id, value.kg_id) != (self.org_id, self.kg_id)
@@ -115,13 +114,9 @@ class MaintenanceTargets:
             )
         ):
             raise self.invalid()
-        base = parent
-        if attempt.get("maintenance_origin"):
-            from domain_kg.operations.maintenance_origin import MaintenanceOrigin
-            from domain_kg.operations.maintenance_results import maintenance_base
+        from domain_kg.operations.generation_results import artifact_base_binding
 
-            await maintenance_base(self.queue, access, attempt)
-            base = MaintenanceOrigin.model_validate(attempt["maintenance_origin"]).base
+        base = await artifact_base_binding(self.queue, access, parent)
         target = MaintenanceTarget(
             org_id=operation.org_id,
             kg_id=operation.kg_id,

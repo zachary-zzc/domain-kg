@@ -19,6 +19,7 @@ from domain_kg.storage.blobs import BlobStore
 
 if TYPE_CHECKING:
     from domain_kg.operations.capture import BackupReadPermit
+    from domain_kg.operations.generation_capture import GenerationReadPermit
 
 
 async def read_artifact(
@@ -29,6 +30,7 @@ async def read_artifact(
     *,
     restoration: MaterialReadPermit | None = None,
     backup: "BackupReadPermit | None" = None,
+    generation: "GenerationReadPermit | None" = None,
 ) -> bytes:
     """Read immutable artifacts under current permission, independent of the original actor."""
     await queue.policy.revalidate(access)
@@ -39,7 +41,13 @@ async def read_artifact(
         raise inaccessible_reference()
 
     async def authorize() -> None:
-        if backup is not None:
+        if generation is not None:
+            if restoration is not None or backup is not None:
+                raise inaccessible_reference()
+            from domain_kg.operations.generation_capture import authorize_generation_read
+
+            await authorize_generation_read(queue, access, source, generation)
+        elif backup is not None:
             if restoration is not None:
                 raise inaccessible_reference()
             from domain_kg.operations.capture import authorize_backup_read

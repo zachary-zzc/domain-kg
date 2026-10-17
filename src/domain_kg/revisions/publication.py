@@ -170,6 +170,10 @@ async def _accepted_document(
         binding.content_hash,
     ):
         raise inconsistent()
+    if attempt.get("generation_origin"):
+        from domain_kg.operations.generation_results import generation_base
+
+        await generation_base(queue, access, attempt)
     if binding.source is None:
         from domain_kg.revisions.curation_publication import curation_document
 

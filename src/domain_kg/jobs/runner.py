@@ -31,6 +31,7 @@ class JobRunner:
             "maintenance",
             "retention",
             "restore_cleanup",
+            "generation",
         ):
             await self.queue.authorize(job)
             if self.operations is None:

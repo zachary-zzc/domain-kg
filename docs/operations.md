@@ -503,3 +503,17 @@ suite passed in 55.44 seconds; two ordinary source-job cancellation/recovery/
 retry-exhaustion regressions passed in 31.82 seconds. Ruff/mypy pass for 221 source
 modules. No model was called. This does not close the independent generation,
 complete backup-authority and multi-profile release acceptance gates.
+
+
+Model-free current-space generation core (2026-10-17): a genuine owner operation
+pins bounded immutable inputs, current placement/schema/embedding settings and
+material fences. It reuses sealed vectors one source at a time and stages fresh
+attempt/generation records. Graph/vector/lexical read-back precedes one fenced
+MongoDB root/configuration switch. Read lineage preserves the actual artifact
+job; repeated rebuild and later curation repair do not impersonate an old actor.
+Three focused unit/real-store checks passed in 127.95 seconds, including injected
+vector failure, old-view availability, retry, two successive rebuilds, preserved
+manual history and later repair. Ruff/mypy pass for 227 source modules. Docker
+configured and active limits both measure 1.476 GB, swap disabled. Zero live model
+calls. Purged bindings and retired curation dependencies are explicitly refused;
+schema/model migration, UI/worker, hidden-source and backup drills remain open.

@@ -152,7 +152,15 @@ class JobQueue:
 
     @staticmethod
     def _action(kind: str) -> Action:
-        if kind in ("backup", "export", "restore", "maintenance", "retention", "restore_cleanup"):
+        if kind in (
+            "backup",
+            "export",
+            "restore",
+            "maintenance",
+            "retention",
+            "restore_cleanup",
+            "generation",
+        ):
             from domain_kg.operations.jobs import operation_action
 
             return operation_action(kind)
@@ -373,6 +381,7 @@ class JobQueue:
                 "maintenance",
                 "retention",
                 "restore_cleanup",
+                "generation",
             }
         ):
             raise ValueError("job kinds require a configured handler")
@@ -465,6 +474,7 @@ class JobQueue:
             "maintenance",
             "retention",
             "restore_cleanup",
+            "generation",
         ):
             from domain_kg.operations.jobs import OwnerOperations
 
@@ -518,12 +528,12 @@ class JobQueue:
         )
         if raw is None:
             raise lease_conflict()
-        if job.kind == "backup":
+        if job.kind in ("backup", "generation"):
             await self.database.read_pins.update_one(
                 {
                     "org_id": str(job.org_id),
                     "kg_id": str(job.kg_id),
-                    "kind": "backup_capture",
+                    "kind": "backup_capture" if job.kind == "backup" else "generation_capture",
                     "job_id": str(job.id),
                     "operation_id": str(job.target_id),
                     "attempt_id": str(job.attempt_id),
@@ -771,6 +781,11 @@ class JobQueue:
         await self.transactions.transaction(commit)
 
     async def finish(self, job: LeasedJob) -> None:
+        if job.kind == "generation":
+            from domain_kg.operations.generation_results import GenerationResults
+
+            if await GenerationResults(self).accepted(job):
+                return
         if job.kind == "restore_cleanup":
             from domain_kg.operations.restore_cleanup_results import RestoreCleanupResults
 
@@ -808,6 +823,7 @@ class JobQueue:
             "maintenance",
             "retention",
             "restore_cleanup",
+            "generation",
         ):
             await self.authorize(job)
             raise DomainError(
@@ -860,6 +876,10 @@ class JobQueue:
         await self.transactions.transaction(commit)
 
     async def accepted(self, job: LeasedJob) -> bool:
+        if job.kind == "generation":
+            from domain_kg.operations.generation_results import GenerationResults
+
+            return await GenerationResults(self).accepted(job)
         if job.kind == "restore_cleanup":
             from domain_kg.operations.restore_cleanup_results import RestoreCleanupResults
 
@@ -960,6 +980,7 @@ class JobQueue:
             "maintenance",
             "retention",
             "restore_cleanup",
+            "generation",
         ):
             from domain_kg.operations.jobs import OwnerOperations
 
@@ -1110,6 +1131,7 @@ class JobQueue:
                 "maintenance",
                 "retention",
                 "restore_cleanup",
+                "generation",
             ):
                 from domain_kg.operations.jobs import OwnerOperations
 

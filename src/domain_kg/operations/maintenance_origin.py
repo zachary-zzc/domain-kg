@@ -44,7 +44,6 @@ class MaintenanceResult(MaintenanceOrigin):
             or self.binding.manifest_id != self.manifest_id
             or self.binding.attempt_id != self.attempt_id
             or (self.binding.org_id, self.binding.kg_id) != (self.org_id, self.kg_id)
-            or self.binding.generation != self.base.generation
             or self.published_revision < 1
         ):
             raise ValueError("repair completion must preserve the sealed curation content")

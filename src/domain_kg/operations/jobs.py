@@ -18,7 +18,7 @@ from domain_kg.operations.restore_cleanup_policy import RestoreCleanupPolicy
 from domain_kg.operations.retention_policy import RetentionPolicy
 
 OWNER_KINDS = frozenset(
-    {"backup", "export", "restore", "maintenance", "retention", "restore_cleanup"}
+    {"backup", "export", "restore", "maintenance", "retention", "restore_cleanup", "generation"}
 )
 
 
@@ -97,7 +97,11 @@ class OwnerOperations:
             raise DomainError(
                 ErrorCode.PROJECTION_INCONSISTENT, "The owner operation reference is inconsistent."
             ) from None
-        if record.command.kind == "restore":
+        if record.command.kind == "generation":
+            from domain_kg.operations.generation_targets import GenerationTargets
+
+            await GenerationTargets(self.queue).record(record, session)
+        elif record.command.kind == "restore":
             from domain_kg.operations.restore_targets import RestoreTargets
 
             await RestoreTargets(self.queue).record(record, session)
@@ -126,7 +130,11 @@ class OwnerOperations:
         if command.kg_id not in current.kg_ids:
             raise inaccessible_reference()
         await self.initialize()
-        if command.kind == "restore":
+        if command.kind == "generation":
+            from domain_kg.operations.generation_targets import GenerationTargets
+
+            await GenerationTargets(self.queue).initialize()
+        elif command.kind == "restore":
             from domain_kg.operations.restore_targets import RestoreTargets
 
             await RestoreTargets(self.queue).initialize()
@@ -217,7 +225,11 @@ class OwnerOperations:
                 intent_hash=fingerprint,
                 snapshot=snapshot,
             )
-            if command.kind == "restore":
+            if command.kind == "generation":
+                from domain_kg.operations.generation_targets import GenerationTargets
+
+                await GenerationTargets(self.queue).allocate(current, record, session)
+            elif command.kind == "restore":
                 from domain_kg.operations.restore_targets import RestoreTargets
 
                 await RestoreTargets(self.queue).allocate(record, session)

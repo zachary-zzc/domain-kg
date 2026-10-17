@@ -50,6 +50,7 @@ async def maintenance_base(
         != origin
         or target.base != origin.base
         or target.parent.manifest_id != origin.parent_manifest_id
+        or target.parent.generation != result.binding.generation
         or record.command.kind != "maintenance"
         or record.intent_hash != digest(record.command.model_dump(mode="json"))
         or record.actor.model_dump(mode="json") != job["actor"]
