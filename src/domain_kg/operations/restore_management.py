@@ -8,7 +8,7 @@ from pydantic import model_validator
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.models import JobReceipt, JobStage
-from domain_kg.models import Namespace
+from domain_kg.models import Namespace, NonNegative
 from domain_kg.operations.jobs import OwnerOperations
 from domain_kg.operations.models import RestoreCommand
 from domain_kg.operations.restore_targets import RestoreTargets
@@ -23,6 +23,9 @@ class RestoreInfo(Namespace):
     state: Literal["allocated", "preparing", "verified", "activated", "abandoned"]
     stage: JobStage
     provider_approved: bool
+    write_tracking: bool = False
+    pending_writes: NonNegative = 0
+    uncertain_writes: NonNegative = 0
 
     @model_validator(mode="after")
     def fresh_namespace(self) -> Self:
@@ -73,6 +76,26 @@ class RestoreManagement:
             approved = profile.embedding_dimensions == self.queue.router.dimensions
         except DomainError:
             pass
+        write_scope = {"org_id": str(current.org_id), "kg_id": str(kg), "job_id": str(job_id)}
+        pending = await self.queue.database.restore_writes.count_documents(
+            write_scope | {"state": "pending"}, limit=100001
+        )
+        uncertain = await self.queue.database.restore_writes.count_documents(
+            write_scope | {"state": "uncertain"}, limit=100001
+        )
+        if pending + uncertain > 100000:
+            raise DomainError(
+                ErrorCode.QUOTA_EXCEEDED, "Restore write inspection exceeds its bound."
+            )
+        tracking = await self.queue.database.restore_targets.find_one(
+            {
+                "org_id": str(current.org_id),
+                "kg_id": str(kg),
+                "id": str(target.id),
+                "write_tracking_version": 1,
+            },
+            {"_id": 1},
+        )
         result = RestoreInfo(
             org_id=current.org_id,
             kg_id=kg,
@@ -83,6 +106,9 @@ class RestoreManagement:
             state=target.state,
             stage=receipt.stage,
             provider_approved=approved,
+            write_tracking=tracking is not None,
+            pending_writes=pending,
+            uncertain_writes=uncertain,
         )
         await self.queue.policy.revalidate(current, action=Action.RESTORE)
         return result

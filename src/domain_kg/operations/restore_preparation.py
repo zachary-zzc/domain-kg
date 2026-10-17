@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from functools import partial
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.jobs.models import LeasedJob
@@ -18,6 +19,7 @@ from domain_kg.operations.restore_inventory import MAX_METADATA, RestoreInventor
 from domain_kg.operations.restore_quota import RestoreQuota
 from domain_kg.operations.restore_stores import RestoreBinding, RestoreStores
 from domain_kg.operations.restore_targets import RestoreTargets
+from domain_kg.operations.restore_writes import RestoreWrites
 from domain_kg.providers.service import ProviderService
 from domain_kg.revisions.projections import CurationEmbeddedDocument, EmbeddedDocument
 from domain_kg.storage.blobs import BlobStore
@@ -45,6 +47,21 @@ class RestorePreparation:
         self.targets = RestoreTargets(queue)
 
     async def _put(
+        self,
+        job: LeasedJob,
+        binding: RestoreBinding,
+        reference: BlobRef,
+        stream: AsyncIterator[bytes],
+    ) -> BlobRef:
+        return await RestoreWrites(self.queue).run(
+            job,
+            binding.target,
+            "blob",
+            partial(self._put_untracked, job, binding, reference, stream),
+            reference=reference,
+        )
+
+    async def _put_untracked(
         self,
         job: LeasedJob,
         binding: RestoreBinding,

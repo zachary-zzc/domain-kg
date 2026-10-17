@@ -3,6 +3,7 @@
 import hashlib
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from functools import partial
 from uuid import uuid5
 
 from domain_kg.errors import DomainError, ErrorCode
@@ -14,6 +15,7 @@ from domain_kg.models import ScopedRef, SourceVersion
 from domain_kg.operations.restore_origin import RestoredProjectionOrigin
 from domain_kg.operations.restore_preparation import PreparedRestore, RestorePreparation
 from domain_kg.operations.restore_stores import RestoreStores
+from domain_kg.operations.restore_writes import RestoreWrites
 from domain_kg.providers.service import ProviderService
 from domain_kg.revisions.models import ReadinessReport, RevisionBatch
 from domain_kg.revisions.projections import AcceptedProjection, digest
@@ -174,10 +176,22 @@ class RestoreProjections:
                 records=tuple(ScopedRef(**ns, id=row.id) for row in document.rows),
             )
             rows = projection_rows(document, batch)
-            await GraphProjection(binding.stores.graph).write(rows)
+            await RestoreWrites(self.queue).run(
+                job,
+                binding.target,
+                "graph",
+                partial(GraphProjection(binding.stores.graph).write, rows),
+            )
             await self.preparation.targets.guard(job)
-            await VectorProjection(binding.stores.vectors).write(
-                rows, [list(row.vector) for row in document.rows]
+            await RestoreWrites(self.queue).run(
+                job,
+                binding.target,
+                "vector",
+                partial(
+                    VectorProjection(binding.stores.vectors).write,
+                    rows,
+                    [list(row.vector) for row in document.rows],
+                ),
             )
             receipts = await verify_document(binding.stores, document, batch)
             report = ReadinessReport(batch=batch, receipts=receipts, ready=True)
@@ -303,10 +317,22 @@ class RestoreProjections:
                 records=tuple(ScopedRef(**ns, id=row.id) for row in document.rows),
             )
             rows = projection_rows(document, batch)
-            await GraphProjection(binding.stores.graph).write(rows)
+            await RestoreWrites(self.queue).run(
+                job,
+                binding.target,
+                "graph",
+                partial(GraphProjection(binding.stores.graph).write, rows),
+            )
             await self.preparation.targets.guard(job)
-            await VectorProjection(binding.stores.vectors).write(
-                rows, [list(row.vector) for row in document.rows]
+            await RestoreWrites(self.queue).run(
+                job,
+                binding.target,
+                "vector",
+                partial(
+                    VectorProjection(binding.stores.vectors).write,
+                    rows,
+                    [list(row.vector) for row in document.rows],
+                ),
             )
             report = ReadinessReport(
                 batch=batch,

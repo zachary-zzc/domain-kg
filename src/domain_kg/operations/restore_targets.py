@@ -82,7 +82,7 @@ class RestoreTargets:
             ),
         )
         await self.database.restore_targets.insert_one(
-            target.model_dump(mode="json"), session=session
+            target.model_dump(mode="json") | {"write_tracking_version": 1}, session=session
         )
         # Profile detach and reservation serialize on the existing registry row.
         await self.database.registry_state.update_one(
@@ -167,7 +167,9 @@ class RestoreTargets:
         try:
             if row is None or not isinstance(operation.command, RestoreCommand):
                 raise ValueError("missing restore target")
-            target = RestoreTarget.model_validate({k: v for k, v in row.items() if k != "_id"})
+            target = RestoreTarget.model_validate(
+                {k: row[k] for k in RestoreTarget.model_fields if k in row}
+            )
             if target.job != operation.job or target.placement.id != operation.command.placement_id:
                 raise ValueError("target job or placement differs")
         except (ValueError, KeyError, TypeError):

@@ -459,3 +459,15 @@ build/check passed: 247 wheel files, SHA-256
 `4d7e097c20e1b2fa73e62ff02b442490787c5736d52ff0919bb806bd30959c08`;
 250 source-archive files. This refresh is a local artifact check; the separate
 Linux image, remote CI and release acceptance remain open.
+
+Restore-target cleanup prerequisite: target provisioning, every original/artifact
+copy and graph/vector mutation now records a scoped pending write under the actual
+restore lease before remote I/O. Issued I/O is shielded and drained even through
+repeated cancellation; an error leaves an uncertain record without exception text.
+Only acknowledged completion is settled. Target allocation records the tracking
+protocol; old untracked targets are not silently approved. The owner job page/API
+show scoped pending/uncertain counts. Four cancellation/record/full-restore checks
+passed in 216.34 seconds; four tracking/status checks passed in 102.71 seconds.
+Ruff and strict mypy passed. No real model was called. The previous timed preview
+finished successfully in 722.17 seconds and cleaned up; it is currently closed.
+Cleanup/refund itself remains a separate unfinished step.
