@@ -218,3 +218,17 @@ reproduced and rejected before binding and inside staging transactions; three
 target/store regressions passed in 11.65 seconds. All 237 unit/protocol checks
 passed in 4.30 seconds, with Ruff and strict mypy (186 sources). Atomic activation
 is still pending; projection receipts alone establish no application access.
+
+The private native activation path now commits the new ready catalog entry,
+approved provider selection, accepted manifests/bindings, a sole current human
+owner grant, restore result, audit and parent-job completion in one Mongo
+transaction. It rechecks files/projections and current source/lease/placement
+before committing. Current and captured material withdrawal flags combine
+monotonically. A native end-to-end graph read, old reader/editor denials and
+lost-response replay passed in 30.15 seconds. Source changes, vector loss and an
+interrupted activation transaction all left no target grant/catalog/accepted
+publication (three checks in 70.59 seconds). After the fence fix, five activation/
+target/owner regressions passed in 33.87 seconds; 239 unit/protocol checks passed
+in 4.32 seconds, with Ruff and strict mypy (189 sources). This prototype still
+rejects human/identity/visibility/import history pending its dedicated transforms;
+no public restore control or full Task 18 acceptance is claimed.

@@ -746,6 +746,11 @@ class JobQueue:
             raise lease_conflict()
 
     async def finish(self, job: LeasedJob) -> None:
+        if job.kind == "restore":
+            from domain_kg.operations.restore_results import RestoreResults
+
+            if await RestoreResults(self).accepted(job):
+                return
         if job.kind == "backup":
             from domain_kg.operations.backup import BackupService
 
@@ -809,7 +814,9 @@ class JobQueue:
 
     async def accepted(self, job: LeasedJob) -> bool:
         if job.kind == "restore":
-            return False
+            from domain_kg.operations.restore_results import RestoreResults
+
+            return await RestoreResults(self).accepted(job)
         if job.kind == "backup":
             from domain_kg.operations.backup import BackupService
 
