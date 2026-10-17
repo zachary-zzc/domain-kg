@@ -1,6 +1,7 @@
 """Thin owner-operation routes; shared services own policy and acceptance."""
 
 from collections.abc import AsyncIterator
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request
@@ -29,6 +30,7 @@ from domain_kg.operations.models import (
 )
 from domain_kg.operations.packages import PackagePage
 from domain_kg.operations.restore_management import RestoreInfo
+from domain_kg.operations.usage_history import UsageHistory, UsageHistoryService
 from domain_kg.transport.runtime import ServiceRuntime
 
 
@@ -98,6 +100,20 @@ def operation_router(runtime: ServiceRuntime) -> APIRouter:
     @router.get("/kgs/{kg_id}/usage")
     async def usage(request: Request, kg_id: UUID) -> ProviderUsage:
         return await runtime.usage.get(await access(request, kg_id, action=Action.CONFIGURE), kg_id)
+
+    @router.get("/kgs/{kg_id}/usage/history")
+    async def usage_history(
+        request: Request,
+        kg_id: UUID,
+        days: int = Query(default=7, ge=1, le=31),
+        end_date: date | None = None,
+    ) -> UsageHistory:
+        return await UsageHistoryService(runtime.policy).get(
+            await access(request, kg_id, action=Action.CONFIGURE),
+            kg_id,
+            days=days,
+            end_date=end_date,
+        )
 
     @router.get("/kgs/{kg_id}/operations/audit")
     async def audit(

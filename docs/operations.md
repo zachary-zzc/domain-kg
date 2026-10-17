@@ -564,3 +564,24 @@ reader operations was denied. HTTP verification does not print cookies or CSRF
 tokens. The 600-second preview fixture is still running at this checkpoint, so
 its final pytest/teardown result is not yet claimed. Opening the browser panel
 was queued; the loopback links themselves were verified. Zero live model calls.
+
+
+Owner usage-history checkpoint (2026-10-17): `GET /api/v1/kgs/{kg_id}/usage/history`
+accepts `days=1..31` (default 7) and optional past UTC `end_date`. It reads only
+the exact KG daily ledger and revalidates current owner access after the cursor
+read. Responses contain recorded dates and conservative spent/reserved counters;
+no historical limits, profile identifiers, endpoints, raw source/job payloads or
+organization aggregates are inferred or exposed. Missing dates remain absent.
+History reads neither call a provider nor settle/refund a reservation. Invalid
+calendar/future windows and corrupt counters fail safely; backend errors are
+redacted. The operations page shows the last seven UTC days. These are service
+provider counts, separate from Codex conversation usage.
+
+Model/DTO RED, calendar-underflow RED, service-missing/API-404 RED preceded the
+implementation. A same-basename pytest collection issue was corrected by naming
+the unit module `test_usage_history_models.py`. Final 299 checks passed in
+22.76 seconds, including actual pending/unknown reservations, namespace/window
+filtering, owner revocation after read, safe backend failure and API/console role
+denials. Ruff/mypy pass for 228 source modules. No live model request. The previous
+full console preview completed successfully in 696.41 seconds (600 seconds of
+viewing), including its cleanup; its server is now closed. Task 18/19 remain open.

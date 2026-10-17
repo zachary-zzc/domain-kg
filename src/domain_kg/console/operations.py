@@ -16,6 +16,7 @@ from domain_kg.models import PageRequest
 from domain_kg.operations.audit import AuditTrail
 from domain_kg.operations.models import GenerationCommand, MaintenanceCommand, RetentionCommand
 from domain_kg.operations.projections import RepairCommand
+from domain_kg.operations.usage_history import UsageHistoryService
 from domain_kg.transport.runtime import ServiceRuntime
 
 
@@ -39,6 +40,7 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "status": result,
                 "usage": await runtime.usage.get(access, kg_id),
+                "usage_history": await UsageHistoryService(runtime.policy).get(access, kg_id),
                 "audit": await AuditTrail(runtime.queue).list(
                     access, kg_id, PageRequest(limit=20, cursor=audit_cursor)
                 ),
