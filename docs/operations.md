@@ -442,3 +442,13 @@ preservation. Ruff and strict mypy pass for 214 source modules. The Docker budge
 was rechecked at 1.476 GB configured/running hard limits, swap disabled. No native
 or remote model request was made. Task 18 remains open for the separate recovery,
 migration, retention and deployment gates.
+
+Public fresh-KG restore controls now use the same owner admission service as
+native execution. The backup page and typed HTTP POST accept approved profile IDs;
+the job page and safe progress endpoint expose the allocated namespace, stage and
+independent target provider approval. No connection, allowed-organization list or
+old grant is returned. The UI never approves a provider scope. A tiny native
+backup/restore fixture verified absent target catalog visibility before approval,
+explicit synthetic target approval, activation/result navigation and reader/editor
+denial: two checks passed in 74.85 seconds. This is local fixture verification,
+not an external provider approval or the full multi-profile recovery drill.

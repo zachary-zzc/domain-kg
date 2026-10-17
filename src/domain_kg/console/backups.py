@@ -1,6 +1,6 @@
 """Owner backup admission and manifest inspection use the shared verified service."""
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -12,7 +12,7 @@ from domain_kg.console.workspace import filters_for, read_context
 from domain_kg.identity.models import Action
 from domain_kg.operations.backup import BackupService
 from domain_kg.operations.jobs import OwnerOperations
-from domain_kg.operations.models import BackupCommand
+from domain_kg.operations.models import BackupCommand, RestoreCommand
 from domain_kg.transport.runtime import ServiceRuntime
 
 
@@ -56,8 +56,35 @@ def backup_router(runtime: ServiceRuntime) -> APIRouter:
                 "manifest": manifest,
                 "parts": result,
                 "index": index,
+                "restore_key": str(uuid4()),
+                "published_revision": scope.view.revision,
             },
             scope=scope,
         )
+
+    @router.post("/kgs/{kg_id}/backups/jobs/{job_id}/restore")
+    async def restore(request: Request, kg_id: UUID, job_id: UUID) -> RedirectResponse:
+        fields, _, access = await command_context(runtime, request, kg_id, Action.RESTORE)
+        if set(fields) != {
+            "expected_published_revision",
+            "placement_id",
+            "provider_profile_id",
+            "name",
+            "idempotency_key",
+        }:
+            raise invalid_form()
+        try:
+            command = RestoreCommand.model_validate(
+                fields
+                | {
+                    "kg_id": kg_id,
+                    "backup_job_id": job_id,
+                    "expected_published_revision": int(fields["expected_published_revision"]),
+                }
+            )
+        except (ValueError, ValidationError):
+            raise invalid_form() from None
+        result = await runtime.restores.submit(access, command)
+        return redirect(f"/admin/kgs/{kg_id}/jobs/{result.job_id}")
 
     return router

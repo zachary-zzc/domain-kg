@@ -126,3 +126,23 @@ resume. No automatic timer or broad bucket cleanup is enabled. Storage-profile o
 configuration changes fence execution; clearing copies in an older placement
 requires a separate retained-storage permit. This command does not clear failed
 restore targets or refund live original-storage quota.
+
+## Fresh KG restore controls
+
+The sealed backup page accepts a new KG name, approved storage/provider profile
+IDs and the displayed source publication revision. The allocated target stays
+outside the catalog. The job page shows its new namespace and provider approval
+status, without connections, credentials or copied grants. An operator must
+approve that exact namespace and its restricted-material policy in the private
+provider configuration; the UI does not grant approval. Restart the API/worker
+with the same approved configuration. Only then run:
+
+```bash
+uv run --no-sync python -m domain_kg.worker --kg-restore-only --once
+```
+
+The equivalent owner endpoints are `POST /api/v1/kgs/{kg_id}/restores` (typed
+`RestoreCommand`) and `GET /api/v1/kgs/{kg_id}/restores/jobs/{job_id}` (safe target
+progress). A failed restore remains inactive; cancellation/retry use the usual
+job controls. Expired package cleanup does not erase these targets or return
+original-storage holds.

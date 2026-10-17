@@ -52,6 +52,7 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
         backup_url = None
         export_url = None
         restore_url = None
+        restore_info = None
         if any(grant.kg_id == kg_id and grant.role == "owner" for grant in access.grants):
             backup = await runtime.queue.database.jobs.find_one(
                 {
@@ -66,9 +67,11 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
                 backup_url = f"/admin/kgs/{kg_id}/backups/jobs/{job_id}"
             elif backup and backup["kind"] == "export":
                 export_url = f"/admin/kgs/{kg_id}/exports/jobs/{job_id}"
-            elif backup and backup["kind"] == "restore" and result.stage == "ready":
-                restored = await RestoreResults(runtime.queue).get(access, kg_id, job_id)
-                restore_url = f"/admin/kgs/{restored.target.kg_id}/search"
+            elif backup and backup["kind"] == "restore":
+                restore_info = await runtime.restores.get(access, kg_id, job_id)
+                if result.stage == "ready":
+                    restored = await RestoreResults(runtime.queue).get(access, kg_id, job_id)
+                    restore_url = f"/admin/kgs/{restored.target.kg_id}/search"
         return await page(
             runtime,
             session,
@@ -81,6 +84,7 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
                 "backup_url": backup_url,
                 "export_url": export_url,
                 "restore_url": restore_url,
+                "restore_info": restore_info,
                 "command_key": str(uuid4()),
             },
             scope=scope,

@@ -29,7 +29,9 @@ JSONL/CSV/GraphML 导出及其页面、专用 worker、筛选和信任检查也�
 变化的关系文本只请求新的目标向量，中途撤销授权会停止恢复。
 原生与导入混合 KG 的恢复、默认信任筛选及未验证引用也已通过（55 秒）；
 拆分历史、保留/清理、物理存储切换和完整恢复演练仍在推进，
-恢复任务已提供“进入已恢复 KG”的结果入口；公开提交恢复的表单仍待完成。
+恢复任务已提供“进入已恢复 KG”的结果入口。备份页现可提交恢复，任务页显示
+新目标 ID 和独立的 provider 审批状态；未审批时目标仍不在目录中。
+公开 HTTP/控制台恢复、显式合成授权后激活及 owner/reader/editor 边界已通过（75 秒）。
 恢复前的组织/KG 原件配额、并发预留、提交回滚与结果页 owner/reader 权限也已通过。所有这一轮检查使用合成模型响应，没有调用真实模型。
 服务侧 provider 日预算已经接入：在每次实际请求前，原子预留组织和 KG 的
 调用/输入/输出 token 预算；不确定是否已消耗的请求按上限保守记账。示例配置
@@ -56,14 +58,15 @@ JSONL/CSV/GraphML 导出及其页面、专用 worker、筛选和信任检查也�
 临时预览使用真实应用页面、隔离的合成 KG 和测试会话；不会展示私有材料，
 不会调用真实模型，也不代表真实 OIDC 登录成功。预览存活 10 分钟并自动清理。
 fixture 登录入口只存在于测试进程，不进入正式应用。
-预览进程提供串行测试 worker，处理备份、导出和人工修订修复；普通入库任务不会被它领取。
+预览进程提供串行测试 worker，处理备份、导出、人工修订修复和到期副本清理；普通入库任务不会被它领取。
 预览数据包含人工重命名示例、已恢复 KG；可从运维页查看每日预算和实际排队修复。
 预览过期期间 localhost 页面不可用，需要重新启动测试预览。
 
 预览运行时可以使用：
 
 - [Owner 预览](http://localhost:28080/__smoke__/start/owner?view=search)
-- [Owner 运维与备份](http://localhost:28080/__smoke__/start/owner?view=operations)
+- [Owner 运维与清理](http://localhost:28080/__smoke__/start/owner?view=operations)
+- [Owner 备份与恢复表单](http://localhost:28080/__smoke__/start/owner?view=backup)
 - [Reader 预览](http://localhost:28080/__smoke__/start/reader)
 - [提前结束预览](http://localhost:28080/__smoke__/finish)
 

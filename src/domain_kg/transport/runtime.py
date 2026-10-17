@@ -19,6 +19,7 @@ from domain_kg.materials.service import MaterialService
 from domain_kg.operations.jobs import OwnerOperations
 from domain_kg.operations.metrics import UsageMetrics
 from domain_kg.operations.projections import ProjectionManagement
+from domain_kg.operations.restore_management import RestoreManagement
 from domain_kg.operations.retention_policy import RetentionPolicy
 from domain_kg.providers.service import ProviderService
 from domain_kg.retrieval.service import RetrievalService
@@ -40,6 +41,7 @@ class ServiceRuntime:
         self.queue = JobQueue(self.policy, catalog.router)
         self.retention_policy = retention_policy or RetentionPolicy()
         self.owner_operations = OwnerOperations(self.queue, self.retention_policy)
+        self.restores = RestoreManagement(self.owner_operations, providers.registry)
         self.job_inspection = JobInspection(self.queue)
         self.inspection = MaterialInspection(self.queue)
         self.management = MaterialManagement(self.queue)
