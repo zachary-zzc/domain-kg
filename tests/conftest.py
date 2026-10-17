@@ -152,7 +152,12 @@ async def team(mongo_db):
 
 
 @pytest.fixture
-async def catalog(team, mongo_db, settings):
+def catalog_dimensions():
+    return 3
+
+
+@pytest.fixture
+async def catalog(team, mongo_db, settings, catalog_dimensions):
     from domain_kg.catalog.backends import BackendRegistry, PrivateConnection
     from domain_kg.catalog.models import RegisterBackend, StorageProfile
     from domain_kg.catalog.service import CatalogService
@@ -208,7 +213,7 @@ async def catalog(team, mongo_db, settings):
     )
     access = await policy.resolve_access(principals["owner"], [], Action.REGISTER_BACKEND)
     await registry.register_profile(access, profile, idempotency_key="profile")
-    router = KGStoreRouter(policy, registry, dimensions=3)
+    router = KGStoreRouter(policy, registry, dimensions=catalog_dimensions)
     service = CatalogService(policy, registry, router)
     await service.initialize()
     try:
@@ -295,7 +300,12 @@ async def catalog(team, mongo_db, settings):
 
 
 @pytest.fixture
-async def material_service(catalog, team):
+def material_domain_profile():
+    return "general"
+
+
+@pytest.fixture
+async def material_service(catalog, team, material_domain_profile):
     from domain_kg.catalog.models import CreateKG
     from domain_kg.identity.models import Action
     from domain_kg.materials.service import MaterialService
@@ -307,7 +317,7 @@ async def material_service(catalog, team):
         creator,
         CreateKG(
             name="Materials",
-            domain_profile_id=catalog_service.general_profile_id,
+            domain_profile_id=getattr(catalog_service, f"{material_domain_profile}_profile_id"),
             placement_id=profile.id,
             idempotency_key="materials-kg",
         ),

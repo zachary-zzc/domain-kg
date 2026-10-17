@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block extra_head %}<script src="/admin/static/vendor/neovis-2.1.0.js" defer></script><script src="/admin/static/graph.js" defer></script>{% endblock %}
+{% block content %}
+<p>{{ _('Visible nodes shown / total') }}: {{ graph_data.nodes|length }} / {{ total_nodes }}. {{ _('Relationships shown') }}: {{ graph_data.edges|length }}.</p>
+<p>{{ _('This overview includes disconnected nodes. Open a node to inspect its source-qualified neighborhood.') }}</p>
+<nav>{% if previous_href %}<a href="{{ previous_href }}">{{ _('Previous page') }}</a>{% endif %} {% if next_href %}<a href="{{ next_href }}">{{ _('Next page') }}</a>{% endif %}</nav>
+{% include "graph.html" %}
+{% endblock %}

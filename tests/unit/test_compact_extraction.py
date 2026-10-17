@@ -14,12 +14,12 @@ from domain_kg.providers.extraction import ExtractionClient, extraction_payload
 from domain_kg.providers.profiles import ProviderProfile
 
 
-def compact_profile(chunk):
+def compact_profile(chunk, format="source_refs_v1"):
     profile, connection = configured(chunk)
     profile = ProviderProfile.model_validate(
         profile.model_copy(
             update={
-                "extraction_format": "source_refs_v1",
+                "extraction_format": format,
                 "extraction_context_tokens": 4096,
                 "max_completion_tokens": 1024,
                 "schema_in_context": False,
@@ -49,8 +49,8 @@ def facts():
     }
 
 
-async def call(chunk, value, *, authorize=None):
-    profile, connection = compact_profile(chunk)
+async def call(chunk, value, *, authorize=None, format="source_refs_v1"):
+    profile, connection = compact_profile(chunk, format)
     _, schema = proposal(chunk)
     usage = []
 
@@ -162,3 +162,47 @@ async def test_compact_preserves_negation_qualifiers_and_post_call_revocation():
 
     with pytest.raises(DomainError):
         await call(chunk, value, authorize=revoke)
+
+
+async def test_names_refer_to_exact_entities_without_model_generated_array_indices():
+    value = facts()
+    value["assertions"][0].update(subject="Alpha", target="Beta")
+    result, _ = await call(source("Alpha uses Beta."), value, format="source_names_v1")
+    assert result.assertions[0].subject == result.entities[0].local_id
+    assert result.assertions[0].target == result.entities[1].local_id
+    for target in ("Invented", "Alpha"):
+        value["assertions"][0]["target"] = target
+        with pytest.raises(DomainError):
+            await call(source("Alpha uses Beta."), value, format="source_names_v1")
+
+
+def test_medical_schema_can_express_the_leaflet_without_inventing_relations():
+    from domain_kg.graph.schema import schema_for
+    from domain_kg.ingestion.extraction import validate_extraction
+    from domain_kg.models import Namespace
+
+    chunk = source("The thyroid gland produces a hormone.")
+    schema = schema_for(Namespace(org_id=chunk.org_id, kg_id=chunk.kg_id), "medical")
+    batch, _ = proposal(chunk)
+    entities = tuple(
+        e.model_copy(
+            update={
+                "name": name,
+                "entity_type": kind,
+                "description": "",
+                "aliases": (),
+                "identifier": None,
+            }
+        )
+        for e, name, kind in zip(
+            batch.entities, ("thyroid gland", "hormone"), ("anatomy", "substance"), strict=True
+        )
+    )
+    batch = batch.model_copy(
+        update={
+            "schema_id": schema.id,
+            "entities": entities,
+            "assertions": (batch.assertions[0].model_copy(update={"predicate": "produces"}),),
+        }
+    )
+    assert validate_extraction(chunk, schema, batch).assertions[0].predicate == "produces"

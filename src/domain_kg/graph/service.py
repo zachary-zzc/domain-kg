@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from domain_kg.engine.scope import EligibilityResolver
-from domain_kg.errors import inaccessible_reference
+from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.graph.repository import GraphRepository
 from domain_kg.graph.views import NodeView, SubgraphView
 from domain_kg.graph.visibility_models import NodeFence
@@ -40,6 +40,47 @@ class GraphService:
     def __init__(self, queue: JobQueue) -> None:
         self.resolver = EligibilityResolver(queue.policy, AcceptedMetadata(queue))
         self.repository = GraphRepository(queue, self.resolver)
+
+    async def overview(
+        self, access: AccessContext, kg_id: UUID, filters: SearchFilters, *, page_index: int = 0
+    ) -> tuple[SubgraphView, int]:
+        if not 0 <= page_index <= 999:
+            raise DomainError(ErrorCode.VALIDATION_ERROR, "Invalid graph page.")
+        scope = await self.resolver.resolve(
+            access,
+            SearchRequest(kg_ids=(kg_id,), query="graph", mode="graph", filters=filters),
+            kg_id,
+        )
+        data = await self.repository.open(scope)
+        identifiers = {data.entity_id(e.entity.id, e.material_id) for e in data.observations}
+        identifiers.update(
+            data.entity_id(n.entity.id, context)
+            for n in data.manual_nodes
+            for context in data.node_contexts(n)
+        )
+        visible = sorted(identifiers, key=str)
+        selected = visible[page_index * 200 : (page_index + 1) * 200]
+        if not selected:
+            await self.resolver.revalidate(scope)
+            return SubgraphView(
+                kg_id=kg_id, revision=scope.current_view.revision, nodes=(), edges=()
+            ), len(visible)
+        view = await self.repository.traverse(
+            scope,
+            SubgraphRequest(
+                kg_id=kg_id,
+                seed_ids=tuple(selected),
+                max_hops=1,
+                max_nodes=200,
+                max_edges=400,
+                filters=filters,
+            ),
+            data=data,
+        )
+        await self.resolver.revalidate(scope)
+        return view.model_copy(update={"truncation": view.truncation or len(visible) > 200}), len(
+            visible
+        )
 
     async def get_node(
         self,

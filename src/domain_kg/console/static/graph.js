@@ -10,7 +10,7 @@
   const fail = () => { selection.textContent = section.dataset.error; };
   try {
     const data = JSON.parse(section.dataset.graph);
-    if (!Array.isArray(data.nodes) || !Array.isArray(data.edges) || data.nodes.length > 25 || data.edges.length > 40) throw new Error("graph budget");
+    if (!Array.isArray(data.nodes) || !Array.isArray(data.edges) || data.nodes.length > 200 || data.edges.length > 400) throw new Error("graph budget");
     const nodes = new Map(data.nodes.map(node => [node.id, node]));
     const edges = new Map(data.edges.map(edge => [edge.id, edge]));
     if (nodes.size !== data.nodes.length || edges.size !== data.edges.length || data.edges.some(edge => !nodes.has(edge.source) || !nodes.has(edge.target))) throw new Error("graph references");

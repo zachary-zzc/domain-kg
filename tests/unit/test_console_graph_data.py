@@ -136,3 +136,12 @@ def test_manual_relationship_keeps_human_history_as_its_primary_evidence():
     assert "/relations/" in graph_data(view, kg)["edges"][0]["href"]
     with pytest.raises(DomainError):
         graph_data(view, kg, org_id=uuid4())
+
+
+def test_document_overview_can_use_a_larger_bounded_display_budget():
+    kg = uuid4()
+    view = SubgraphView(kg_id=kg, revision=1, nodes=tuple(node(kg) for _ in range(30)), edges=())
+    result = graph_data(view, kg, max_nodes=200, max_edges=400)
+    assert len(result["nodes"]) == 30
+    with pytest.raises(DomainError):
+        graph_data(view, kg, max_nodes=201, max_edges=400)

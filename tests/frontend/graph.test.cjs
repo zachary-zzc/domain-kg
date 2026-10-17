@@ -67,3 +67,11 @@ test('missing renderer, invalid references and oversized input retain safe fallb
   for(const h of [harness(data,true),harness({...data,edges:[{...data.edges[0],target:'hidden'}]}),
     harness({...data,nodes:Array(26).fill(data.nodes[0])})]) assert.equal(h.selection.textContent,'unavailable');
 });
+
+test('a bounded document overview displays more than one node neighborhood', () => {
+  const nodes = Array.from({length:100},(_,i)=>({id:'node'+i,name:'Node '+i,href:'/admin/kgs/kg/nodes/'+i}));
+  const h = harness({nodes,edges:[],truncated:false});
+  assert.equal(h.chart.nodes.rows.length,100);
+  const tooLarge = harness({nodes:[...nodes,...nodes.map((n,i)=>({...n,id:'other'+i})),{...nodes[0],id:'last'}],edges:[]});
+  assert.equal(tooLarge.selection.textContent,'unavailable');
+});

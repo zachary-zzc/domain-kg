@@ -19,6 +19,7 @@ from domain_kg.storage.router import KGStoreRouter
 class CatalogService:
     general_profile_id = uuid5(NAMESPACE_URL, "domain-kg/domain/general/v1")
     scientific_profile_id = uuid5(NAMESPACE_URL, "domain-kg/domain/scientific/v1")
+    medical_profile_id = uuid5(NAMESPACE_URL, "domain-kg/domain/medical/v1")
 
     def __init__(self, policy: Policy, registry: BackendRegistry, router: KGStoreRouter) -> None:
         self.policy, self.registry, self.router = policy, registry, router
@@ -29,6 +30,7 @@ class CatalogService:
         for identifier, name in (
             (self.general_profile_id, "general"),
             (self.scientific_profile_id, "scientific"),
+            (self.medical_profile_id, "medical"),
         ):
             await self.policy.database.domain_profiles.update_one(
                 {"id": str(identifier)},

@@ -1,0 +1,12 @@
+{
+  "source_manifest": "config/medical-pdf-smoke.json",
+  "provider_mode": "real",
+  "simulation_allowed": false,
+  "domain_schema": "medical",
+  "chunks": {"target_tokens": 128, "overlap_tokens": 16},
+  "max_chunks": 48,
+  "whole_run_timeout_seconds": 1800,
+  "preview_seconds": 600,
+  "docker_memory_profile": "config/laptop-smoke.json",
+  "native_model_profile": "config/medical-model.approved.json"
+}

@@ -35,7 +35,7 @@ class ProviderProfile(FrozenModel):
     embedding_connection_ref: str | None = None
     extraction_model: Annotated[str, Field(min_length=1, max_length=200)]
     extraction_revision: Annotated[str, Field(min_length=1, max_length=200)] = "1"
-    extraction_format: Literal["full", "source_refs_v1"] = "full"
+    extraction_format: Literal["full", "source_refs_v1", "source_names_v1"] = "full"
     embedding_model: Annotated[str, Field(min_length=1, max_length=200)]
     embedding_dimensions: Annotated[int, Field(ge=1, le=4096, strict=True)]
     embedding_revision: Annotated[str, Field(min_length=1, max_length=200)] = "1"

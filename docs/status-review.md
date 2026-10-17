@@ -2,6 +2,27 @@
 
 核对日期 / Reviewed: 2026-10-18。
 
+**本轮真实抽取仍未完成 / Real extraction is still incomplete.**
+模型和分块修复已提交 `b0dea0c`、`b4074e0`：服务端生成来源坐标、按上下文合并
+文本行、保存逐块断点、仅对输出截断做有上限的再分块，并记录拒绝响应的用量。
+医学类型表与命名端点协议、来源过滤的中英图谱总览和 API 配置已准备。
+
+用户批准的 Qwen3-4B Q4_K_M 已下载并校验（2,497,280,256 字节）。经过格式诊断，
+最终三段检查仅 **1/3 通过**，另两段因来源或结构问题被拒；还观察到原文不支持的
+分类关系，故不能把来源对应检查当成语义准确性。最终峰值 RSS 3.082 GB，低于单独
+批准的 3.5 GB 监测上限，模型已停止。没有运行整篇模型抽取或发布真实 KG。
+
+The approved 4B model's final three-passage gate passed only one case. Two were
+rejected, and inspection also found unsupported semantic claims. The owned model
+stopped after a 3.082 GB peak. The full-document run remains gated; no genuine
+full-PDF graph has been published. There is no substitute simulated result.
+
+等待可用 API endpoint、抽取模型名，以及私有文件中的 key：
+`/Users/zachary/.cache/domain-kg/providers.medical-api.local.json`（0600）。
+配置模板为 [medical API profile](../config/providers.medical-api.example.json)。
+远程连接未启用。下一阶段是实际 API 小样本验收、全 PDF 抽取/发布与持久页面验收。
+全量运行脚本仍属于未验收准备代码，不应报告为已完成。
+
 主计划 19 阶段中，14 阶段已完成本机验证。第 18、19 阶段仍有开发与验收工作，
 第 3、9、15 阶段仍需外部验证。不能把当前演示或局部测试等同于可上线。
 
@@ -98,11 +119,13 @@ Tiny local facts passed on the 0.8B model; full grounded extraction did not pass
 ## 本机资源与预览 / Laptop resources and preview
 
 Docker 数据库配置与运行硬上限均为 **1.476 GB**，禁用 swap，低于 1.5 GB。
-本轮实际模型调用为 **0**；使用合成响应。原生模型预算与 Docker 分开测量。
+此前受控回归的实际模型调用为 **0**；本轮原生模型检查结果见本文顶部。
+原生模型预算与 Docker 分开测量。
 配置详见 [laptop smoke](laptop-smoke.md) 和 [operations](operations.md)。
 
-Docker hard limits total **1.476 GB**, with swap disabled. This run made **zero
-actual model calls**. The native model budget is separate.
+Docker hard limits total **1.476 GB**, with swap disabled. The earlier controlled
+pipeline run made zero actual model calls; see the new native checks above.
+The native model budget is separate.
 
 以下入口仅在手动启动的隔离测试预览存活期间有效（默认 10 分钟）。测试登录不进入
 正式应用，不代表外部 OIDC 通过；过期后需重启预览。新预览使用已提交的冻结源码。

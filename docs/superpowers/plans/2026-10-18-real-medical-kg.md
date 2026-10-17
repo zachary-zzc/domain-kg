@@ -66,6 +66,39 @@ parent sandbox passed, without changing parser isolation. Ruff and strict mypy
 
 ## 3. Real full-document run and display
 
+Prepared follow-up (not full-corpus acceptance): `source_names_v1` removes
+model-generated entity indices, the medical schema can express anatomy/substance
+and produces/is_a, and an explicitly separate format example teaches field
+semantics. The example is never source evidence; canonical validation remains
+strict. A scoped graph overview includes disconnected nodes, at most 200 nodes /
+400 edges per page; the existing node view retains 25/40. API private-file
+selection fails closed without approval or when its namespace is outside scope.
+
+Native evidence: Qwen3-4B file length/hash verified; increasing CPU microbatch
+32 -> 128 improved observed prefill from ~4 to ~16 tokens/s, without raising two
+threads or the 3.5 GB RSS watchdog. Diagnostic runs found self references, absent
+endpoints and incorrect semantic relations. Final named-example-v2 gate: only
+thyroid passed (15.808 s); cholesterol/coeliac failed (53.383/60.739 s). Peak
+3081830400 bytes; owned process stopped. There were 11 actual 4B requests across
+the initial checks, instrumentation and prompt fixes, not a full-PDF run. No facts
+were published. Stop further native retries; request a reliable approved API.
+
+The source preflight with current medical prompt covers all 228 blocks in 29
+128-token windows. This is input coverage only. `config/medical-pdf-live.json`
+sets 48 windows maximum, 1800 s whole-run timeout, and separate memory profiles.
+The opt-in actual-store runner supports genuine native/API calls, then sequential
+approved embeddings; it is gated on a matching successful quality report. It has
+not run end to end, and persistent retention/reopening remains to be finalized
+before serving a durable actual KG. Do not equate skipped opt-in collection with
+successful corpus processing.
+
+Preparation verification after API wiring: 338 checks passed and the real corpus
+run correctly skipped (34.93 s); actual Docker hard cap 1.476 GB, swap off. The
+four JavaScript contracts passed (0.177 s); Ruff, strict mypy (235 modules) and
+offline wheel/sdist inventory checks passed. These results verify software
+boundaries, not the incomplete real-PDF outcome. The requested API connection
+remains unconfigured, and its private template is disabled by default.
+
 - [ ] Build a resumable, bounded native run over every parsed PDF source span.
   Persist hashes/profile/model/protocol, real raw results, validated batches,
   per-window status and usage outside Git. Empty results count as processed, not

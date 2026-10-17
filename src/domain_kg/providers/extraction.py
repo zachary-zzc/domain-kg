@@ -106,12 +106,13 @@ def extraction_payload(
             },
         },
     }
-    if profile.extraction_format == "source_refs_v1":
+    if profile.extraction_format != "full":
         from domain_kg.providers.compact import messages, response_schema
 
-        payload["messages"] = messages(chunk, schema)
+        named = profile.extraction_format == "source_names_v1"
+        payload["messages"] = messages(chunk, schema, named=named)
         payload["response_format"]["json_schema"]["schema"] = strict_schema(
-            response_schema(schema), profile.schema_string_limit
+            response_schema(schema, named=named), profile.schema_string_limit
         )
         payload["temperature"] = 0
     return payload
@@ -209,10 +210,12 @@ class ExtractionClient:
                     or message.get("function_call")
                 ):
                     raise unavailable()
-                from domain_kg.providers.compact import RefContent
+                from domain_kg.providers.compact import NamedContent, RefContent
 
                 content = (
-                    RefContent.model_validate_json(message["content"])
+                    NamedContent.model_validate_json(message["content"])
+                    if self.profile.extraction_format == "source_names_v1"
+                    else RefContent.model_validate_json(message["content"])
                     if self.profile.extraction_format == "source_refs_v1"
                     else ExtractionContent.model_validate_json(message["content"])
                 )
@@ -226,9 +229,9 @@ class ExtractionClient:
             ) as exc:
                 raise unavailable() from exc
         await self.authorize(chunk)
-        if self.profile.extraction_format == "source_refs_v1":
+        if self.profile.extraction_format != "full":
             from domain_kg.providers.compact import expand
 
-            assert isinstance(content, RefContent)
+            assert isinstance(content, (RefContent, NamedContent))
             content = expand(content, chunk, schema, self.id)
         return content.model_dump(mode="json")

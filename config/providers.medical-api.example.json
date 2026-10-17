@@ -1,0 +1,38 @@
+{
+  "connections": [
+    {
+      "ref": "medical-api",
+      "endpoint": "https://api.example.invalid/v1",
+      "api_key": "REPLACE_IN_PRIVATE_COPY"
+    },
+    {
+      "ref": "local-embedding",
+      "endpoint": "http://127.0.0.1:29501/v1",
+      "api_key": "REPLACE_WITH_PRIVATE_LOCAL_KEY"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "a29052a3-2f45-424d-a561-4e10bed0490d",
+      "revision": 1,
+      "connection_ref": "medical-api",
+      "embedding_connection_ref": "local-embedding",
+      "extraction_model": "REPLACE_WITH_APPROVED_API_MODEL",
+      "extraction_revision": "source-names-v1-named-example-v2",
+      "extraction_format": "source_names_v1",
+      "extraction_context_tokens": 16384,
+      "max_completion_tokens": 2048,
+      "schema_in_context": true,
+      "embedding_model": "domain-kg-small-embedding",
+      "embedding_dimensions": 1024,
+      "embedding_context_tokens": 2048,
+      "embedding_revision": "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
+      "embedding_batch_size": 1,
+      "embedding_query_prefix": "Instruct: Retrieve relevant evidence passages.\nQuery: ",
+      "timeout_seconds": 120,
+      "allowed_namespaces": [],
+      "data_policy_approved": false,
+      "allow_restricted": false
+    }
+  ]
+}

@@ -37,13 +37,17 @@ def graph_data(
     org_id: UUID | None = None,
     material_id: UUID | None = None,
     version_id: UUID | None = None,
+    max_nodes: int = 25,
+    max_edges: int = 40,
 ) -> GraphData:
     identifiers = {node.id for node in view.nodes}
     edge_ids = {f"{edge.assertion_id}:{edge.support_id}" for edge in view.edges}
     if (
         view.kg_id != kg
-        or len(view.nodes) > 25
-        or len(view.edges) > 40
+        or not 1 <= max_nodes <= 200
+        or not 0 <= max_edges <= 400
+        or len(view.nodes) > max_nodes
+        or len(view.edges) > max_edges
         or len(identifiers) != len(view.nodes)
         or len(edge_ids) != len(view.edges)
         or any(node.kg_id != kg for node in view.nodes)

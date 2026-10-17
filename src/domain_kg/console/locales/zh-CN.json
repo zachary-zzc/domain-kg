@@ -527,5 +527,12 @@
   "This view reached its limit of 25 nodes or 40 relationships. Follow a node to explore its neighborhood.": "本视图已达到 25 个节点或 40 条关系的显示上限。可打开某个节点，继续查看它周围的关系。",
   "Visible nodes as links": "可见节点列表",
   "Enable JavaScript for the interactive graph, or use these links and the relationship list.": "启用 JavaScript 可查看交互关系图，也可直接使用节点链接和关系列表。",
-  "View node and graph": "查看节点与关系图"
+  "View node and graph": "查看节点与关系图",
+  "Graph overview": "图谱总览",
+  "Previous page": "上一页",
+  "Next page": "下一页",
+  "Visible nodes shown / total": "已显示 / 全部可见节点",
+  "Relationships shown": "已显示关系",
+  "This overview includes disconnected nodes. Open a node to inspect its source-qualified neighborhood.": "总览包含未连通的节点。打开节点可查看其关系和对应来源。",
+  "This view reached its display limit. Open a node or narrow the source filter to explore further.": "当前已达到显示上限。可打开节点或缩小来源范围继续查看。"
 }

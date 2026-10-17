@@ -1,9 +1,10 @@
 """Thin source-qualified graph inspection, human edit and compensation forms."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
+from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 
@@ -33,6 +34,54 @@ RELATION_FIELDS = {
 
 def curation_router(runtime: ServiceRuntime) -> APIRouter:
     router = APIRouter()
+
+    @router.get("/kgs/{kg_id}/graph")
+    async def overview(
+        request: Request,
+        kg_id: UUID,
+        include_unverified: bool = False,
+        material_id: UUID | None = None,
+        version_id: UUID | None = None,
+        page_index: Annotated[int, Query(ge=0, le=999)] = 0,
+    ) -> HTMLResponse:
+        filters = filters_for(include_unverified, material_id, version_id)
+        session, access, scope = await read_context(runtime, request, kg_id, filters)
+        view, total = await runtime.graph.overview(access, kg_id, filters, page_index=page_index)
+
+        def page_link(index: int) -> str:
+            values = {
+                "page_index": str(index),
+                "include_unverified": str(include_unverified).lower(),
+            }
+            if material_id is not None:
+                values["material_id"] = str(material_id)
+            if version_id is not None:
+                values["version_id"] = str(version_id)
+            return f"/admin/kgs/{kg_id}/graph?" + urlencode(values)
+
+        return await page(
+            runtime,
+            session,
+            access,
+            "graph_overview.html",
+            {
+                "title": "Graph overview",
+                "total_nodes": total,
+                "next_href": page_link(page_index + 1) if (page_index + 1) * 200 < total else None,
+                "previous_href": page_link(page_index - 1) if page_index > 0 else None,
+                "graph_data": graph_data(
+                    view,
+                    kg_id,
+                    org_id=access.org_id,
+                    include_unverified=include_unverified,
+                    material_id=material_id,
+                    version_id=version_id,
+                    max_nodes=200,
+                    max_edges=400,
+                ),
+            },
+            scope=scope,
+        )
 
     @router.get("/kgs/{kg_id}/nodes/{entity_id}")
     async def node(

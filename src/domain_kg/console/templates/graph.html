@@ -4,7 +4,7 @@
 <div id="node-graph" class="graph-canvas" role="img" aria-label="{{ _('Visible nodes and relationships. Accessible links follow the graph.') }}"></div>
 <p class="graph-legend"><span class="graph-source">{{ _('Source evidence') }}</span> · <span class="graph-manual">{{ _('Human curation') }}</span> · <span class="graph-import">{{ _('Unverified import') }}</span></p>
 <p data-graph-selection role="status" aria-live="polite">{{ _('Select an item to open its details.') }}</p>
-{% if graph_data.truncated %}<p class="muted">{{ _('This view reached its limit of 25 nodes or 40 relationships. Follow a node to explore its neighborhood.') }}</p>{% endif %}
+{% if graph_data.truncated %}<p class="muted">{{ _('This view reached its display limit. Open a node or narrow the source filter to explore further.') }}</p>{% endif %}
 <details><summary>{{ _('Visible nodes as links') }}</summary><ul>{% for item in graph_data.nodes %}<li><a href="{{ item.href }}">{{ item.name }}</a></li>{% endfor %}</ul></details>
 <noscript><p>{{ _('Enable JavaScript for the interactive graph, or use these links and the relationship list.') }}</p></noscript>
 </section>

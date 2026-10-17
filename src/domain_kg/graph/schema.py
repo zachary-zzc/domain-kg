@@ -19,6 +19,30 @@ def schema_for(namespace: Namespace, name: str) -> DomainSchema:
     if name == "general":
         types = ("concept", "person", "organization", "event", "artifact")
         predicates = ("related_to", "part_of", "causes", "uses", "supports", "contradicts")
+    elif name == "medical":
+        types = (
+            "condition",
+            "anatomy",
+            "substance",
+            "test",
+            "measurement",
+            "care_activity",
+            "person",
+            "organization",
+            "concept",
+        )
+        predicates = (
+            "is_a",
+            "part_of",
+            "produces",
+            "screens_for",
+            "measures",
+            "uses",
+            "supports",
+            "associated_with",
+            "related_to",
+            "causes",
+        )
     elif name == "scientific":
         types = ("gene", "protein", "compound", "disease", "process", "method", "result")
         predicates = (
