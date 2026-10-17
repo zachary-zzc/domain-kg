@@ -212,6 +212,8 @@ def load_laptop_profile(path: Path = ROOT / "config/laptop-smoke.json") -> dict[
         bounded(tests, "quick_timeout_seconds", 1, 180)
         bounded(tests, "task_timeout_seconds", 1, 1800)
         bounded(tests, "preview_seconds", 1, 900)
+        if type(tests.get("preview_restore_demo", False)) is not bool:
+            raise ValueError
         if native["autostart"] is not False or native["stop_owned_process_after_smoke"] is not True:
             raise ValueError
         for field, minimum, maximum in (

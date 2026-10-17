@@ -19,7 +19,8 @@
     "preview_seconds": 600,
     "auto_download_models": false,
     "ocr_enabled": false,
-    "load_test_enabled": false
+    "load_test_enabled": false,
+    "preview_restore_demo": false
   },
   "native": {
     "model_manifest": "config/model-runtime.proposed.json",

@@ -585,3 +585,22 @@ filtering, owner revocation after read, safe backend failure and API/console rol
 denials. Ruff/mypy pass for 228 source modules. No live model request. The previous
 full console preview completed successfully in 696.41 seconds (600 seconds of
 viewing), including its cleanup; its server is now closed. Task 18/19 remain open.
+
+
+Light preview/configuration checkpoint (2026-10-18 local): the explicit boolean
+`tests.preview_restore_demo` defaults to false. Normal page previews retain real
+source/manual data and genuinely cancelled inactive targets while skipping the
+complete restore setup; a restored-KG identifier is returned only in the explicit
+full-demo mode after activation. Three configuration regressions were observed
+red before implementation; all 16 resource-profile checks pass (1.10 seconds).
+Configured and running Docker hard limits remain 1.476 GB with swap disabled.
+The new lightweight live HTTP check verified the usage-history page/API, a real
+generation job to ready, an inactive cleanup job to ready, owner audit 200 and
+reader denial. The 600-second preview is currently live; its final timed-fixture
+result is pending, separate from the completed prior 696.41-second preview.
+
+Offline distributions were refreshed after usage history: wheel 260 entries,
+SHA-256 `85dd6f87cb44ea86e89a798c31655ab0af68eba06228fc6728e634a4c62a7164`;
+source archive 263 entries, SHA-256
+`81363e65e299f9ad5cc3b1a5004aacdf85e9b64dbf82c2880f8311ccbeadd96d`.
+Both passed the archive boundary checks. No Docker image or actual model call.

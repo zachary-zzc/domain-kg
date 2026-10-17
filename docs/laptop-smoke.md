@@ -177,3 +177,14 @@ bounded automatic retry; explicit cancelled/failed jobs use the normal retry UI.
 Quiesce old restore workers before upgrading. Targets allocated before supported
 write tracking, and targets with pending/uncertain writes, are deliberately not
 auto-cleaned; lease expiry alone is not evidence that remote writes ended.
+
+
+The default browser preview uses `tests.preview_restore_demo: false` in
+`config/laptop-smoke.json`. It prepares genuine cancelled, inactive restore jobs
+for inspection/cleanup and keeps the native-source/manual-edit, history and index
+rebuild controls available. It skips the already-verified full restore setup on
+each ordinary preview. Set the boolean to `true` only when deliberately reviewing
+the complete restored-KG example; both modes use synthetic providers, one serial
+worker, the same database caps and the bounded preview lifetime. A cancelled
+target is never labelled as an activated restored KG. Numeric/string values for
+this option are rejected. This option does not start or download any local model.

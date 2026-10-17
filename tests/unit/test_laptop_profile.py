@@ -13,6 +13,7 @@ def test_default_laptop_profile_is_bounded_and_has_no_automatic_model_calls():
     assert profile["docker"]["memory_cap_bytes"] == 1_500_000_000
     assert sum(profile["docker"]["service_memory_bytes"].values()) == 1_476_395_008
     assert profile["tests"]["provider_mode"] == "synthetic"
+    assert profile["tests"]["preview_restore_demo"] is False
     assert profile["native"]["autostart"] is False
     assert profile["native"]["max_concurrent_models"] == 1
     assert profile["native"]["embedding_tiny_requests"] == 3
@@ -29,6 +30,8 @@ def test_default_laptop_profile_is_bounded_and_has_no_automatic_model_calls():
         ("native", "threads", 8),
         ("native", "embedding_tiny_requests", 100),
         ("native", "autostart", True),
+        ("tests", "preview_restore_demo", 1),
+        ("tests", "preview_restore_demo", "false"),
     ],
 )
 def test_unsafe_laptop_profile_is_rejected_before_startup(tmp_path, area, field, value):

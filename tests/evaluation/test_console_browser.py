@@ -45,6 +45,9 @@ pytestmark = [
 
 
 async def test_temporary_console_browser_preview(publishing, team, catalog, issuer_fixture):
+    configuration = json.loads(await asyncio.to_thread(PROFILE_PATH.read_bytes))
+    full_restore = configuration["tests"].get("preview_restore_demo", False)
+    assert type(full_restore) is bool
     _, editor, queue, coordinator, _, _ = publishing
     source, job, checkpoint = await prepare(publishing)
     await coordinator.publish(editor, await ready(publishing, job, checkpoint))
@@ -80,12 +83,15 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
             "allow_restricted": True,
         }
     )
-    restore_job = await queue.claim("preview-restore", kinds=("restore",))
-    await JobRunner(
-        queue,
-        configured_pipeline(queue, coordinator.providers),
-        operations=RestoreService(queue, coordinator.providers),
-    ).run_job(restore_job)
+    if full_restore:
+        restore_job = await queue.claim("preview-restore", kinds=("restore",))
+        await JobRunner(
+            queue,
+            configured_pipeline(queue, coordinator.providers),
+            operations=RestoreService(queue, coordinator.providers),
+        ).run_job(restore_job)
+    else:
+        await queue.cancel(owner, recovery.job_id, idempotency_key="preview-skip-full-restore")
     editor = await queue.policy.resolve_access(principals["editor"], [job.kg_id], Action.CURATE)
     reviewed = await RevisionService(queue, coordinator.providers).update_node(
         editor,
@@ -101,7 +107,9 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
     )
     await publish_curation(queue, coordinator, editor, reviewed)
     refreshed = await queue.policy.resolve_access(principals["owner"], [job.kg_id], Action.RESTORE)
-    assert (await queue.get(refreshed, recovery.job_id)).stage == "ready"
+    assert (await queue.get(refreshed, recovery.job_id)).stage == (
+        "ready" if full_restore else "cancelled"
+    )
     abandoned = await operations.submit(
         refreshed,
         RestoreCommand(
@@ -178,7 +186,9 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 "kg_id": str(job.kg_id),
                 "material_id": str(source.material_id),
                 "node_id": str(alpha),
-                "restored_kg_id": str(target.target.kg_id),
+                "restored_kg_id": str(target.target.kg_id) if full_restore else None,
+                "restore_target_kg_id": str(target.target.kg_id),
+                "full_restore_demo": full_restore,
                 "restore_job_id": str(recovery.job_id),
                 "inactive_restore_job_id": str(abandoned.job_id),
                 "inactive_kg_id": str(inactive.target.kg_id),
@@ -246,7 +256,6 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                     "Browser preview ready: http://localhost:28080/__smoke__/start/owner",
                     flush=True,
                 )
-                configuration = json.loads(await asyncio.to_thread(PROFILE_PATH.read_bytes))
                 lifetime = int(configuration["tests"]["preview_seconds"])
                 assert 1 <= lifetime <= 900
                 done, _ = await asyncio.wait(
