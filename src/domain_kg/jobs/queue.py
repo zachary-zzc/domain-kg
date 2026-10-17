@@ -376,11 +376,15 @@ class JobQueue:
             }
         ):
             raise ValueError("job kinds require a configured handler")
+        from domain_kg.operations.failure_audit import FailureAudit
+        from domain_kg.operations.jobs import OWNER_KINDS
+
+        await FailureAudit(self).expire(allowed)
         # Expired leases at the bound become explicit terminal failures; no
         # unbounded polling or accidental fourth attempt after worker death.
         await self.database.jobs.update_many(
             {
-                "kind": {"$in": list(allowed)},
+                "kind": {"$in": [kind for kind in allowed if kind not in OWNER_KINDS]},
                 "stage": {"$nin": TERMINAL},
                 "attempts": {"$gte": self.max_attempts},
                 "lease_until": {"$lte": now()},
@@ -733,27 +737,38 @@ class JobQueue:
         return checkpoint
 
     async def fail(self, job: LeasedJob, error: DomainError, *, repair: bool = False) -> None:
-        raw = await self._current(job)
-        retry = error.retryable and raw["attempts"] < self.max_attempts
-        stage = ("repair_required" if repair else "queued") if retry else "failed"
-        code = (
-            str(error.code)
-            if str(error.code) in {str(value) for value in ErrorCode}
-            else "BACKEND_UNAVAILABLE"
-        )
-        result = await self.database.jobs.update_one(
-            self._active(job),
-            {
-                "$set": {
-                    "stage": stage,
-                    "error_code": code,
-                    "lease_until": now(),
-                    "available_at": now() + timedelta(seconds=min(5, 2 ** (raw["attempts"] - 1))),
-                }
-            },
-        )
-        if not result.matched_count:
-            raise lease_conflict()
+        async def commit(session: AsyncClientSession) -> None:
+            raw = await self._current(job, session)
+            retry = error.retryable and raw["attempts"] < self.max_attempts
+            stage = ("repair_required" if repair else "queued") if retry else "failed"
+            code = (
+                str(error.code)
+                if str(error.code) in {str(value) for value in ErrorCode}
+                else "BACKEND_UNAVAILABLE"
+            )
+            result = await self.database.jobs.update_one(
+                self._active(job),
+                {
+                    "$set": {
+                        "stage": stage,
+                        "error_code": code,
+                        "lease_until": now(),
+                        "available_at": now()
+                        + timedelta(seconds=min(5, 2 ** (raw["attempts"] - 1))),
+                    }
+                },
+                session=session,
+            )
+            if not result.matched_count:
+                raise lease_conflict()
+            from domain_kg.operations.jobs import OWNER_KINDS
+
+            if job.kind in OWNER_KINDS:
+                from domain_kg.operations.failure_audit import FailureAudit
+
+                await FailureAudit(self).append(raw, ErrorCode(code), session)
+
+        await self.transactions.transaction(commit)
 
     async def finish(self, job: LeasedJob) -> None:
         if job.kind == "restore_cleanup":

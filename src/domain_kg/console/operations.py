@@ -13,6 +13,7 @@ from domain_kg.console.workspace import filters_for, read_context
 from domain_kg.errors import inaccessible_reference
 from domain_kg.identity.models import Action
 from domain_kg.models import PageRequest
+from domain_kg.operations.audit import AuditTrail
 from domain_kg.operations.models import MaintenanceCommand, RetentionCommand
 from domain_kg.operations.projections import RepairCommand
 from domain_kg.transport.runtime import ServiceRuntime
@@ -22,7 +23,9 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
     router = APIRouter()
 
     @router.get("/kgs/{kg_id}/operations")
-    async def operations(request: Request, kg_id: UUID) -> HTMLResponse:
+    async def operations(
+        request: Request, kg_id: UUID, audit_cursor: str | None = None
+    ) -> HTMLResponse:
         session, access, scope = await read_context(runtime, request, kg_id, filters_for(True))
         access = await runtime.policy.revalidate(access, action=Action.CONFIGURE)
         result = await runtime.projections.status(access, kg_id)
@@ -36,6 +39,9 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "status": result,
                 "usage": await runtime.usage.get(access, kg_id),
+                "audit": await AuditTrail(runtime.queue).list(
+                    access, kg_id, PageRequest(limit=20, cursor=audit_cursor)
+                ),
                 "command_key": str(uuid4()),
                 "curation_repair_key": str(uuid4()),
                 "backup_key": str(uuid4()),

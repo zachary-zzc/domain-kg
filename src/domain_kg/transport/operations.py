@@ -3,12 +3,14 @@
 from collections.abc import AsyncIterator
 from uuid import UUID
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.models import JobReceipt
+from domain_kg.models import PageRequest
+from domain_kg.operations.audit import AuditPage, AuditTrail
 from domain_kg.operations.backup import BackupService
 from domain_kg.operations.backup_models import BackupManifest
 from domain_kg.operations.downloads import BackupDownloads
@@ -87,6 +89,18 @@ def operation_router(runtime: ServiceRuntime) -> APIRouter:
     @router.get("/kgs/{kg_id}/usage")
     async def usage(request: Request, kg_id: UUID) -> ProviderUsage:
         return await runtime.usage.get(await access(request, kg_id, action=Action.CONFIGURE), kg_id)
+
+    @router.get("/kgs/{kg_id}/operations/audit")
+    async def audit(
+        request: Request,
+        kg_id: UUID,
+        limit: int = Query(default=20, ge=1, le=100),
+        cursor: str | None = Query(default=None, max_length=512),
+    ) -> AuditPage:
+        current = await access(request, kg_id, action=Action.CONFIGURE)
+        return await AuditTrail(runtime.queue).list(
+            current, kg_id, PageRequest(limit=limit, cursor=cursor)
+        )
 
     @router.post("/kgs/{kg_id}/restores", status_code=202)
     async def restore(request: Request, kg_id: UUID, command: RestoreCommand) -> JobReceipt:

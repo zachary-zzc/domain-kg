@@ -490,3 +490,16 @@ The corrected final run passed 300 checks in 115.19 seconds, including owner
 console/API, CSRF, reader/editor denial, source preservation, transactional rollback
 and automatic retry. Ruff and strict mypy pass across 220 source modules. All
 providers were synthetic and Docker retained its 1.476 GB hard limits.
+
+Owner operation failure/expiry audit now commits atomically with job state.
+The actual attempt ID and finite safe error code are recorded once, anchored to
+immutable admitted actor provenance. An already-revoked actor can have a failure
+recorded without granting that actor permission to continue work. Exhausted expired
+owner leases are swept in bounded batches of 100 with a distinct lease-expired
+reason. Private error text, endpoints and credentials are omitted. API and console
+audit reads require current owner access and retain scoped opaque cursors.
+Five focused checks passed in 27.38 seconds. The final 305-check light/real-store
+suite passed in 55.44 seconds; two ordinary source-job cancellation/recovery/
+retry-exhaustion regressions passed in 31.82 seconds. Ruff/mypy pass for 221 source
+modules. No model was called. This does not close the independent generation,
+complete backup-authority and multi-profile release acceptance gates.

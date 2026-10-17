@@ -23,6 +23,23 @@ class AuditEvent(ScopedRef):
     kind: OwnerOperationKind
     outcome: Literal["admitted", "cancelled", "retried", "completed", "failed"]
     created_at: UTCDateTime
+    attempt_id: UUID | None = None
+    error_code: ErrorCode | None = None
+    failure_reason: Literal["worker_error", "lease_expired"] | None = None
+
+    @model_validator(mode="after")
+    def failure_fields(self) -> Self:
+        if (self.attempt_id is None) != (self.error_code is None) or (
+            self.outcome != "failed"
+            and any(
+                value is not None
+                for value in (self.attempt_id, self.error_code, self.failure_reason)
+            )
+        ):
+            raise ValueError("failure provenance must be typed and belong to a failed attempt")
+        if self.failure_reason is not None and self.attempt_id is None:
+            raise ValueError("a failure reason requires its actual attempt")
+        return self
 
 
 class AuditPage(Namespace):

@@ -27,11 +27,11 @@ existing `jobs/queue.py`, `jobs/runner.py`, runtime/HTTP/MCP adapters and tests.
   operation records and handlers. Do not pass non-source targets through source
   version checks or fabricate a material/version. Bind each operation to the
   verified actor, org/KG, command digest, lease and publication boundary.
-- [ ] Keep admission/outbox/audit atomic in Mongo. Reuse existing policy audit
+- [x] Keep admission/outbox/audit atomic in Mongo. Reuse existing policy audit
   records and add allowlisted outcomes/IDs; omit source text, queries, tokens,
   endpoints, exception payloads and credentials. Audit reads require current
   owner permission and scoped opaque cursors.
-- [ ] Run serial operation admission/recovery/permission tests and static gates;
+- [x] Run serial operation admission/recovery/permission tests and static gates;
   commit the verified operation foundation.
 
 ## 2. Retained, manifest-bound backup and scoped export
