@@ -1,6 +1,7 @@
 """Single-job execution with heartbeats, exact checkpoint reuse and durable failures."""
 
 import asyncio
+from typing import Protocol
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.ingestion.pipeline import Pipeline
@@ -8,11 +9,31 @@ from domain_kg.jobs.models import LeasedJob
 from domain_kg.jobs.queue import JobQueue
 
 
+class OwnerOperationExecutor(Protocol):
+    async def run(self, job: LeasedJob) -> None: ...
+
+
 class JobRunner:
-    def __init__(self, queue: JobQueue, pipeline: Pipeline) -> None:
-        self.queue, self.pipeline = queue, pipeline
+    def __init__(
+        self,
+        queue: JobQueue,
+        pipeline: Pipeline,
+        *,
+        operations: OwnerOperationExecutor | None = None,
+    ) -> None:
+        self.queue, self.pipeline, self.operations = queue, pipeline, operations
 
     async def _steps(self, job: LeasedJob) -> None:
+        if job.kind in ("backup", "export"):
+            await self.queue.authorize(job)
+            if self.operations is None:
+                raise DomainError(
+                    ErrorCode.REVISION_NOT_READY,
+                    "The owner operation handler is not configured.",
+                    retryable=True,
+                )
+            await self.operations.run(job)
+            return
         if job.kind == "purge_material":
             from domain_kg.materials.purge import PurgeService
 

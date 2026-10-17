@@ -152,6 +152,10 @@ class JobQueue:
 
     @staticmethod
     def _action(kind: str) -> Action:
+        if kind in ("backup", "export"):
+            from domain_kg.operations.jobs import operation_action
+
+            return operation_action(kind)
         if kind == "purge_material":
             return Action.PURGE
         if kind == "curate":
@@ -363,6 +367,8 @@ class JobQueue:
                 "reprocess_material",
                 "curate",
                 "purge_material",
+                "backup",
+                "export",
             }
         ):
             raise ValueError("job kinds require a configured handler")
@@ -444,6 +450,11 @@ class JobQueue:
             org_id=job.org_id,
             session=session,
         )
+        if job.kind in ("backup", "export"):
+            from domain_kg.operations.jobs import OwnerOperations
+
+            await OwnerOperations(self).authorize(access, raw, session)
+            return access
         if job.kind == "curate":
             from domain_kg.graph.curation import authorize_curation
 
@@ -721,6 +732,11 @@ class JobQueue:
             raise lease_conflict()
 
     async def finish(self, job: LeasedJob) -> None:
+        if job.kind in ("backup", "export"):
+            await self.authorize(job)
+            raise DomainError(
+                ErrorCode.REVISION_NOT_READY, "The operation has no verified package."
+            )
         if await self.accepted(job):
             return
         await self.authorize(job)
@@ -837,6 +853,11 @@ class JobQueue:
         )
         if raw is None:
             raise inaccessible_reference()
+        if raw["kind"] in ("backup", "export"):
+            from domain_kg.operations.jobs import OwnerOperations
+
+            await OwnerOperations(self).authorize(current, raw, session)
+            return raw
         if raw["kind"] == "purge_material":
             from domain_kg.materials.purge import visible_purge_job
 
@@ -914,7 +935,7 @@ class JobQueue:
         key = TypeAdapter(IdempotencyKey).validate_python(key)
 
         async def change(session: AsyncClientSession) -> JobReceipt:
-            raw = await self._visible_job(access, identifier, Action.INGEST, session)
+            raw = await self._visible_job(access, identifier, Action.READ, session)
             current = await self.policy.revalidate(
                 access, action=self._action(raw["kind"]), session=session
             )
@@ -962,6 +983,20 @@ class JobQueue:
                 },
                 session=session,
             )
+            if raw["kind"] in ("backup", "export"):
+                from domain_kg.operations.jobs import OwnerOperations
+
+                operations = OwnerOperations(self)
+                record = await operations.authorize(current, result, session)
+                await operations.audit.append(
+                    current,
+                    record.kg_id,
+                    record.id,
+                    record.job.id,
+                    record.command.kind,
+                    "cancelled" if operation == "cancel" else "retried",
+                    session,
+                )
             return receipt
 
         return await self.transactions.transaction(change)
