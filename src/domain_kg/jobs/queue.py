@@ -503,6 +503,19 @@ class JobQueue:
         )
         if raw is None:
             raise lease_conflict()
+        if job.kind == "backup":
+            await self.database.read_pins.update_one(
+                {
+                    "org_id": str(job.org_id),
+                    "kg_id": str(job.kg_id),
+                    "kind": "backup_capture",
+                    "job_id": str(job.id),
+                    "operation_id": str(job.target_id),
+                    "attempt_id": str(job.attempt_id),
+                    "expires_at": {"$gt": now()},
+                },
+                {"$set": {"expires_at": raw["lease_until"]}},
+            )
         await self.database.kgs.update_one(
             {
                 "org_id": str(job.org_id),

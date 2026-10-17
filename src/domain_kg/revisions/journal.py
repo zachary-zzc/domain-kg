@@ -1,6 +1,6 @@
 """Mongo acceptance metadata; projection presence can never establish acceptance."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -17,6 +17,9 @@ from domain_kg.revisions.models import ProjectionReceipt, PublishedView, Retaine
 from domain_kg.revisions.projections import AcceptedProjection
 from domain_kg.storage.blobs import BlobStore
 
+if TYPE_CHECKING:
+    from domain_kg.operations.capture import BackupReadPermit
+
 
 async def read_artifact(
     queue: JobQueue,
@@ -25,6 +28,7 @@ async def read_artifact(
     source: SourceVersion,
     *,
     restoration: MaterialReadPermit | None = None,
+    backup: "BackupReadPermit | None" = None,
 ) -> bytes:
     """Read immutable artifacts under current permission, independent of the original actor."""
     await queue.policy.revalidate(access)
@@ -35,7 +39,13 @@ async def read_artifact(
         raise inaccessible_reference()
 
     async def authorize() -> None:
-        if restoration is not None:
+        if backup is not None:
+            if restoration is not None:
+                raise inaccessible_reference()
+            from domain_kg.operations.capture import authorize_backup_read
+
+            await authorize_backup_read(queue, access, source, backup)
+        elif restoration is not None:
             from domain_kg.materials.restoration import authorize_restore_read
 
             await authorize_restore_read(queue, access, source, restoration)

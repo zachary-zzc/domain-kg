@@ -325,7 +325,12 @@ class PurgeService:
             session=session,
         )
         pin = await self.database.read_pins.find_one(
-            ns | {"material_ids": str(material), "expires_at": {"$gt": now()}}, session=session
+            ns
+            | {
+                "expires_at": {"$gt": now()},
+                "$or": [{"material_ids": str(material)}, {"kind": "backup_capture"}],
+            },
+            session=session,
         )
         upload = await self.database.uploads.find_one(
             ns
@@ -613,6 +618,7 @@ class PurgeService:
             saved = await authorize_purge_job(self.queue, current, job, session)
             if saved["phase"] == "detached":
                 return
+            await self._idle(current, job.kg_id, job.target_id, own_job=job.id, session=session)
             kg_key = {"org_id": ns["org_id"], "id": ns["kg_id"]}
             kg = await self.database.kgs.find_one(kg_key, session=session)
             if kg is None:

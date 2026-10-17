@@ -42,3 +42,13 @@ memory bounded. Two package-contract checks passed in 0.04 seconds and a tiny re
 S3 integrity/replay/corruption check passed in 3.28 seconds. The broader
 unit/protocol suite passed 185 checks in 4.04 seconds. Full capture/sealing and
 restore handlers remain in progress.
+
+Live capture now pins the accepted manifest/generation/visibility boundary against
+source cleanup. The pin is scoped to one real backup job attempt and expires with
+its lease; heartbeats renew live pins and cannot revive expired ones. Cleanup also
+rechecks pins inside the detach transaction. A separate internal backup permit
+can read only an accepted source bound to that pinned manifest under an explicit
+current owner backup context. Ordinary reads of excluded sources remain denied.
+Visibility changes, cancellation, policy changes or a missing pin stop capture.
+The scope/heartbeat/purge/owner-job regression passed ten real-store checks in
+66.85 seconds; 185 unit/protocol checks passed in 3.42 seconds.
