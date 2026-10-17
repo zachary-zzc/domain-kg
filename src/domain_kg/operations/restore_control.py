@@ -18,7 +18,9 @@ from domain_kg.ingestion.resolved import ResolvedDocument
 from domain_kg.jobs.models import JobCommand, LeasedJob
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.models import FrozenModel, ScopedRef, SourceVersion
+from domain_kg.operations.backup_models import AuthorityTable
 from domain_kg.operations.restore_authority import RestoreAuthority
+from domain_kg.operations.restore_import_history import RestoreImportHistory
 from domain_kg.operations.restore_materials import RestoreMaterials
 from domain_kg.operations.restore_preparation import PreparedRestore
 from domain_kg.providers.service import ProviderService
@@ -52,14 +54,28 @@ class RestoreControl(RestoreAuthority):
         inventory = staged.inventory
         mapping = inventory.mapping(staged.binding.target.target)
         documents = await inventory.documents(mapping)
-        if documents.imports:
-            raise DomainError(
-                ErrorCode.UNSUPPORTED_FORMAT,
-                "Import admission history requires its dedicated restore stage.",
-            )
+        imports = RestoreImportHistory(documents)
         materials = RestoreMaterials(documents)
         rows: list[Row] = []
         target = mapping.target.model_dump(mode="json")
+        for raw in inventory.rows("import_plans"):
+            rows.append(("control", "import_plans", imports.plan(raw)))
+        for bundle in documents.imports.values():
+            rows.append(("control", "import_source_origins", bundle.origin.model_dump(mode="json")))
+        mapping_tables: tuple[tuple[AuthorityTable, Literal["observation", "support"]], ...] = (
+            ("import_id_mappings", "observation"),
+            ("import_assertion_mappings", "support"),
+        )
+        for table, kind in mapping_tables:
+            expected_count = sum(
+                len(bundle.graph.entities if kind == "observation" else bundle.graph.relations)
+                for bundle in documents.imports.values()
+            )
+            captured = inventory.records.get(table, [])
+            if len(captured) != expected_count:
+                raise self.invalid()
+            for raw in captured:
+                rows.append(("authority", table, imports.mapping_row(kind, raw)))
         current = {str(source.material_id): source for source in inventory.root.sources}
         for raw in inventory.rows("material_access"):
             source = current.get(str(raw["id"]))
@@ -107,6 +123,22 @@ class RestoreControl(RestoreAuthority):
             for name in ("material_id", "material_ids"):
                 if name in raw:
                     value[name] = raw[name]
+            if command.kind == "import":
+                bundle = imports.bundle(
+                    SourceVersion(
+                        **mapping.origin.model_dump(),
+                        material_id=raw["material_id"],
+                        version_id=command.target_id,
+                    )
+                )
+                if (raw.get("import_plan_id"), raw.get("import_plan_hash")) != (
+                    str(bundle.original.plan_id),
+                    bundle.original.plan_hash,
+                ):
+                    raise self.invalid()
+                value.update(
+                    import_plan_id=str(bundle.plan.id), import_plan_hash=bundle.origin.plan_hash
+                )
             rows.append(("control", "jobs", value))
         for rewritten in staged.artifacts:
             rows.append(("control", "job_artifacts", rewritten.artifact.model_dump(mode="json")))
@@ -148,8 +180,14 @@ class RestoreControl(RestoreAuthority):
                     "org_id": str(mapping.origin.org_id),
                     "kg_id": str(mapping.origin.kg_id),
                 }
-                if any(original[identifier].get(key) != data for key, data in old.items()):
-                    raise self.invalid()
+                differences = [
+                    key for key, data in old.items() if original[identifier].get(key) != data
+                ]
+                if differences:
+                    raise DomainError(
+                        ErrorCode.PROJECTION_INCONSISTENT,
+                        "Restored source ledger differs in fields: " + ", ".join(differences),
+                    )
                 rows.append(("authority", table, value))
         for raw in inventory.rows("observations"):
             from domain_kg.ingestion.resolved import ResolvedEntity
@@ -163,6 +201,10 @@ class RestoreControl(RestoreAuthority):
             )
         for rewritten in staged.artifacts:
             if rewritten.checkpoint.stage != "resolving":
+                continue
+            if rewritten.artifact.blob.version_id in {
+                bundle.original.version_id for bundle in documents.imports.values()
+            }:
                 continue
             resolved = ResolvedDocument.model_validate_json(rewritten.body)
             by_chunk = {batch.chunk_id: batch for batch in resolved.extraction.batches}
@@ -207,6 +249,8 @@ class RestoreControl(RestoreAuthority):
                         raise self.invalid()
                     if "id" in value:
                         query = ns | {"id": value["id"]}
+                    elif table == "import_source_origins":
+                        query = ns | {key: value[key] for key in ("material_id", "version_id")}
                     elif table == "curation_scopes":
                         query = ns | {key: value[key] for key in ("target_id", "scope_key")}
                     else:

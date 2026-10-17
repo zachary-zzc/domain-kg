@@ -45,11 +45,6 @@ class RestoreActivation(RestoreAuthority):
                 await self._actor(job), [job.kg_id], Action.RESTORE, org_id=job.org_id
             )
             return await self.results.get(access, job.kg_id, job.id)
-        if staged.inventory.rows("import_plans"):
-            raise DomainError(
-                ErrorCode.UNSUPPORTED_FORMAT,
-                "This restore history requires its dedicated activation path.",
-            )
         if await self.bindings.approved(job) != (staged.binding.target, staged.binding.embedding):
             raise DomainError(ErrorCode.VERSION_CONFLICT, "Restore configuration changed.")
         if (

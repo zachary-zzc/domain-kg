@@ -228,3 +228,25 @@ def test_import_artifact_chain_reseals_graph_and_prepared_rows_without_native_ex
     assert all(
         r.assertion.support.status == "imported_unverified" for r in restored.rows if r.assertion
     )
+
+
+def test_restored_import_owned_ids_match_future_reprocessing_without_duplicate_identities():
+    from domain_kg.operations.restore_documents import RestoreDocuments
+    from domain_kg.operations.restore_imports import restore_import
+
+    mapping, blob, plan, graph, origin, prepared, body = imported()
+    bundle = restore_import(mapping, plan, graph, origin, body)
+    documents = RestoreDocuments(mapping, originals=(blob,), imports=(bundle,))
+
+    def checkpoint(value):
+        return value.model_copy(update=mapping.target.model_dump())
+
+    rewritten = documents.prepared(prepared, checkpoint)
+    fresh = build_import(
+        bundle.graph,
+        bundle.origin,
+        documents.parsed(snapshot_document(blob, body)),
+        documents.schema(prepared.domain_schema),
+        checkpoint(prepared.chunk_checkpoint),
+    )
+    assert {row.id: row for row in rewritten.rows} == {row.id: row for row in fresh.rows}

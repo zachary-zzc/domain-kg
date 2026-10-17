@@ -7,6 +7,7 @@ from domain_kg.graph.curation_models import ManualNode
 from domain_kg.graph.identity_models import IdentityGroup, ManualIdentity
 from domain_kg.graph.manual_relations import ManualRelation, RelationFields
 from domain_kg.graph.models import AssertionRecord, EntityRecord, SupportRecord
+from domain_kg.imports.build import legacy_owned_id
 from domain_kg.imports.legacy import stable
 from domain_kg.imports.legacy_models import LegacyGraph
 from domain_kg.ingestion.models import ParsedChunk
@@ -113,6 +114,53 @@ class RestoreRemapper:
             )
         if len({item.id for item in self._assertions.values()}) != len(self._assertions):
             raise inaccessible_reference()
+        self._observation_ids, self._support_ids = self._legacy_owned_ids(legacy_graphs)
+
+    def _legacy_owned_ids(
+        self, graphs: tuple[LegacyGraph, ...]
+    ) -> tuple[dict[UUID, UUID], dict[UUID, tuple[UUID, UUID, UUID]]]:
+        observations: dict[UUID, UUID] = {}
+        supports: dict[UUID, tuple[UUID, UUID, UUID]] = {}
+        indexed: dict[UUID, list[ResolvedEntity]] = {}
+        for observation in self._observations.values():
+            indexed.setdefault(observation.entity.id, []).append(observation)
+        for graph in graphs:
+            sources = set()
+            for entity in graph.entities:
+                for observation in indexed.get(entity.entity_id, ()):
+                    source = SourceVersion(
+                        **{key: getattr(observation, key) for key in SourceVersion.model_fields}
+                    )
+                    old = legacy_owned_id(
+                        source, graph.origin, "observation", entity.source_id, entity.legacy_id
+                    )
+                    if observation.id != old:
+                        continue
+                    sources.add(source)
+                    observations[old] = legacy_owned_id(
+                        self.source(source),
+                        graph.origin,
+                        "observation",
+                        entity.source_id,
+                        entity.legacy_id,
+                    )
+            for source in sources:
+                for relation in graph.relations:
+                    old = legacy_owned_id(
+                        source, graph.origin, "support", relation.source_id, relation.legacy_id
+                    )
+                    supports[old] = (
+                        legacy_owned_id(
+                            self.source(source),
+                            graph.origin,
+                            "support",
+                            relation.source_id,
+                            relation.legacy_id,
+                        ),
+                        source.version_id,
+                        relation.assertion_id,
+                    )
+        return observations, supports
 
     def _scoped(self, item: Namespace) -> None:
         if (item.org_id, item.kg_id) != (self.origin.org_id, self.origin.kg_id):
@@ -197,7 +245,12 @@ class RestoreRemapper:
             raise inaccessible_reference()
         source = self.source(item)
         return ResolvedEntity.model_validate(
-            item.model_dump() | source.model_dump() | {"entity": self.entity_ref(item.entity)}
+            item.model_dump()
+            | source.model_dump()
+            | {
+                "id": self._observation_ids.get(item.id, item.id),
+                "entity": self.entity_ref(item.entity),
+            }
         )
 
     def assertion(self, item: AssertionRecord) -> AssertionRecord:
@@ -215,10 +268,18 @@ class RestoreRemapper:
             if source is None:
                 raise inaccessible_reference()
             version = ScopedRef(**self.target.model_dump(), id=source.version_id)
+        imported = self._support_ids.get(item.id)
+        if imported and (
+            item.version is None
+            or (item.version.id, item.assertion.id) != imported[1:]
+            or item.status != "imported_unverified"
+        ):
+            raise inaccessible_reference()
         return SupportRecord.model_validate(
             item.model_dump()
             | self.target.model_dump()
             | {
+                "id": imported[0] if imported else item.id,
                 "assertion": self.assertion_ref(item.assertion),
                 "version": version,
                 "curation": self.curation_ref(item.curation) if item.curation else None,
@@ -301,13 +362,23 @@ class RestoreRemapper:
                 | {
                     "assertion": self.assertion(item.assertion.assertion),
                     "support": self.support(item.assertion.support),
+                    "subject_observation_id": self._observation_ids.get(
+                        item.assertion.subject_observation_id, item.assertion.subject_observation_id
+                    )
+                    if item.assertion.subject_observation_id is not None
+                    else None,
+                    "target_observation_id": self._observation_ids.get(
+                        item.assertion.target_observation_id, item.assertion.target_observation_id
+                    )
+                    if item.assertion.target_observation_id is not None
+                    else None,
                 }
             )
         node = self.manual_node(item.manual_node) if item.manual_node else None
         relation = self.manual_relation(item.manual_relation) if item.manual_relation else None
         return ProjectionBody(
             **self.target.model_dump(),
-            id=item.id,
+            id=(claim.support.id if claim else self._observation_ids.get(item.id, item.id)),
             source=source,
             curation=curation,
             kind=item.kind,

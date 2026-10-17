@@ -267,3 +267,18 @@ request left no active target. Both cases passed in 73.02 seconds. The unchanged
 native preparation/replay regression also passed with provider HTTP forbidden.
 Pre-call durable provider budgets and target storage quota admission still need
 completion before this helper is exposed as a public restore handler.
+
+The mixed native/legacy restore now stages resealed admitted import plans,
+original blobs/schema bindings, historical import-job seals, origins and typed
+source-qualified ID mappings. It validates mapping completeness and keeps the
+native and legacy preparation formats distinct. Imported observation/support IDs
+now match a fresh target reprocessing result, preventing duplicate identities.
+The real mixed-source flow passed in 55.01 seconds: native retrieval worked,
+legacy results remained excluded by default, explicit unverified retrieval and
+citation retained target-scoped provenance without invented spans. Mapping/seal/
+owner regressions and all 256 unit/protocol checks passed. A separate regression
+found and fixed inherited whitespace stripping in backup authority envelopes;
+ledger text, nested quotes and reasons now survive byte-faithful round trips.
+Previously inconsistent packages continue to fail integrity checks. Full retention,
+second physical placement, repair/generation work and public restore acceptance
+remain open.

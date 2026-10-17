@@ -51,15 +51,21 @@ def snapshot_document(blob: BlobRef, body: bytes) -> ParsedDocument:
 
 
 def owned_id(origin: ImportOrigin, kind: str, legacy_source: str, identifier: str) -> UUID:
+    return legacy_owned_id(origin, origin.origin, kind, legacy_source, identifier)
+
+
+def legacy_owned_id(
+    source: SourceVersion, origin: str, kind: str, legacy_source: str, identifier: str
+) -> UUID:
     return uuid5(
-        origin.org_id,
+        source.org_id,
         json.dumps(
             [
-                str(origin.kg_id),
-                str(origin.material_id),
-                str(origin.version_id),
+                str(source.kg_id),
+                str(source.material_id),
+                str(source.version_id),
                 "legacy",
-                origin.origin,
+                origin,
                 kind,
                 legacy_source,
                 identifier,
