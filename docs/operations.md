@@ -398,3 +398,18 @@ and retained the reviewed node; owner Operations/usage returned 200 and reader
 Operations returned 404. Its complete timed fixture and cleanup passed (822.06
 seconds including the configured 600-second viewing window). The preview is now
 closed; it holds the exclusive smoke-store lock while running.
+
+Private retained-object erasure now has a bounded, exact-key storage primitive
+and a typed physical-grace policy (`config/retention.example.json`). It inventories
+all versions/delete markers and unfinished uploads before deleting, checks current
+authority before each I/O, waits for in-flight calls even under repeated
+cancellation, and verifies absence. Prefix siblings and live originals remain
+untouched. The pinned SeaweedFS 4.48 endpoint supplies an upload-ID-only cursor
+and treats KeyMarker as equality; the implementation follows that cursor without
+inventing a key marker. Missing/nonadvancing cursors fail before mutation.
+The [pinned upstream implementation](https://github.com/seaweedfs/seaweedfs/blob/4.48/weed/s3api/filer_multipart.go#L1288)
+was checked after the real regression exposed skipped uploads. Twelve pure/real-S3
+checks passed in 24.49 seconds. The time policy defaults to 24-hour physical grace,
+10 targets, 100 records/page, 20 pages and 1,000 inventory records. These helpers
+are not yet wired to an owner cleanup job or an automatic sweep; original-storage
+quota refunds and inactive restore-target cleanup remain unfinished.

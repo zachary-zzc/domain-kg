@@ -1,0 +1,9 @@
+{
+  "grace_seconds": 86400,
+  "max_targets": 10,
+  "erasure": {
+    "page_size": 100,
+    "max_pages": 20,
+    "max_records": 1000
+  }
+}
