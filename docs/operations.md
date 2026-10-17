@@ -644,3 +644,25 @@ worked from committed revision `00c6bd3`. Latest offline distributions retain
 source SHA-256 `52d0c31669343ea228d7d275cb50ffe8ced7695351e27783189ec3c5a817d6f7`.
 Second physical-profile recovery, complete purged/history capture, generation
 retirement/model-schema migration and final evaluation remain open.
+
+
+Serial physical-profile recovery checkpoint (2026-10-18 local): a real retained
+backup with one native source and a human rename restored through the owner
+worker onto different Neo4j/Qdrant volumes/ports and a separate authority database
+on the same Mongo replica set. Original bytes, human provenance, lexical retrieval
+and denial of old reader/editor grants were verified. The stopped primary profile
+failed explicitly. Deleting one exact target vector made readiness fail; a real
+source repair restored readiness without providers. A new target-owner metadata
+edit then succeeded. Switching back recovered the primary data with its original
+name and without target-only tags. Only the fresh target projections and the
+drill-owned secondary authority database were cleaned; no volume was removed.
+
+The explicit physical case passed in 119.53 seconds (115.08-second call). Before
+switching, on secondary storage and after primary restoration, all four active
+databases had combined hard limits of 1.476 GB and disabled swap. Both switches
+used cached, pinned images with `--pull never --no-build`. The first attempt
+exposed an overlong test database suffix, failed safely and restored primary;
+shortening the fixture name corrected the harness. No application correction or
+actual model call was needed. This is a sequential capped-laptop drill, not a
+simultaneous multi-profile throughput benchmark. Required backup/quota/audit
+regressions are running separately; Task 18/19 remain open.
