@@ -1,0 +1,28 @@
+{
+  "source_url": "https://www.uhs.nhs.uk/Media/UHS-website-2019/Patientinformation/Childhealth/Your-childs-diabetes-annual-review-3077-PIL.pdf",
+  "title": "NHS: Your child's diabetes annual review",
+  "filename": "child-diabetes-annual-review.pdf",
+  "size_bytes": 412271,
+  "sha256": "71f29a55c38addc0efec1d23d1d8900d43e7a6208268e7e120df5ceb7dbf45b7",
+  "download_cap_bytes": 600000,
+  "parse": {
+    "max_pages": 8,
+    "max_expanded_bytes": 1048576,
+    "timeout_seconds": 30,
+    "ocr": false
+  },
+  "chunks": {
+    "target_tokens": 256,
+    "overlap_tokens": 32
+  },
+  "max_chunks": 24,
+  "provider_mode": "synthetic",
+  "actual_model_calls": 0,
+  "graph_fact": "annual review related_to diabetes (source wording only; no clinical inference)",
+  "browser_preview_seconds": 600,
+  "provider_overrides": {
+    "max_completion_tokens": 512,
+    "schema_in_context": false,
+    "timeout_seconds": 10
+  }
+}

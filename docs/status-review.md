@@ -7,6 +7,15 @@
 
 14 of 19 stages have passed local verification. Tasks 18–19 remain in progress;
 Tasks 3, 9 and 15 retain external gates. The demo does not establish release readiness.
+本次关系图补充已完成真实医学 PDF 回归：NHS 文件 412,271 字节、7 页，
+228 个原始文本块、15 个处理窗口、257 处原文定位通过。图谱为明确的受控抽取测试，
+含 2 节点、1 关系，实际模型调用 0 次，医学抽取质量门禁保持未完成。
+来源关系可打开对应的原文版本，人工关系继续查看人工修订历史。
+
+Real NHS PDF smoke passed with seven pages, 15 fitted chunks and 257 verified
+source spans. Extraction/embedding responses are controlled fixtures; the two-node
+example does not establish model or clinical quality.
+
 完整阶段记录见 [implementation progress](implementation-progress.md) 与
 [implementation plan](implementation-plan.md)。
 

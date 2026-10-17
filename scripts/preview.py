@@ -120,7 +120,8 @@ def run_owned(arguments: list[str], env: dict[str, str], *, timeout: int) -> Non
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args()
+    parser.add_argument("--medical-pdf", type=Path, help="Opt-in public medical PDF graph preview")
+    arguments = parser.parse_args()
     # Reuse the canonical budget validator without importing the application.
     spec = importlib.util.spec_from_file_location("preview_budgets", ROOT / "scripts/smoke.py")
     if spec is None or spec.loader is None:
@@ -141,6 +142,11 @@ def main() -> None:
             ),
         }
 
+        test_file = "test_console_browser.py"
+        if arguments.medical_pdf is not None:
+            environment["DOMAIN_KG_MEDICAL_PDF"] = str(arguments.medical_pdf.expanduser().resolve())
+            test_file = "test_medical_pdf.py"
+
         def interrupted(*_: object) -> None:
             raise KeyboardInterrupt
 
@@ -154,7 +160,7 @@ def main() -> None:
                     str(snapshot),
                     "--rootdir",
                     str(snapshot),
-                    str(snapshot / "tests/evaluation/test_console_browser.py"),
+                    str(snapshot / "tests/evaluation" / test_file),
                     "-q",
                     "-s",
                 ],

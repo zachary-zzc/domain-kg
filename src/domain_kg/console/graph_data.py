@@ -5,7 +5,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 from domain_kg.errors import DomainError, ErrorCode
-from domain_kg.graph.views import SubgraphView
+from domain_kg.graph.views import EdgeView, SubgraphView
 
 
 class GraphNode(TypedDict):
@@ -34,6 +34,7 @@ def graph_data(
     kg: UUID,
     *,
     include_unverified: bool = False,
+    org_id: UUID | None = None,
     material_id: UUID | None = None,
     version_id: UUID | None = None,
 ) -> GraphData:
@@ -47,7 +48,16 @@ def graph_data(
         or len(edge_ids) != len(view.edges)
         or any(node.kg_id != kg for node in view.nodes)
         or any(
-            edge.subject_id not in identifiers
+            (
+                edge.source is not None
+                and (
+                    edge.source.kg_id != kg
+                    or (org_id is not None and edge.source.org_id != org_id)
+                    or (material_id is not None and edge.source.material_id != material_id)
+                    or (version_id is not None and edge.source.version_id != version_id)
+                )
+            )
+            or edge.subject_id not in identifiers
             or edge.target_id not in identifiers
             or edge.status not in {"verified", "manual", "imported_unverified"}
             for edge in view.edges
@@ -60,6 +70,20 @@ def graph_data(
     if version_id is not None:
         query["version_id"] = str(version_id)
     suffix = "?" + urlencode(query)
+
+    def evidence_link(edge: EdgeView) -> str:
+        if edge.source is not None and edge.status != "manual":
+            evidence_query = {
+                "version_id": str(edge.source.version_id),
+                "include_unverified": query["include_unverified"],
+            }
+            return (
+                f"/admin/kgs/{kg}/materials/{edge.source.material_id}?"
+                + urlencode(evidence_query)
+                + "#source-context"
+            )
+        return f"/admin/kgs/{kg}/relations/{edge.assertion_id}/history{suffix}"
+
     return {
         "nodes": [
             {
@@ -76,7 +100,7 @@ def graph_data(
                 "target": str(edge.target_id),
                 "predicate": edge.predicate,
                 "status": edge.status,
-                "href": f"/admin/kgs/{kg}/relations/{edge.assertion_id}/history{suffix}",
+                "href": evidence_link(edge),
             }
             for edge in view.edges
         ],

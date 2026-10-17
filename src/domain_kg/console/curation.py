@@ -70,6 +70,7 @@ def curation_router(runtime: ServiceRuntime) -> APIRouter:
                 "graph_data": graph_data(
                     neighborhood,
                     kg_id,
+                    org_id=access.org_id,
                     include_unverified=include_unverified,
                     material_id=material_id,
                     version_id=version_id,

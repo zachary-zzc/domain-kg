@@ -104,3 +104,35 @@ def test_graph_json_and_fallback_names_are_escaped():
     parser = Data()
     parser.feed(rendered)
     assert parser.value["nodes"][0]["name"] == value.name
+
+
+def test_source_relationship_opens_its_exact_original_version():
+    from domain_kg.models import SourceVersion
+
+    org, kg, material, version = uuid4(), uuid4(), uuid4(), uuid4()
+    left, right = node(kg), node(kg)
+    fact = edge(left, right).model_copy(
+        update={
+            "source": SourceVersion(org_id=org, kg_id=kg, material_id=material, version_id=version)
+        }
+    )
+    view = SubgraphView(kg_id=kg, revision=1, nodes=(left, right), edges=(fact,))
+    href = graph_data(view, kg)["edges"][0]["href"]
+    assert f"/materials/{material}?" in href
+    assert f"version_id={version}" in href
+
+
+def test_manual_relationship_keeps_human_history_as_its_primary_evidence():
+    from domain_kg.models import SourceVersion
+
+    org, kg = uuid4(), uuid4()
+    left, right = node(kg), node(kg)
+    fact = edge(left, right, "manual").model_copy(
+        update={
+            "source": SourceVersion(org_id=org, kg_id=kg, material_id=uuid4(), version_id=uuid4())
+        }
+    )
+    view = SubgraphView(kg_id=kg, revision=1, nodes=(left, right), edges=(fact,))
+    assert "/relations/" in graph_data(view, kg)["edges"][0]["href"]
+    with pytest.raises(DomainError):
+        graph_data(view, kg, org_id=uuid4())

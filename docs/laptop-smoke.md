@@ -218,3 +218,49 @@ Language regression uses the local catalogue and synthetic providers; it makes n
 model calls. Run `uv run pytest tests/unit/test_console_i18n.py
  tests/integration/test_console.py tests/evaluation/test_console_flows.py -q`
 as one serial process against the already capped databases.
+
+### Graph and real medical PDF / 关系图与真实医学 PDF
+
+Node pages embed **neovis.js 2.1.0**, with Apache-2.0 and bundled notices retained.
+The renderer receives only a permission-filtered one-hop GraphService view, bounded
+to 25 nodes and 40 relationships. It never receives database connection settings.
+Physics stops after at most 80 iterations or a 1.5-second timer. Accessible text
+links remain available. Source relationships open their exact material version;
+human relationships open curation history. Original evidence stays authoritative.
+
+The public NHS fixture is **Your child's diabetes annual review**, downloaded from
+https://www.uhs.nhs.uk/Media/UHS-website-2019/Patientinformation/Childhealth/Your-childs-diabetes-annual-review-3077-PIL.pdf
+and retained outside Git at `~/.cache/domain-kg/smoke-medical/child-diabetes-annual-review.pdf`.
+Its pinned size/hash and explicit budgets are in `config/medical-pdf-smoke.json`.
+Actual file: 412,271 bytes (402.6 KiB), seven pages. Native parser RSS cap: 384 MiB;
+OCR disabled, maximum eight pages, 1 MiB expanded text and 30-second parse deadline.
+
+The smoke uses real original storage, native parsing, evidence, MongoDB, Neo4j and
+Qdrant with **controlled extraction/embedding responses**, not a live model.
+It verifies 228 blocks, 15 fitted chunks and 257 exact source spans, and publishes
+only a minimal two-concept / one-relationship graph from the document wording.
+This does not establish medical extraction quality, clinical validity or model throughput.
+The controlled profile budgets response-schema handling outside prompt context and
+reserves 512 output tokens; this reduced unnecessary splitting from 207 to 15 mock
+requests without weakening source/schema validation or changing production defaults.
+
+中文：该测试使用真实 PDF、原件存储、解析与证据账本。抽取和嵌入响应为受控夹具，
+实际模型调用为零；它验证软件流程，不代表医学模型质量。交互画布仍需人工查看：
+本机会话的浏览器自动化已关闭；已经通过的是脚本契约、页面数据与权限检查。
+
+```bash
+# Repeat only when needed; one storage suite at a time, no automatic download.
+DOMAIN_KG_MEDICAL_PDF="$HOME/.cache/domain-kg/smoke-medical/child-diabetes-annual-review.pdf" \
+  uv run pytest tests/evaluation/test_medical_pdf.py -q
+
+# Committed frozen preview, defaults to Chinese, ten-minute viewing window.
+uv run python scripts/preview.py --medical-pdf \
+  "$HOME/.cache/domain-kg/smoke-medical/child-diabetes-annual-review.pdf"
+
+# Fast JavaScript contracts; Node built-ins only, no browser or npm install.
+node --test tests/frontend/graph.test.cjs
+```
+
+The preview's test sessions and fixture/finish routes exist only in the isolated
+pytest process. No production login bypass is added; preview fixtures are cleaned
+when it exits. This lean medical preview does not run a background editing worker.

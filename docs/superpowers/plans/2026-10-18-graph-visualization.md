@@ -33,12 +33,12 @@ retain upstream/bundled licence notices and serve scripts locally under existing
 
 ## Stage 2 — Real medical document, bounded smoke
 
-- [ ] Verify the actual downloaded PDF bytes/hash, native parse without OCR, small
+- [x] Verify the actual downloaded PDF bytes/hash, native parse without OCR, small
   page/expanded-byte/time caps, chunks and exact evidence span resolution. Keep PDF
   and parsed content outside Git. Source: NHS Southampton, Your child's diabetes
   annual review, 412271 bytes, SHA256
   71f29a55c38addc0efec1d23d1d8900d43e7a6208268e7e120df5ceb7dbf45b7.
-- [ ] Exercise a source-scoped graph from that real document with the existing
+- [x] Exercise a source-scoped graph from that real document with the existing
   validated pipeline; clearly separate controlled fixture responses/manual facts
   from any actual model extraction. If trying the already approved 0.8B native
   model, limit to one short source window/request, CPU two threads, measured RSS,
