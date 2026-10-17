@@ -452,3 +452,10 @@ backup/restore fixture verified absent target catalog visibility before approval
 explicit synthetic target approval, activation/result navigation and reader/editor
 denial: two checks passed in 74.85 seconds. This is local fixture verification,
 not an external provider approval or the full multi-profile recovery drill.
+
+The updated controls also pass all 293 unit/protocol checks (11.10 seconds),
+Ruff and strict mypy across 215 source modules. A fresh offline distribution
+build/check passed: 247 wheel files, SHA-256
+`4d7e097c20e1b2fa73e62ff02b442490787c5736d52ff0919bb806bd30959c08`;
+250 source-archive files. This refresh is a local artifact check; the separate
+Linux image, remote CI and release acceptance remain open.

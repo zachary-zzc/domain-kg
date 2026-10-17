@@ -26,6 +26,7 @@ from domain_kg.operations.maintenance import MaintenanceService
 from domain_kg.operations.models import BackupCommand, RestoreCommand
 from domain_kg.operations.restore import RestoreService
 from domain_kg.operations.restore_targets import RestoreTargets
+from domain_kg.operations.retention import RetentionService
 from domain_kg.revisions.models import NodeChanges, NodeUpdate
 from domain_kg.revisions.service import RevisionService
 from domain_kg.settings import Settings
@@ -107,6 +108,7 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 public_url="http://localhost:28080",
                 oidc_issuer=state["issuer"],
                 oidc_client_id="console",
+                retention_config=PROFILE_PATH.with_name("retention.example.json"),
             ),
             identity_repository=identities,
             oidc_http_client=oidc,
@@ -128,12 +130,15 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
         # These fixture routes exist only in this opt-in pytest process and synthetic namespace.
         @app.get("/__smoke__/start/{role}")
         async def start(
-            role: str, view: Literal["catalog", "search", "operations", "restore_job"] = "catalog"
+            role: str,
+            view: Literal["catalog", "search", "operations", "restore_job", "backup"] = "catalog",
         ):
             assert role in ("owner", "editor", "reader")
             ticket = await app.state.identity.sessions.create(principals[role], org)
             destination = (
-                f"/admin/kgs/{job.kg_id}/jobs/{recovery.job_id}"
+                f"/admin/kgs/{job.kg_id}/backups/jobs/{backup.job_id}"
+                if view == "backup"
+                else f"/admin/kgs/{job.kg_id}/jobs/{recovery.job_id}"
                 if view == "restore_job"
                 else "/admin"
                 if view == "catalog"
@@ -155,6 +160,9 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 "node_id": str(alpha),
                 "restored_kg_id": str(target.target.kg_id),
                 "restore_job_id": str(recovery.job_id),
+                "backup_job_id": str(backup.job_id),
+                "placement_id": str(catalog[3].id),
+                "provider_profile_id": str(profile.id),
                 "curation_id": str(reviewed.revision_id),
             }
 
@@ -173,6 +181,8 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 async def run(self, leased):
                     if leased.kind == "maintenance":
                         await MaintenanceService(queue).run(leased)
+                    elif leased.kind == "retention":
+                        await RetentionService(queue).run(leased)
                     else:
                         await OwnerJobExecutor(queue).run(leased)
 
@@ -184,7 +194,8 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 )
                 while True:
                     leased = await queue.claim(
-                        "synthetic-preview-operations", kinds=("backup", "export", "maintenance")
+                        "synthetic-preview-operations",
+                        kinds=("backup", "export", "maintenance", "retention"),
                     )
                     if leased:
                         await runner.run_job(leased)
