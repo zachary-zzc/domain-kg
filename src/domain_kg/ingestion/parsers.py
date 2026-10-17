@@ -88,10 +88,14 @@ class Parser:
                     blob.model_dump_json(),
                     options.model_dump_json(),
                 ]
+                code_root = (await asyncio.to_thread(Path(__file__).resolve)).parents[2]
                 environment = {
                     "PATH": os.defpath,
                     "LC_ALL": "C",
                     "PYTHONUTF8": "1",
+                    # Bind the child to this server's trusted code, including
+                    # frozen previews; ambient editable installs are not authority.
+                    "PYTHONPATH": str(code_root),
                     "PYTHONDONTWRITEBYTECODE": "1",
                     "PYTHONHASHSEED": "0",
                     "TMPDIR": str(directory),

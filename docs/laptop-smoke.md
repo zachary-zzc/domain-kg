@@ -188,3 +188,20 @@ the complete restored-KG example; both modes use synthetic providers, one serial
 worker, the same database caps and the bounded preview lifetime. A cancelled
 target is never labelled as an activated restored KG. Numeric/string values for
 this option are rejected. This option does not start or download any local model.
+
+
+Use `uv run --no-sync python scripts/preview.py` for a preview pinned to the
+current Git commit. The launcher archives only committed source/test/public-config
+roots into a temporary directory, checks the 16 MiB snapshot bound and Docker
+RAM cap, and verifies child imports stay in that snapshot. Local `.env`, private
+`.local` files and Git metadata are not copied. Existing private environment
+configuration is read from the normal working directory. The temporary source
+copy is removed when the owned preview process ends. Source/template edits in
+the working tree can continue while this preview is running; keep dependency
+installs and backend changes deferred, and keep all storage tests serial. Restart
+the preview after the next phase commit to show that revision. Deadline or
+interruption signals stop only the launcher's owned process group.
+
+Parser children receive only the server's trusted code root in `PYTHONPATH`,
+independently of an ambient editable installation. Native parser network denial,
+write restrictions, resource limits and offline decoder settings remain active.

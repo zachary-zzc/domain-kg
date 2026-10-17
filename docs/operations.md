@@ -604,3 +604,22 @@ SHA-256 `85dd6f87cb44ea86e89a798c31655ab0af68eba06228fc6728e634a4c62a7164`;
 source archive 263 entries, SHA-256
 `81363e65e299f9ad5cc3b1a5004aacdf85e9b64dbf82c2880f8311ccbeadd96d`.
 Both passed the archive boundary checks. No Docker image or actual model call.
+
+
+Preview/source-isolation checkpoint (2026-10-18 local): the lightweight preview
+completed successfully in 647.47 seconds, including its 600-second viewing window
+and fixture teardown. Its startup/teardown portion was about 47 seconds versus
+about 96 seconds for the prior complete-restore preview. A new committed-source
+launcher isolates application/templates from working edits, using a bounded
+temporary Git archive, verified import roots and an owned child process group.
+Four snapshot/link/budget/deadline checks pass. Initial end-to-end startup exposed
+a real parser-child code-path mismatch: its sanitized environment lost the
+snapshot path and fell back toward the editable installation. The parser now
+sets `PYTHONPATH` to its own resolved code root; no sandbox/network permission was
+expanded. A real sandboxed two-step marker/parse check proves code matching even
+with an untrusted ambient path. The full 300-unit suite passed in 6.45 seconds;
+seven focused checks, including native memory/runtime refusal without heavy
+inputs and actual macOS network denial, passed in 6.16 seconds. Ruff/mypy pass for
+228 source modules. The launcher is committed before re-running its frozen HEAD
+so that this parser fix is included. End-to-end launcher startup remains pending
+at this checkpoint. Zero model calls; Docker caps unchanged.
