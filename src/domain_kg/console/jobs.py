@@ -13,6 +13,7 @@ from domain_kg.console.workspace import filters_for, read_context
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import Action
 from domain_kg.models import IdempotencyKey, PageRequest
+from domain_kg.operations.restore_results import RestoreResults
 from domain_kg.transport.runtime import ServiceRuntime
 
 
@@ -50,13 +51,14 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
         result = await runtime.queue.get(access, job_id)
         backup_url = None
         export_url = None
+        restore_url = None
         if any(grant.kg_id == kg_id and grant.role == "owner" for grant in access.grants):
             backup = await runtime.queue.database.jobs.find_one(
                 {
                     "org_id": str(access.org_id),
                     "kg_id": str(kg_id),
                     "id": str(job_id),
-                    "kind": {"$in": ["backup", "export"]},
+                    "kind": {"$in": ["backup", "export", "restore"]},
                 },
                 {"_id": 0, "id": 1, "kind": 1},
             )
@@ -64,6 +66,9 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
                 backup_url = f"/admin/kgs/{kg_id}/backups/jobs/{job_id}"
             elif backup and backup["kind"] == "export":
                 export_url = f"/admin/kgs/{kg_id}/exports/jobs/{job_id}"
+            elif backup and backup["kind"] == "restore" and result.stage == "ready":
+                restored = await RestoreResults(runtime.queue).get(access, kg_id, job_id)
+                restore_url = f"/admin/kgs/{restored.target.kg_id}/search"
         return await page(
             runtime,
             session,
@@ -75,6 +80,7 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
                 "job": result,
                 "backup_url": backup_url,
                 "export_url": export_url,
+                "restore_url": restore_url,
                 "command_key": str(uuid4()),
             },
             scope=scope,

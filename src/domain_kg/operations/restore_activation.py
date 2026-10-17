@@ -17,6 +17,7 @@ from domain_kg.operations.restore_authority import RestoreAuthority
 from domain_kg.operations.restore_fences import material_fences
 from domain_kg.operations.restore_preparation import PreparedRestore
 from domain_kg.operations.restore_projections import RestoredProjection
+from domain_kg.operations.restore_quota import RestoreQuota
 from domain_kg.operations.restore_results import RestoreResult, RestoreResults
 from domain_kg.providers.service import ProviderService
 from domain_kg.revisions.journal import PublicationJournal
@@ -129,6 +130,7 @@ class RestoreActivation(RestoreAuthority):
 
         async def commit(session: AsyncClientSession) -> None:
             await self._guard(job, staged, session)
+            await RestoreQuota(self.queue).accept(job, staged, access, session)
             if await self.bindings.approved(job) != (target, staged.binding.embedding):
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "Restore configuration changed.")
             source_ns = {"org_id": str(job.org_id), "kg_id": str(job.kg_id)}

@@ -73,6 +73,12 @@ async def test_failed_activation_never_publishes_or_grants_a_target(
         )
         raw = await queue.database.jobs.find_one(queue._scope(job))
         assert raw["stage"] != "ready" and not await queue.accepted(job)
+        quota = await queue.database.kg_quotas.find_one(ns)
+        assert quota["reserved_bytes"] > 0 and quota["committed_bytes"] == 0
+        reservation = await queue.database.restore_quota_reservations.find_one(
+            {"org_id": str(owner.org_id), "kg_id": str(source.kg_id), "id": str(job.target_id)}
+        )
+        assert reservation["state"] == "reserved" and reservation["accepted_at"] is None
     finally:
         await staged.binding.stores.vectors.client.delete_collection(
             staged.binding.stores.vectors.collection

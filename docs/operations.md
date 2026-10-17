@@ -294,3 +294,23 @@ an accessible target, finished its source job, and replayed a lost response in
 passed in 4.58 seconds; Ruff and strict mypy (198 sources) passed. Public restore
 admission/console controls still await storage/provider budgets and the remaining
 full restore gates.
+
+Restore preparation now reserves exact original-byte storage against both the
+organization and fresh target KG before provisioning/copying. Reservations bind
+the real current restore job, target, sealed package and source boundary. Two
+concurrent restores cannot claim the same remaining organization allowance;
+replays reserve once. Activation converts reserved bytes to committed bytes in
+its catalog/grant/publication transaction. Interrupted activation rolls back that
+conversion; failed inactive copies keep their reservation until actual cleanup.
+Four serial quota/console checks passed in 82.42 seconds, including rejection
+before provisioning, the real quota race, successful activation, owner-only
+restored-KG links and existing job controls. The interrupted-transaction check
+passed in 30.37 seconds. All 259 unit/protocol checks passed in 4.17 seconds,
+with Ruff and strict mypy (199 sources). No real provider was called.
+
+A completed restore job now links to its verified target search page. The owner
+link requires the sealed restore result; unfinished targets have no link. Ready
+backup/export/restore links are inside the status fragment so status refreshes
+show them. Reader access to the owner restore job and its target ID is denied.
+The public restore submission form remains pending provider pre-call budgets and
+the remaining retention/physical-placement acceptance checks.

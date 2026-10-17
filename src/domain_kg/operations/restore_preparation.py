@@ -15,6 +15,7 @@ from domain_kg.operations.package_reader import PackageReader
 from domain_kg.operations.resealing import RestoreArtifactLedger, RewrittenArtifact
 from domain_kg.operations.restore_embeddings import RestoreEmbeddings
 from domain_kg.operations.restore_inventory import MAX_METADATA, RestoreInventory
+from domain_kg.operations.restore_quota import RestoreQuota
 from domain_kg.operations.restore_stores import RestoreBinding, RestoreStores
 from domain_kg.operations.restore_targets import RestoreTargets
 from domain_kg.providers.service import ProviderService
@@ -104,6 +105,7 @@ class RestorePreparation:
         ledger = RestoreArtifactLedger(
             documents, ScopedRef(org_id=job.org_id, kg_id=job.kg_id, id=job.target_id)
         )
+        await RestoreQuota(self.queue).reserve(job, target, manifest, inventory.parts)
         binding = await self.bindings.provision(job)
         originals = []
         for part in inventory.parts:
