@@ -153,3 +153,40 @@ def test_profile_is_fail_closed_and_no_remote_plaintext_or_credentials_in_repr()
         ProviderConnection(ref="bad", endpoint="http://remote.example/v1", api_key="x")
     with pytest.raises(DomainError):
         ProviderRegistry().resolve(profile.id, profile.allowed_namespaces[0], restricted=False)
+
+
+async def test_truncated_output_is_rejected_but_its_actual_usage_is_counted():
+    chunk = source()
+    _, schema = proposal(chunk)
+    profile, connection = configured(chunk)
+    usage = []
+
+    async def noop(_):
+        pass
+
+    async def record(value):
+        usage.append(value)
+
+    client = ExtractionClient(
+        profile,
+        connection,
+        authorize=noop,
+        record_usage=record,
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {"finish_reason": "length", "message": {"content": '{"entities":['}}
+                    ],
+                    "usage": {"prompt_tokens": 123, "completion_tokens": 512},
+                },
+            )
+        ),
+    )
+    try:
+        with pytest.raises(DomainError):
+            await client.complete(chunk, schema)
+        assert len(usage) == 1 and usage[0].input_tokens == 123 and usage[0].output_tokens == 512
+    finally:
+        await client.close()

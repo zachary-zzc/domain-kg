@@ -26,6 +26,13 @@ class Usage(FrozenModel):
     output_tokens: int
 
 
+class ExtractionOutputLimit(DomainError):
+    """A safe, typed signal for explicitly bounded source splitting by a caller."""
+
+    def __init__(self) -> None:
+        super().__init__(ErrorCode.PROVIDER_UNAVAILABLE, "Extraction exceeded its output budget.")
+
+
 def strict_schema(value: dict[str, Any], string_limit: int | None = None) -> dict[str, Any]:
     """Normalize optional Pydantic properties to required nullable strict-schema fields."""
     result: dict[str, Any] = {}
@@ -179,20 +186,6 @@ class ExtractionClient:
                 result = json.loads(body)
                 choice = result["choices"][0]
                 message = choice["message"]
-                if (
-                    choice["finish_reason"] != "stop"
-                    or message.get("refusal")
-                    or message.get("tool_calls")
-                    or message.get("function_call")
-                ):
-                    raise unavailable()
-                from domain_kg.providers.compact import RefContent
-
-                content = (
-                    RefContent.model_validate_json(message["content"])
-                    if self.profile.extraction_format == "source_refs_v1"
-                    else ExtractionContent.model_validate_json(message["content"])
-                )
                 raw_usage = result["usage"]
                 counts = (raw_usage["prompt_tokens"], raw_usage["completion_tokens"])
                 if any(type(value) is not int or not 0 <= value <= 1_000_000 for value in counts):
@@ -207,6 +200,22 @@ class ExtractionClient:
                 if charge is not None:
                     await charge.report(used)
                 await self.record_usage(used)
+                if choice["finish_reason"] == "length":
+                    raise ExtractionOutputLimit()
+                if (
+                    choice["finish_reason"] != "stop"
+                    or message.get("refusal")
+                    or message.get("tool_calls")
+                    or message.get("function_call")
+                ):
+                    raise unavailable()
+                from domain_kg.providers.compact import RefContent
+
+                content = (
+                    RefContent.model_validate_json(message["content"])
+                    if self.profile.extraction_format == "source_refs_v1"
+                    else ExtractionContent.model_validate_json(message["content"])
+                )
             except (
                 httpx.HTTPError,
                 ValueError,

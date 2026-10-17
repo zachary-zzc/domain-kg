@@ -218,7 +218,9 @@ def extraction_steps(
         for _, profile in sorted(providers.registry.profiles.items(), key=lambda pair: str(pair[0]))
     )
     extract_hash = hashlib.sha256(
-        (chunk_step.input_hash + configuration + "strict-lightrag-1.5.7-v1").encode()
+        (
+            chunk_step.input_hash + configuration + "strict-lightrag-1.5.7-v2-cached-output-split"
+        ).encode()
     ).hexdigest()
     resolve_hash = hashlib.sha256(
         (extract_hash + "conservative-resolution-v1").encode()
@@ -257,6 +259,9 @@ def extraction_steps(
 
     async def extract(job: LeasedJob) -> Checkpoint:
         from domain_kg.ingestion.delta import accepted_delta
+        from domain_kg.ingestion.extraction_cache import cached_extraction
+        from domain_kg.ingestion.models import ExtractionBatch, ParsedChunk
+        from domain_kg.ingestion.output_splitting import extract_with_splitting
         from domain_kg.materials.restoration import reprocessing_permit
 
         wanted_hash = await current_extract_hash(job)
@@ -289,12 +294,30 @@ def extraction_steps(
         for chunk in document.chunks:
             await queue.authorize(job)
             reused = delta.extraction(chunk) if delta else None
+
+            async def produce(parent: ParsedChunk = chunk) -> ExtractionBatch:
+                async def fetch(item: ParsedChunk) -> ExtractionBatch:
+                    async def request() -> ExtractionBatch:
+                        return (
+                            await providers.extract(access, item, schema, restoration=permit)
+                            if permit is not None
+                            else await providers.extract(access, item, schema)
+                        )
+
+                    if item.id == parent.id:
+                        return await request()
+                    return await cached_extraction(
+                        queue, job, item, schema, profile.id, wanted_hash, request
+                    )
+
+                return await extract_with_splitting(parent, schema, profile.id, fetch)
+
             batches.append(
                 reused
                 if reused is not None
-                else await providers.extract(access, chunk, schema, restoration=permit)
-                if permit is not None
-                else await providers.extract(access, chunk, schema)
+                else await cached_extraction(
+                    queue, job, chunk, schema, profile.id, wanted_hash, produce
+                )
             )
         await providers.authorize_source(
             access,
