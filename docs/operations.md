@@ -517,3 +517,15 @@ manual history and later repair. Ruff/mypy pass for 227 source modules. Docker
 configured and active limits both measure 1.476 GB, swap disabled. Zero live model
 calls. Purged bindings and retired curation dependencies are explicitly refused;
 schema/model migration, UI/worker, hidden-source and backup drills remain open.
+
+
+Generation controls checkpoint (2026-10-17): the owner operations page and typed
+HTTP reindex command now share the same admission service. The dedicated
+`--generation-only` worker uses an empty provider registry and handles one kind
+serially. An empty-KG API/CSRF/cancel/retry/worker drill and five retained-source /
+material-fence / configuration / revoked-owner / MongoDB-abort checks passed.
+The light suite reported 297 passes and one failure in 405.12 seconds: the
+separate new backup/restore case exposed missing rebuild artifact ancestry in
+backup. That compatibility fix and its focused verification remain in progress;
+this checkpoint does not claim a wholly green backup suite. Zero live models.
+See [generation rebuild](generation-rebuild.md) for limits and commands.

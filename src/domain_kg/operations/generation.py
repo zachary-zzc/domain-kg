@@ -309,7 +309,9 @@ class GenerationService:
                     "publication_fence": lease.fence,
                     "publication_lease.lease_token": str(lease.lease_token),
                     "visibility_revision": operation.snapshot.visibility_revision,
-                    "configuration_epoch": operation.snapshot.configuration_epoch,
+                    "configuration_epoch": operation.snapshot.configuration_epoch
+                    if operation.snapshot.configuration_epoch
+                    else {"$in": [0, None]},
                 },
                 {
                     "$set": {

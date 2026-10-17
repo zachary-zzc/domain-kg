@@ -17,6 +17,7 @@ from domain_kg.jobs.runner import JobRunner
 from domain_kg.operations.backup import BackupService
 from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.operations.export import ExportService
+from domain_kg.operations.generation import GenerationService
 from domain_kg.operations.maintenance import MaintenanceService
 from domain_kg.operations.restore import RestoreService
 from domain_kg.operations.restore_cleanup import RestoreCleanupService
@@ -45,11 +46,14 @@ async def serve(
     maintenance_only: bool = False,
     retention_only: bool = False,
     restore_cleanup_only: bool = False,
+    generation_only: bool = False,
 ) -> None:
     runner.pipeline.require_configured()
     while True:
         kinds = (
-            ("restore_cleanup",)
+            ("generation",)
+            if generation_only
+            else ("restore_cleanup",)
             if restore_cleanup_only
             else ("retention",)
             if retention_only
@@ -99,6 +103,7 @@ async def main(
     maintenance_only: bool = False,
     retention_only: bool = False,
     restore_cleanup_only: bool = False,
+    generation_only: bool = False,
 ) -> None:
     settings = Settings()
     client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
@@ -117,10 +122,12 @@ async def main(
             or maintenance_only
             or retention_only
             or restore_cleanup_only
+            or generation_only
             else ProviderRegistry.from_file(settings.provider_config)
         )
         if not approved_providers.profiles and not (
-            restore_cleanup_only
+            generation_only
+            or restore_cleanup_only
             or retention_only
             or maintenance_only
             or repair_only
@@ -139,7 +146,9 @@ async def main(
         runner = JobRunner(
             queue,
             configured_pipeline(queue, providers),
-            operations=RestoreCleanupService(queue)
+            operations=GenerationService(queue)
+            if generation_only
+            else RestoreCleanupService(queue)
             if restore_cleanup_only
             else RetentionService(queue)
             if retention_only
@@ -174,6 +183,7 @@ async def main(
             maintenance_only=maintenance_only,
             retention_only=retention_only,
             restore_cleanup_only=restore_cleanup_only,
+            generation_only=generation_only,
         )
     finally:
         await router.close()
@@ -184,6 +194,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--generation-only",
+        action="store_true",
+        help="rebuild current index generations serially from sealed vectors without models",
+    )
     mode.add_argument(
         "--restore-cleanup-only",
         action="store_true",
@@ -257,6 +272,7 @@ if __name__ == "__main__":
                 maintenance_only=args.maintenance_only,
                 retention_only=args.retention_only,
                 restore_cleanup_only=args.restore_cleanup_only,
+                generation_only=args.generation_only,
             )
         )
     except DomainError as exc:

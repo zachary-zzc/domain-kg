@@ -21,6 +21,7 @@ from domain_kg.operations.metrics import ProviderUsage
 from domain_kg.operations.models import (
     BackupCommand,
     ExportCommand,
+    GenerationCommand,
     MaintenanceCommand,
     RestoreCleanupCommand,
     RestoreCommand,
@@ -42,6 +43,14 @@ def operation_router(runtime: ServiceRuntime) -> APIRouter:
     ) -> AccessContext:
         principal, member = await runtime.identity.actor(request, mutating=mutate)
         return await runtime.access(principal, (kg,), action, member.org_id)
+
+    @router.post("/kgs/{kg_id}/reindex", status_code=202)
+    async def generation(request: Request, kg_id: UUID, command: GenerationCommand) -> JobReceipt:
+        if command.kg_id != kg_id:
+            raise DomainError(ErrorCode.VALIDATION_ERROR, "Path and command identities must match.")
+        return await runtime.owner_operations.submit(
+            await access(request, kg_id, mutate=True, action=Action.CONFIGURE), command
+        )
 
     @router.post("/kgs/{kg_id}/backups", status_code=202)
     async def backup(request: Request, kg_id: UUID, command: BackupCommand) -> JobReceipt:

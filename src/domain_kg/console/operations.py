@@ -14,7 +14,7 @@ from domain_kg.errors import inaccessible_reference
 from domain_kg.identity.models import Action
 from domain_kg.models import PageRequest
 from domain_kg.operations.audit import AuditTrail
-from domain_kg.operations.models import MaintenanceCommand, RetentionCommand
+from domain_kg.operations.models import GenerationCommand, MaintenanceCommand, RetentionCommand
 from domain_kg.operations.projections import RepairCommand
 from domain_kg.transport.runtime import ServiceRuntime
 
@@ -47,6 +47,7 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
                 "backup_key": str(uuid4()),
                 "export_key": str(uuid4()),
                 "retention_key": str(uuid4()),
+                "generation_key": str(uuid4()),
                 "retention_policy": runtime.retention_policy,
             },
             scope=scope,
@@ -80,6 +81,24 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
         except (ValueError, ValidationError):
             raise invalid_form() from None
         result = await runtime.projections.repair_curation(access, command)
+        return redirect(f"/admin/kgs/{kg_id}/jobs/{result.job_id}")
+
+    @router.post("/kgs/{kg_id}/operations/reindex")
+    async def generation(request: Request, kg_id: UUID) -> RedirectResponse:
+        fields, _, access = await command_context(runtime, request, kg_id, Action.CONFIGURE)
+        try:
+            command = GenerationCommand.model_validate(
+                fields
+                | {
+                    "kg_id": kg_id,
+                    "expected_published_revision": int(
+                        fields.get("expected_published_revision", "")
+                    ),
+                }
+            )
+        except (ValueError, ValidationError):
+            raise invalid_form() from None
+        result = await runtime.owner_operations.submit(access, command)
         return redirect(f"/admin/kgs/{kg_id}/jobs/{result.job_id}")
 
     @router.post("/kgs/{kg_id}/operations/retention")
