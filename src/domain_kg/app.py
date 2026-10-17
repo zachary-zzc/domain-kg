@@ -91,7 +91,15 @@ def create_app(
         providers = providers or ProviderService(
             catalog.policy, catalog.router, ProviderRegistry.from_file(settings.provider_config)
         )
-        services = ServiceRuntime(identity, catalog, materials, providers)
+        from domain_kg.operations.retention_policy import RetentionPolicy
+
+        services = ServiceRuntime(
+            identity,
+            catalog,
+            materials,
+            providers,
+            retention_policy=RetentionPolicy.from_file(settings.retention_config),
+        )
     server: MCPServer[None] = SafeMCPServer(
         "domain_kg_mcp",
         version="0.1.0",

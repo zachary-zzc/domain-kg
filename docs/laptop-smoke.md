@@ -99,3 +99,30 @@ vector and lexical projections, checks them, then switches one publication. It
 preserves the original human actor, reason, scope and target revision counters.
 The API process and this native worker remain outside the Docker database budget;
 no native model is started by this command.
+
+## Expired package cleanup
+
+The Operations page requires an explicit choice of expired exports, backups or
+both. The server freezes the policy and target list at owner admission. Configure
+`DOMAIN_KG_RETENTION_CONFIG=config/retention.example.json` for the checked-in
+24-hour grace, ten-target and bounded object-listing settings. This laptop
+example also limits each package to 1,000 objects and 16 MiB of declared bytes;
+these limits are checked before reading all retained original bytes. Oversized
+packages fail closed and remain claimed for investigation. Server defaults
+cover the capture bounds (100,000 objects and 2 GiB). The file is read
+with a 64 KiB cap; unknown fields and unsafe bounds are rejected. Changes apply
+to new jobs after restart. Existing plans retain their admitted policy.
+
+```bash
+# One owner-approved expired-package job, serially; no provider file or model.
+uv run --no-sync python -m domain_kg.worker --retention-only --once
+```
+
+`POST /api/v1/kgs/{kg_id}/retention` accepts only `kg_id`,
+`expected_published_revision`, `resources` (`backups`, `exports`, `both`) and
+`idempotency_key`. The ordinary worker and backup/export worker skip these jobs.
+A cancelled/failed cleanup keeps its exact claim: retry the original job to
+resume. No automatic timer or broad bucket cleanup is enabled. Storage-profile or
+configuration changes fence execution; clearing copies in an older placement
+requires a separate retained-storage permit. This command does not clear failed
+restore targets or refund live original-storage quota.

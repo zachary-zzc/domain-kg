@@ -410,9 +410,13 @@ inventing a key marker. Missing/nonadvancing cursors fail before mutation.
 The [pinned upstream implementation](https://github.com/seaweedfs/seaweedfs/blob/4.48/weed/s3api/filer_multipart.go#L1288)
 was checked after the real regression exposed skipped uploads. Twelve pure/real-S3
 checks passed in 24.49 seconds. The time policy defaults to 24-hour physical grace,
-10 targets, 100 records/page, 20 pages and 1,000 inventory records. These helpers
-are not yet wired to an owner cleanup job or an automatic sweep; original-storage
-quota refunds and inactive restore-target cleanup remain unfinished.
+10 targets, 100 records/page, 20 pages and 1,000 inventory records. They now back an explicit current-owner retention job, with a frozen cutoff,
+scoped target claims, durable verified object inventory and lease/permission
+checks around destructive I/O. Ordinary workers skip it; the separate
+`--retention-only` worker makes no provider calls. The HTTP/console controls
+require an explicit resource selection and CSRF where applicable. No automatic
+sweep is enabled; original-storage quota refunds and inactive restore-target
+cleanup remain unfinished.
 
 Deployment preparation now includes a digest-pinned Python runtime Dockerfile,
 hashed runtime dependency export, non-root UID/GID 10001 and a read-only CI
@@ -421,9 +425,20 @@ remote workflow/deployment was triggered. Offline wheel/source builds succeeded;
 a new distribution checker prevents developer/private paths from entering the
 source archive while requiring application and console assets in the wheel.
 The original broad source archive reproduced a developer-log inclusion failure;
-the allowlist fix and five artifact-boundary checks pass. The current complete
-unit/protocol suite is 286 passing checks (14.83 seconds), Ruff and strict mypy
-cover 210 sources. The final local wheel has 242 files (SHA-256
+the allowlist fix and five artifact-boundary checks pass. At that packaging checkpoint the complete
+unit/protocol suite had 286 passing checks (14.83 seconds), Ruff and strict mypy
+cover 210 sources. The packaging-checkpoint wheel has 242 files (SHA-256
 `b98633876e43df759da70f3ab6efb7df3e8516a27d8303c0898d1eb92c1c3a27`);
 its source archive has 245 files. Deployment accounts, Linux image/parser startup
 and external CI still need their real acceptance checks. See `docs/deployment.md`.
+
+Expired-package cleanup is now locally verified. Seven focused intent/execution/
+backup/console checks passed in 135.71 seconds. A further 293-check light/real-store
+run passed in 88.58 seconds, including configuration-change inspection and corrupt
+backup boundaries. The final 294-check regression passed in 49.56 seconds and
+covers actual cancellation followed by a new lease/attempt, lost-response replay,
+preflight byte rejection before content I/O, immutable plan scope and live-byte
+preservation. Ruff and strict mypy pass for 214 source modules. The Docker budget
+was rechecked at 1.476 GB configured/running hard limits, swap disabled. No native
+or remote model request was made. Task 18 remains open for the separate recovery,
+migration, retention and deployment gates.

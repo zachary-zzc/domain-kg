@@ -48,6 +48,7 @@ class JobCommand(Namespace):
         "backup",
         "restore",
         "maintenance",
+        "retention",
         "restore_material",
         "reprocess_material",
         "purge_material",

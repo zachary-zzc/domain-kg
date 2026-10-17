@@ -19,6 +19,7 @@ from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.operations.export import ExportService
 from domain_kg.operations.maintenance import MaintenanceService
 from domain_kg.operations.restore import RestoreService
+from domain_kg.operations.retention import RetentionService
 from domain_kg.providers.profiles import ProviderRegistry
 from domain_kg.providers.service import ProviderService
 from domain_kg.settings import Settings
@@ -41,11 +42,14 @@ async def serve(
     operations_only: bool = False,
     kg_restore_only: bool = False,
     maintenance_only: bool = False,
+    retention_only: bool = False,
 ) -> None:
     runner.pipeline.require_configured()
     while True:
         kinds = (
-            ("maintenance",)
+            ("retention",)
+            if retention_only
+            else ("maintenance",)
             if maintenance_only
             else ("restore",)
             if kg_restore_only
@@ -89,6 +93,7 @@ async def main(
     operations_only: bool = False,
     kg_restore_only: bool = False,
     maintenance_only: bool = False,
+    retention_only: bool = False,
 ) -> None:
     settings = Settings()
     client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
@@ -101,11 +106,12 @@ async def main(
         queue = JobQueue(policy, router)
         approved_providers = (
             ProviderRegistry()
-            if backup_only or export_only or operations_only or maintenance_only
+            if backup_only or export_only or operations_only or maintenance_only or retention_only
             else ProviderRegistry.from_file(settings.provider_config)
         )
         if not approved_providers.profiles and not (
-            maintenance_only
+            retention_only
+            or maintenance_only
             or repair_only
             or restore_only
             or curation_only
@@ -122,7 +128,9 @@ async def main(
         runner = JobRunner(
             queue,
             configured_pipeline(queue, providers),
-            operations=MaintenanceService(queue)
+            operations=RetentionService(queue)
+            if retention_only
+            else MaintenanceService(queue)
             if maintenance_only
             else RestoreService(queue, providers)
             if kg_restore_only
@@ -151,6 +159,7 @@ async def main(
             operations_only=operations_only,
             kg_restore_only=kg_restore_only,
             maintenance_only=maintenance_only,
+            retention_only=retention_only,
         )
     finally:
         await router.close()
@@ -161,6 +170,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--retention-only",
+        action="store_true",
+        help="erase explicitly selected expired backups and exports serially without models",
+    )
     mode.add_argument(
         "--maintenance-only",
         action="store_true",
@@ -222,6 +236,7 @@ if __name__ == "__main__":
                 operations_only=args.operations_only,
                 kg_restore_only=args.kg_restore_only,
                 maintenance_only=args.maintenance_only,
+                retention_only=args.retention_only,
             )
         )
     except DomainError as exc:

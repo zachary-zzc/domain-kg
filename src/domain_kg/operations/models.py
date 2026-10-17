@@ -9,7 +9,7 @@ from domain_kg.identity.models import Principal
 from domain_kg.models import SHA256, FrozenModel, IdempotencyKey, Namespace, NonNegative, ScopedRef
 from domain_kg.retrieval.models import SearchFilters
 
-OwnerOperationKind = Literal["backup", "export", "restore", "maintenance"]
+OwnerOperationKind = Literal["backup", "export", "restore", "maintenance", "retention"]
 
 
 class BackupCommand(FrozenModel):
@@ -49,8 +49,17 @@ class MaintenanceCommand(FrozenModel):
     idempotency_key: IdempotencyKey
 
 
+class RetentionCommand(FrozenModel):
+    kind: Literal["retention"] = "retention"
+    kg_id: UUID
+    expected_published_revision: NonNegative
+    resources: Literal["backups", "exports", "both"]
+    idempotency_key: IdempotencyKey
+
+
 OwnerCommand = Annotated[
-    BackupCommand | ExportCommand | RestoreCommand | MaintenanceCommand, Field(discriminator="kind")
+    BackupCommand | ExportCommand | RestoreCommand | MaintenanceCommand | RetentionCommand,
+    Field(discriminator="kind"),
 ]
 
 

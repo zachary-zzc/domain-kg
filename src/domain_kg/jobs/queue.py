@@ -152,7 +152,7 @@ class JobQueue:
 
     @staticmethod
     def _action(kind: str) -> Action:
-        if kind in ("backup", "export", "restore", "maintenance"):
+        if kind in ("backup", "export", "restore", "maintenance", "retention"):
             from domain_kg.operations.jobs import operation_action
 
             return operation_action(kind)
@@ -371,6 +371,7 @@ class JobQueue:
                 "export",
                 "restore",
                 "maintenance",
+                "retention",
             }
         ):
             raise ValueError("job kinds require a configured handler")
@@ -452,7 +453,7 @@ class JobQueue:
             org_id=job.org_id,
             session=session,
         )
-        if job.kind in ("backup", "export", "restore", "maintenance"):
+        if job.kind in ("backup", "export", "restore", "maintenance", "retention"):
             from domain_kg.operations.jobs import OwnerOperations
 
             await OwnerOperations(self).authorize(access, raw, session)
@@ -747,6 +748,11 @@ class JobQueue:
             raise lease_conflict()
 
     async def finish(self, job: LeasedJob) -> None:
+        if job.kind == "retention":
+            from domain_kg.operations.retention_results import RetentionResults
+
+            if await RetentionResults(self).accepted(job):
+                return
         if job.kind == "maintenance":
             from domain_kg.operations.maintenance_results import MaintenanceResults
 
@@ -767,7 +773,7 @@ class JobQueue:
 
             if await ExportService(self).accepted(job):
                 return
-        if job.kind in ("backup", "export", "restore", "maintenance"):
+        if job.kind in ("backup", "export", "restore", "maintenance", "retention"):
             await self.authorize(job)
             raise DomainError(
                 ErrorCode.REVISION_NOT_READY, "The operation has no verified package."
@@ -819,6 +825,10 @@ class JobQueue:
         await self.transactions.transaction(commit)
 
     async def accepted(self, job: LeasedJob) -> bool:
+        if job.kind == "retention":
+            from domain_kg.operations.retention_results import RetentionResults
+
+            return await RetentionResults(self).accepted(job)
         if job.kind == "maintenance":
             from domain_kg.operations.maintenance_results import MaintenanceResults
 
@@ -904,7 +914,7 @@ class JobQueue:
         )
         if raw is None:
             raise inaccessible_reference()
-        if raw["kind"] in ("backup", "export", "restore", "maintenance"):
+        if raw["kind"] in ("backup", "export", "restore", "maintenance", "retention"):
             from domain_kg.operations.jobs import OwnerOperations
 
             await OwnerOperations(self).authorize(current, raw, session)
@@ -1034,7 +1044,7 @@ class JobQueue:
                 },
                 session=session,
             )
-            if raw["kind"] in ("backup", "export", "restore", "maintenance"):
+            if raw["kind"] in ("backup", "export", "restore", "maintenance", "retention"):
                 from domain_kg.operations.jobs import OwnerOperations
 
                 operations = OwnerOperations(self)

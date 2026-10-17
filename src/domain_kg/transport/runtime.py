@@ -16,8 +16,10 @@ from domain_kg.materials.inspection import MaterialInspection
 from domain_kg.materials.lifecycle import MaterialLifecycle
 from domain_kg.materials.management import MaterialManagement
 from domain_kg.materials.service import MaterialService
+from domain_kg.operations.jobs import OwnerOperations
 from domain_kg.operations.metrics import UsageMetrics
 from domain_kg.operations.projections import ProjectionManagement
+from domain_kg.operations.retention_policy import RetentionPolicy
 from domain_kg.providers.service import ProviderService
 from domain_kg.retrieval.service import RetrievalService
 from domain_kg.revisions.service import RevisionService
@@ -30,10 +32,14 @@ class ServiceRuntime:
         catalog: CatalogService,
         materials: MaterialService,
         providers: ProviderService,
+        *,
+        retention_policy: RetentionPolicy | None = None,
     ) -> None:
         self.identity, self.catalog = identity, catalog
         self.policy, self.materials, self.providers = catalog.policy, materials, providers
         self.queue = JobQueue(self.policy, catalog.router)
+        self.retention_policy = retention_policy or RetentionPolicy()
+        self.owner_operations = OwnerOperations(self.queue, self.retention_policy)
         self.job_inspection = JobInspection(self.queue)
         self.inspection = MaterialInspection(self.queue)
         self.management = MaterialManagement(self.queue)

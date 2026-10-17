@@ -14,8 +14,9 @@ from domain_kg.materials.service import digest
 from domain_kg.models import ScopedRef
 from domain_kg.operations.audit import AuditTrail
 from domain_kg.operations.models import OwnerCommand, OwnerOperation, SnapshotPointer
+from domain_kg.operations.retention_policy import RetentionPolicy
 
-OWNER_KINDS = frozenset({"backup", "export", "restore", "maintenance"})
+OWNER_KINDS = frozenset({"backup", "export", "restore", "maintenance", "retention"})
 
 
 def operation_action(kind: str) -> Action:
@@ -31,8 +32,9 @@ def operation_action(kind: str) -> Action:
 
 
 class OwnerOperations:
-    def __init__(self, queue: JobQueue) -> None:
+    def __init__(self, queue: JobQueue, retention_policy: RetentionPolicy | None = None) -> None:
         self.queue, self.database = queue, queue.database
+        self.retention_policy = retention_policy or RetentionPolicy()
         self.audit = AuditTrail(queue)
 
     async def initialize(self) -> None:
@@ -94,6 +96,13 @@ class OwnerOperations:
             from domain_kg.operations.maintenance_targets import MaintenanceTargets
 
             await MaintenanceTargets(self.queue).record(record, session)
+        elif record.command.kind == "retention":
+            from domain_kg.operations.retention_targets import RetentionTargets, invalid
+
+            try:
+                await RetentionTargets(self.queue).record(record, session)
+            except (ValidationError, KeyError, TypeError, ValueError):
+                raise invalid() from None
         return record
 
     async def submit(self, access: AccessContext, command: OwnerCommand) -> JobReceipt:
@@ -112,6 +121,10 @@ class OwnerOperations:
             from domain_kg.operations.maintenance_targets import MaintenanceTargets
 
             await MaintenanceTargets(self.queue).initialize()
+        elif command.kind == "retention":
+            from domain_kg.operations.retention_targets import RetentionTargets
+
+            await RetentionTargets(self.queue).initialize()
         key = self.queue.transactions.key(current, command.kg_id, command.idempotency_key)
         fingerprint = digest(command.model_dump(mode="json"))
         operation_id, job_id = uuid4(), uuid4()
@@ -195,6 +208,15 @@ class OwnerOperations:
                 from domain_kg.operations.maintenance_targets import MaintenanceTargets
 
                 await MaintenanceTargets(self.queue).allocate(current, record, session)
+            elif command.kind == "retention":
+                from domain_kg.operations.retention_targets import RetentionTargets, invalid
+
+                try:
+                    await RetentionTargets(self.queue, self.retention_policy).allocate(
+                        record, session
+                    )
+                except (ValidationError, KeyError, TypeError, ValueError):
+                    raise invalid() from None
             raw = job.model_dump(mode="json") | {
                 "actor": current.principal.model_dump(mode="json"),
                 "stage": "queued",
