@@ -44,5 +44,15 @@ retain upstream/bundled licence notices and serve scripts locally under existing
   model, limit to one short source window/request, CPU two threads, measured RSS,
   and stop the owned process. Never silently publish invalid extraction or claim
   synthetic responses establish medical/model quality.
-- [ ] Run storage checks serially under the existing Docker 1.5 GB cap; commit the
+- [x] Run storage checks serially under the existing Docker 1.5 GB cap; commit the
   evidence/docs and refresh a frozen bilingual preview with a clear graph entry.
+
+Verification record: stage 1 Python 11 passed in 41.67 seconds and Node 3 passed
+in 0.10 seconds. Full unit regression after the source-navigation review: 313
+passed in 6.77 seconds. Whole real-PDF pipeline and page checks passed in 28.98
+seconds, then the combined unit/PDF cohort passed 313 in 28.67 seconds. Ruff and
+strict mypy (231 modules) passed. The fresh frozen preview was checked over real
+HTTP for both languages, two nodes/one edge, exact source-version links and pinned
+assets; CSP remained unchanged. Canvas appearance/dragging remains **unobserved**
+because browser automation is disabled in Work settings. The timed viewing
+window's pytest is pending while the preview remains available.

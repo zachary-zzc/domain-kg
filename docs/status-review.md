@@ -12,6 +12,9 @@ Tasks 3, 9 and 15 retain external gates. The demo does not establish release rea
 含 2 节点、1 关系，实际模型调用 0 次，医学抽取质量门禁保持未完成。
 来源关系可打开对应的原文版本，人工关系继续查看人工修订历史。
 
+[本轮医学关系图预览 / Medical graph preview](http://localhost:28080/__smoke__/start/owner?lang=zh-CN)
+（隔离预览存活约 10 分钟；页面顶部切换 English；此精简模式不运行编辑工作进程）。
+
 Real NHS PDF smoke passed with seven pages, 15 fitted chunks and 257 verified
 source spans. Extraction/embedding responses are controlled fixtures; the two-node
 example does not establish model or clinical quality.
