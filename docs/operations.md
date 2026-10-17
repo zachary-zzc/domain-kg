@@ -413,3 +413,17 @@ checks passed in 24.49 seconds. The time policy defaults to 24-hour physical gra
 10 targets, 100 records/page, 20 pages and 1,000 inventory records. These helpers
 are not yet wired to an owner cleanup job or an automatic sweep; original-storage
 quota refunds and inactive restore-target cleanup remain unfinished.
+
+Deployment preparation now includes a digest-pinned Python runtime Dockerfile,
+hashed runtime dependency export, non-root UID/GID 10001 and a read-only CI
+workflow with pinned official action commits. No image was built or run and no
+remote workflow/deployment was triggered. Offline wheel/source builds succeeded;
+a new distribution checker prevents developer/private paths from entering the
+source archive while requiring application and console assets in the wheel.
+The original broad source archive reproduced a developer-log inclusion failure;
+the allowlist fix and five artifact-boundary checks pass. The current complete
+unit/protocol suite is 286 passing checks (14.83 seconds), Ruff and strict mypy
+cover 210 sources. The final local wheel has 242 files (SHA-256
+`b98633876e43df759da70f3ab6efb7df3e8516a27d8303c0898d1eb92c1c3a27`);
+its source archive has 245 files. Deployment accounts, Linux image/parser startup
+and external CI still need their real acceptance checks. See `docs/deployment.md`.

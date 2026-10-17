@@ -69,3 +69,5 @@ The initial vertical slice is: an authorized editor uploads a PDF into one KG, a
 Legacy Word `.doc` files require an explicitly configured conversion worker; Google Docs require export or a future connector. Additional office formats, rich figure understanding, community summaries, and temporal reasoning are staged extensions.
 
 The repository has no production credentials, copied corpus, or provider configuration. It has no GitHub remote. Existing skill installation details are retained in the research document; this design revision does not install or modify skills.
+
+Deployment artifacts, runtime roles, credential boundaries and unverified release gates are documented in [deployment preparation](docs/deployment.md).

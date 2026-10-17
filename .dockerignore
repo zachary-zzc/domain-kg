@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!requirements.lock
+!dist/
+dist/**
+!dist/*.whl
