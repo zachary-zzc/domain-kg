@@ -9,6 +9,9 @@ from domain_kg.graph.curation_models import ManualNode
 from domain_kg.graph.identity_models import ManualIdentity
 from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.models import DomainSchema
+from domain_kg.imports.legacy_models import LegacyGraph
+from domain_kg.imports.prepared import PreparedImport
+from domain_kg.imports.provenance import ImportOrigin
 from domain_kg.ingestion.models import ExtractionBatch, ParsedBlock, ParsedChunk, ParsedDocument
 from domain_kg.ingestion.resolved import (
     ExtractionArtifact,
@@ -20,6 +23,7 @@ from domain_kg.jobs.models import Checkpoint
 from domain_kg.materials.models import BlobRef
 from domain_kg.models import SourceVersion
 from domain_kg.operations.remapping import RestoreRemapper
+from domain_kg.operations.restore_imports import RestoredImport, checksum
 from domain_kg.providers.embeddings import EmbeddingProfile
 from domain_kg.revisions.projections import (
     CurationEmbeddedDocument,
@@ -29,15 +33,37 @@ from domain_kg.revisions.projections import (
 
 
 class RestoreDocuments:
-    def __init__(self, mapping: RestoreRemapper, *, originals: tuple[BlobRef, ...]) -> None:
+    def __init__(
+        self,
+        mapping: RestoreRemapper,
+        *,
+        originals: tuple[BlobRef, ...],
+        imports: tuple[RestoredImport, ...] = (),
+    ) -> None:
         self.mapping = mapping
+        if (
+            len(imports) > 10000
+            or sum(len(i.graph.entities) + len(i.graph.relations) for i in imports) > 100000
+        ):
+            raise DomainError(ErrorCode.QUOTA_EXCEEDED, "Restore import inventory is too large.")
+        self.imports = {item.original: RestoredImport.model_validate(item) for item in imports}
+        if len(self.imports) != len(imports):
+            raise inaccessible_reference()
+        self.import_sources = {
+            self.owner_from_origin(item.original): item for item in self.imports.values()
+        }
+        if len(self.import_sources) != len(self.imports):
+            raise inaccessible_reference()
+        for item in self.imports.values():
+            if mapping.source(item.original) != RestoreDocuments.owner_from_origin(item.origin):
+                raise inaccessible_reference()
         if len(originals) > 10000:
             raise DomainError(ErrorCode.QUOTA_EXCEEDED, "Restore source inventory is too large.")
         self.originals = {item.version_id: item for item in originals}
         if len(self.originals) != len(originals):
             raise inaccessible_reference()
-        for item in originals:
-            mapping.source(self.owner(item))
+        for original in originals:
+            mapping.source(self.owner(original))
 
     @staticmethod
     def owner(blob: BlobRef) -> SourceVersion:
@@ -47,6 +73,57 @@ class RestoreDocuments:
             material_id=blob.material_id,
             version_id=blob.version_id,
         )
+
+    @staticmethod
+    def owner_from_origin(origin: ImportOrigin) -> SourceVersion:
+        return SourceVersion(**{k: getattr(origin, k) for k in SourceVersion.model_fields})
+
+    def import_origin(self, origin: ImportOrigin) -> ImportOrigin:
+        result = self.imports.get(origin)
+        if result is None:
+            raise self.inconsistent()
+        return result.origin
+
+    def legacy(self, graph: LegacyGraph, owner: SourceVersion) -> LegacyGraph:
+        self.mapping.source(owner)
+        bundle = self.import_sources.get(owner)
+        if bundle is None or checksum(graph) != bundle.original.graph_hash:
+            raise self.inconsistent()
+        return bundle.graph
+
+    def prepared(
+        self, item: PreparedImport, checkpoint: Callable[[Checkpoint], Checkpoint]
+    ) -> PreparedImport:
+        try:
+            item = PreparedImport.model_validate(item)
+            rewritten = checkpoint(item.chunk_checkpoint)
+            old = item.chunk_checkpoint
+            if (
+                rewritten.org_id,
+                rewritten.kg_id,
+                rewritten.job_id,
+                rewritten.stage,
+                rewritten.artifact_id,
+            ) != (
+                self.mapping.target.org_id,
+                self.mapping.target.kg_id,
+                old.job_id,
+                old.stage,
+                old.artifact_id,
+            ):
+                raise self.inconsistent()
+            return PreparedImport.model_validate(
+                item.model_dump()
+                | self.mapping.source(item).model_dump()
+                | {
+                    "import_origin": self.import_origin(item.import_origin),
+                    "domain_schema": self.schema(item.domain_schema),
+                    "chunk_checkpoint": rewritten,
+                    "rows": tuple(self.mapping.projection_body(row) for row in item.rows),
+                }
+            )
+        except ValidationError:
+            raise self.inconsistent() from None
 
     def original(self, blob: BlobRef) -> BlobRef:
         source = self.mapping.source(self.owner(blob))
@@ -198,10 +275,6 @@ class RestoreDocuments:
             self.mapping.target.kg_id,
         ):
             raise inaccessible_reference()
-        if item.import_origin is not None:
-            raise DomainError(
-                ErrorCode.UNSUPPORTED_FORMAT, "Import provenance must be resealed separately."
-            )
         try:
             item = EmbeddedDocument.model_validate(item)
             rows = self._projection_rows(item.rows, item.profile, profile, vectors)
@@ -226,6 +299,9 @@ class RestoreDocuments:
                     "resolved_checkpoint": resolved,
                     "profile": profile,
                     "profile_selection_revision": 1,
+                    "import_origin": self.import_origin(item.import_origin)
+                    if item.import_origin
+                    else None,
                     "rows": tuple(rows),
                 }
             )

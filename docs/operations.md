@@ -161,6 +161,15 @@ hashes and explicit original/restored artifact provenance; active leases are not
 part of that representation. Native source and human projection documents reuse
 vectors only when the embedding space, dimensions, model and text agree. Changed
 text or spaces require fresh validated vectors. These are pure assembly helpers;
-alternative history chains, imported artifact provenance and full activation
+alternative history chains and full activation
 remain unfinished. Their focused tests and the full 229 unit/protocol checks
 passed in 4.19 seconds, with Ruff and strict mypy (178 sources). No model ran.
+
+Legacy import preparation now has a separate typed path. It checks original
+bytes against the old sealed graph, parses those same bytes for the target
+namespace, verifies canonical identity mappings, and reseals plan/graph/origin
+hashes. The namespace-dependent normalized hash and record ordering are rebuilt;
+raw content hashes and origin text stay exact. Prepared and embedded rows keep
+`imported_unverified` status without fabricated extraction provenance or spans.
+Four focused cases passed, and all 233 unit/protocol checks passed in 4.27 seconds;
+Ruff and strict mypy (179 sources) passed. This still does not activate a KG.

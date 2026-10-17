@@ -5,9 +5,11 @@ from dataclasses import dataclass, field
 from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import ValidationError, model_validator
+from pydantic import TypeAdapter, ValidationError, model_validator
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
+from domain_kg.imports.legacy_models import LegacyGraph
+from domain_kg.imports.prepared import PreparedImport
 from domain_kg.ingestion.models import ParsedDocument
 from domain_kg.ingestion.resolution import fingerprint
 from domain_kg.ingestion.resolved import ExtractionArtifact, ResolvedDocument
@@ -137,7 +139,14 @@ class RestoreArtifactLedger:
                 raise self.inconsistent()
             hashes = (self._checkpoints[dependency][1].output_hash,)
         canonical = ""
-        rewritten: BlobRef | ParsedDocument | ExtractionArtifact | ResolvedDocument
+        rewritten: (
+            BlobRef
+            | ParsedDocument
+            | ExtractionArtifact
+            | ResolvedDocument
+            | LegacyGraph
+            | PreparedImport
+        )
         if checkpoint.stage == "validating":
             original = BlobRef.model_validate_json(body)
             if self.documents.owner(original) != owner:
@@ -150,25 +159,35 @@ class RestoreArtifactLedger:
                 raise self.inconsistent()
             rewritten = self.documents.parsed(parsed)
         elif checkpoint.stage == "extracting":
-            extraction = ExtractionArtifact.model_validate_json(body)
-            if self.documents.mapping.source(extraction) != self.documents.mapping.source(owner):
-                raise self.inconsistent()
-            if self._stages.get((artifact.job_id, "chunking")) != extraction.chunk_artifact_id:
-                raise self.inconsistent()
+            extraction = TypeAdapter(ExtractionArtifact | LegacyGraph).validate_json(body)
             canonical = hashlib.sha256(extraction.model_dump_json().encode()).hexdigest()
-            rewritten = self.documents.extraction(extraction)
+            if isinstance(extraction, LegacyGraph):
+                rewritten = self.documents.legacy(extraction, owner)
+            else:
+                if self.documents.mapping.source(extraction) != self.documents.mapping.source(
+                    owner
+                ):
+                    raise self.inconsistent()
+                if self._stages.get((artifact.job_id, "chunking")) != extraction.chunk_artifact_id:
+                    raise self.inconsistent()
+                rewritten = self.documents.extraction(extraction)
         else:
-            resolved = ResolvedDocument.model_validate_json(body)
+            resolved = TypeAdapter(ResolvedDocument | PreparedImport).validate_json(body)
             if self.documents.mapping.source(resolved) != self.documents.mapping.source(owner):
                 raise self.inconsistent()
             previous = self._stages.get((artifact.job_id, "extracting"))
-            if (
-                previous is None
-                or hashlib.sha256(resolved.extraction.model_dump_json().encode()).hexdigest()
-                != self._canonical[previous]
-            ):
+            graph_hash = (
+                resolved.import_origin.graph_hash
+                if isinstance(resolved, PreparedImport)
+                else (hashlib.sha256(resolved.extraction.model_dump_json().encode()).hexdigest())
+            )
+            if previous is None or graph_hash != self._canonical[previous]:
                 raise self.inconsistent()
-            rewritten = self.documents.resolved(resolved)
+            rewritten = (
+                self.documents.prepared(resolved, self.checkpoint)
+                if isinstance(resolved, PreparedImport)
+                else self.documents.resolved(resolved)
+            )
         data = rewritten.model_dump_json().encode()
         if len(data) > 50 * 1024 * 1024:
             raise DomainError(
