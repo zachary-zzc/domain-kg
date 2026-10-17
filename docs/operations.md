@@ -666,3 +666,14 @@ shortening the fixture name corrected the harness. No application correction or
 actual model call was needed. This is a sequential capped-laptop drill, not a
 simultaneous multi-profile throughput benchmark. Required backup/quota/audit
 regressions are running separately; Task 18/19 remain open.
+
+
+Required Task 18 regression checkpoint (2026-10-18 local):
+`pytest tests/integration/test_backup_restore.py tests/integration/test_quotas_audit.py -q`
+passed all 14 checks in 203.77 seconds after primary storage was restored. Current
+Ruff and strict mypy pass for 228 source modules. The independently verified
+300-unit, seven native isolation/resource, 80.24-second split-follow-up and
+119.53-second physical restore/repair evidence remains recorded above. No new
+model, image, deployment or corpus migration was performed. Composite main-plan
+Task 18/19 checkboxes remain open for complete history/retirement/migration and
+release quality/acceptance; focused verified subplans are checked individually.
