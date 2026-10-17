@@ -392,3 +392,9 @@ write failure followed by retry under a new immutable attempt, and two scoped
 usage checks including owner withdrawal during the database read: 273 checks
 passed in 68.31 seconds. The abandoned partial attempt remained unaccepted.
 Ruff and strict mypy (208 sources) passed before the storage checks.
+
+The refreshed synthetic preview exercised the actual owner curation-repair worker
+and retained the reviewed node; owner Operations/usage returned 200 and reader
+Operations returned 404. Its complete timed fixture and cleanup passed (822.06
+seconds including the configured 600-second viewing window). The preview is now
+closed; it holds the exclusive smoke-store lock while running.

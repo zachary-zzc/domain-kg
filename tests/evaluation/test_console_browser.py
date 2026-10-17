@@ -11,7 +11,7 @@ import httpx
 import pytest
 import uvicorn
 from fastapi.responses import RedirectResponse
-from test_curation import alpha_id
+from test_curation import alpha_id, publish_curation
 from test_identity import issuer_fixture as issuer_fixture  # noqa: F401
 from test_publication import prepare, publishing, ready  # noqa: F401
 
@@ -22,11 +22,13 @@ from domain_kg.jobs.runner import JobRunner
 from domain_kg.operations.backup import BackupService
 from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.operations.jobs import OwnerOperations
+from domain_kg.operations.maintenance import MaintenanceService
 from domain_kg.operations.models import BackupCommand, RestoreCommand
 from domain_kg.operations.restore import RestoreService
 from domain_kg.operations.restore_targets import RestoreTargets
+from domain_kg.revisions.models import NodeChanges, NodeUpdate
+from domain_kg.revisions.service import RevisionService
 from domain_kg.settings import Settings
-from domain_kg.worker import serve
 
 PROFILE_PATH = Path(__file__).resolve().parents[2] / "config/laptop-smoke.json"
 
@@ -81,6 +83,20 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
         configured_pipeline(queue, coordinator.providers),
         operations=RestoreService(queue, coordinator.providers),
     ).run_job(restore_job)
+    editor = await queue.policy.resolve_access(principals["editor"], [job.kg_id], Action.CURATE)
+    reviewed = await RevisionService(queue, coordinator.providers).update_node(
+        editor,
+        NodeUpdate(
+            kg_id=job.kg_id,
+            entity_id=alpha,
+            expected_revision=0,
+            source_ids=(source.material_id,),
+            changes=NodeChanges(name="Reviewed Alpha"),
+            reason="Synthetic review for the repair demonstration",
+            idempotency_key="preview-reviewed-name",
+        ),
+    )
+    await publish_curation(queue, coordinator, editor, reviewed)
     refreshed = await queue.policy.resolve_access(principals["owner"], [job.kg_id], Action.RESTORE)
     assert (await queue.get(refreshed, recovery.job_id)).stage == "ready"
     _, state, transport, _ = issuer_fixture
@@ -139,6 +155,7 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 "node_id": str(alpha),
                 "restored_kg_id": str(target.target.kg_id),
                 "restore_job_id": str(recovery.job_id),
+                "curation_id": str(reviewed.revision_id),
             }
 
         @app.get("/__smoke__/finish")
@@ -151,19 +168,30 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
         app.router.routes[0:0] = smoke_routes
         async with app.router.lifespan_context(app):
             serving = asyncio.create_task(server.serve())
-            working = asyncio.create_task(
-                serve(
+
+            class PreviewOperations:
+                async def run(self, leased):
+                    if leased.kind == "maintenance":
+                        await MaintenanceService(queue).run(leased)
+                    else:
+                        await OwnerJobExecutor(queue).run(leased)
+
+            async def work():
+                runner = JobRunner(
                     queue,
-                    JobRunner(
-                        queue,
-                        configured_pipeline(queue, coordinator.providers),
-                        operations=OwnerJobExecutor(queue),
-                    ),
-                    once=False,
-                    worker_id="synthetic-preview-operations",
-                    operations_only=True,
+                    configured_pipeline(queue, coordinator.providers),
+                    operations=PreviewOperations(),
                 )
-            )
+                while True:
+                    leased = await queue.claim(
+                        "synthetic-preview-operations", kinds=("backup", "export", "maintenance")
+                    )
+                    if leased:
+                        await runner.run_job(leased)
+                    else:
+                        await asyncio.sleep(1)
+
+            working = asyncio.create_task(work())
             try:
                 for _ in range(100):
                     if server.started:
