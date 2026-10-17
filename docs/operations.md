@@ -186,3 +186,12 @@ All 233 unit/protocol checks passed in 4.37 seconds, with Ruff and strict mypy
 (181 sources). No model was called. Target authority, projection publication and
 activation remain pending. The Docker configured/running hard limits were also
 read back at 1.476 GB combined with swap disabled.
+
+Canonical target materials, versions, entities, curations, assertions and supports
+can now be staged through scoped repositories in dependency order. Batches fence
+the current owner/lease, source snapshot, retained header and approved placement;
+replays compare complete records rather than overwrite them. Reconciliation of
+the real prepared target passed, including a repeated staging call, in 30.10
+seconds. The target remained absent from the catalog and unreadable. All 235
+unit/protocol checks passed in 4.42 seconds; Ruff and strict mypy (183 sources)
+passed. Control metadata, source ledgers and final projection activation are next.

@@ -100,6 +100,17 @@ async def test_prepare_copies_verified_originals_and_reseals_actual_native_artif
             assert stored == item.body
         replay = await RestorePreparation(queue, coordinator.providers).prepare(job)
         assert replay.originals == staged.originals and replay.artifacts == staged.artifacts
+        from domain_kg.operations.restore_authority import RestoreAuthority
+
+        from domain_kg.models import ScopedRef
+
+        await RestoreAuthority(queue, coordinator.providers).stage(job, staged)
+        await RestoreAuthority(queue, coordinator.providers).stage(job, staged)
+        assert await staged.binding.stores.authority.reconcile() == []
+        version = await staged.binding.stores.authority.get_material_version(
+            ScopedRef(**target.target.model_dump(), id=source.version_id)
+        )
+        assert version.material.id == source.material_id
         document = staged.sources[0].document
         assert document.kg_id == target.target.kg_id and document.material_id == source.material_id
         assert all(row.source.kg_id == target.target.kg_id for row in document.rows)
