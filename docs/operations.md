@@ -553,3 +553,14 @@ source archive 262 entries, SHA-256
 No image build or live provider request was performed. This completes the
 explicit `rebuild_current` subplan, not full Task 18 schema/model migration,
 complete backup history, physical-profile recovery or Task 19 acceptance.
+
+
+Live console checkpoint (2026-10-17): the opt-in synthetic loopback preview now
+includes an explicitly cancelled, never-executed restore for safe cleanup review,
+and a serial dispatcher for generation and restore-cleanup jobs. Real HTTP
+owner forms were submitted: generation reached ready at source publication 3;
+inactive-target cleanup reached ready; owner operations and audit returned 200;
+reader operations was denied. HTTP verification does not print cookies or CSRF
+tokens. The 600-second preview fixture is still running at this checkpoint, so
+its final pytest/teardown result is not yet claimed. Opening the browser panel
+was queued; the loopback links themselves were verified. Zero live model calls.

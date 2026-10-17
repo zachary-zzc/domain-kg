@@ -21,10 +21,12 @@ from domain_kg.ingestion.pipeline import configured_pipeline
 from domain_kg.jobs.runner import JobRunner
 from domain_kg.operations.backup import BackupService
 from domain_kg.operations.executor import OwnerJobExecutor
+from domain_kg.operations.generation import GenerationService
 from domain_kg.operations.jobs import OwnerOperations
 from domain_kg.operations.maintenance import MaintenanceService
 from domain_kg.operations.models import BackupCommand, RestoreCommand
 from domain_kg.operations.restore import RestoreService
+from domain_kg.operations.restore_cleanup import RestoreCleanupService
 from domain_kg.operations.restore_targets import RestoreTargets
 from domain_kg.operations.retention import RetentionService
 from domain_kg.revisions.models import NodeChanges, NodeUpdate
@@ -100,6 +102,20 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
     await publish_curation(queue, coordinator, editor, reviewed)
     refreshed = await queue.policy.resolve_access(principals["owner"], [job.kg_id], Action.RESTORE)
     assert (await queue.get(refreshed, recovery.job_id)).stage == "ready"
+    abandoned = await operations.submit(
+        refreshed,
+        RestoreCommand(
+            kg_id=job.kg_id,
+            expected_published_revision=2,
+            backup_job_id=backup.job_id,
+            placement_id=catalog[3].id,
+            provider_profile_id=profile.id,
+            name="Inactive cleanup example",
+            idempotency_key="preview-inactive-restore",
+        ),
+    )
+    inactive = await RestoreTargets(queue).get(refreshed, job.kg_id, abandoned.job_id)
+    await queue.cancel(refreshed, abandoned.job_id, idempotency_key="preview-cancel-inactive")
     _, state, transport, _ = issuer_fixture
     state["issuer"] = principals["owner"].issuer
     async with httpx.AsyncClient(transport=transport) as oidc:
@@ -131,7 +147,9 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
         @app.get("/__smoke__/start/{role}")
         async def start(
             role: str,
-            view: Literal["catalog", "search", "operations", "restore_job", "backup"] = "catalog",
+            view: Literal[
+                "catalog", "search", "operations", "restore_job", "inactive_restore", "backup"
+            ] = "catalog",
         ):
             assert role in ("owner", "editor", "reader")
             ticket = await app.state.identity.sessions.create(principals[role], org)
@@ -140,6 +158,8 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 if view == "backup"
                 else f"/admin/kgs/{job.kg_id}/jobs/{recovery.job_id}"
                 if view == "restore_job"
+                else f"/admin/kgs/{job.kg_id}/jobs/{abandoned.job_id}"
+                if view == "inactive_restore"
                 else "/admin"
                 if view == "catalog"
                 else f"/admin/kgs/{job.kg_id}/{view}"
@@ -160,6 +180,8 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 "node_id": str(alpha),
                 "restored_kg_id": str(target.target.kg_id),
                 "restore_job_id": str(recovery.job_id),
+                "inactive_restore_job_id": str(abandoned.job_id),
+                "inactive_kg_id": str(inactive.target.kg_id),
                 "backup_job_id": str(backup.job_id),
                 "placement_id": str(catalog[3].id),
                 "provider_profile_id": str(profile.id),
@@ -179,7 +201,11 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
 
             class PreviewOperations:
                 async def run(self, leased):
-                    if leased.kind == "maintenance":
+                    if leased.kind == "generation":
+                        await GenerationService(queue).run(leased)
+                    elif leased.kind == "restore_cleanup":
+                        await RestoreCleanupService(queue).run(leased)
+                    elif leased.kind == "maintenance":
                         await MaintenanceService(queue).run(leased)
                     elif leased.kind == "retention":
                         await RetentionService(queue).run(leased)
@@ -195,7 +221,14 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 while True:
                     leased = await queue.claim(
                         "synthetic-preview-operations",
-                        kinds=("backup", "export", "maintenance", "retention"),
+                        kinds=(
+                            "backup",
+                            "export",
+                            "maintenance",
+                            "retention",
+                            "restore_cleanup",
+                            "generation",
+                        ),
                     )
                     if leased:
                         await runner.run_job(leased)
