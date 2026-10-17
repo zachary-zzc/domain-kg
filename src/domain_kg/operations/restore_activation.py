@@ -20,6 +20,7 @@ from domain_kg.operations.restore_projections import RestoredProjection
 from domain_kg.operations.restore_quota import RestoreQuota
 from domain_kg.operations.restore_results import RestoreResult, RestoreResults
 from domain_kg.providers.service import ProviderService
+from domain_kg.revisions.curation_publication import CurationCoordinator
 from domain_kg.revisions.journal import PublicationJournal
 from domain_kg.revisions.models import RevisionReceipt
 from domain_kg.revisions.projections import (
@@ -263,14 +264,15 @@ class RestoreActivation(RestoreAuthority):
                 if source is not None:
                     owner_key = f"source:{source.material_id}"
                 elif part.binding.curation is not None:
-                    owner_key = (
-                        f"identity:{part.binding.curation.id}"
-                        if any(
-                            row["id"] == str(part.binding.curation.id) and row["kind"] == "identity"
-                            for row in staged.inventory.rows("curation_revisions")
-                        )
-                        else f"curation:{part.binding.curation.id}"
+                    record = await self.queue.database.curation_revisions.find_one(
+                        ns | {"id": str(part.binding.curation.id), "state": "accepted"},
+                        session=session,
                     )
+                    if record is None or record["kind"] not in ("node", "relation", "identity"):
+                        raise DomainError(
+                            ErrorCode.PROJECTION_INCONSISTENT, "Restored curation state is missing."
+                        )
+                    owner_key = CurationCoordinator.owner_key(record)
                 else:
                     raise DomainError(
                         ErrorCode.PROJECTION_INCONSISTENT, "Restore owner is missing."

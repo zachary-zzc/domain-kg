@@ -13,7 +13,7 @@ from domain_kg.operations.restore_authority import RestoreAuthority
 from domain_kg.operations.restore_control import RestoreControl
 from domain_kg.operations.restore_preparation import RestorePreparation
 from domain_kg.operations.restore_projections import RestoreProjections
-from domain_kg.revisions.models import NodeChanges, NodeUpdate
+from domain_kg.revisions.models import NodeChanges, NodeUpdate, RollbackRevision
 from domain_kg.revisions.service import RevisionService
 
 pytestmark = pytest.mark.storage
@@ -97,9 +97,37 @@ async def test_human_rename_history_restores_with_original_author_and_new_scoped
         await JobRunner(queue, configured_pipeline(queue, coordinator.providers))._steps(next_job)
         await queue.finish(next_job)
         assert (await queue.get(editor_target, receipt.job_id)).stage == "ready"
+        from domain_kg.revisions.journal import PublicationJournal
+
+        view = await PublicationJournal(queue).load_metadata(editor_target, target.target.kg_id)
+        assert len(view.curations) == 1, "a later edit must replace its scoped restored binding"
+        assert view.curations[0].id == receipt.revision_id
         assert (
             await GraphService(queue).get_node(editor_target, target.target.kg_id, alpha)
         ).name == "Reviewed Alpha"
+        rollback = await RevisionService(queue, coordinator.providers).rollback(
+            editor_target,
+            RollbackRevision(
+                kg_id=target.target.kg_id,
+                revision_id=staged.curations[0].curation.id,
+                expected_current_revision=2,
+                reason="Withdraw the restored rename",
+                idempotency_key="rollback-restored-name",
+            ),
+        )
+        await publish_curation(queue, coordinator, editor_target, rollback)
+        reverted = await GraphService(queue).get_node(editor_target, target.target.kg_id, alpha)
+        assert reverted.name == "Alpha"
+        assert (
+            len(
+                (
+                    await PublicationJournal(queue).load_metadata(
+                        editor_target, target.target.kg_id
+                    )
+                ).curations
+            )
+            == 1
+        )
     finally:
         await staged.binding.stores.vectors.client.delete_collection(
             staged.binding.stores.vectors.collection

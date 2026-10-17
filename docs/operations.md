@@ -330,3 +330,11 @@ two focused regressions (85.36 seconds). All 267 unit/protocol checks passed in
 validate with corpus approval disabled. No real model ran. Budget-history cleanup,
 inactive-target/retained-package cleanup and the remaining full restore/operations
 gates remain unfinished.
+
+Restored node/relation bindings now use the same target-and-scope owner key as
+ordinary curation publication. A real follow-up edit previously left two active
+bindings; the regression reproduced that failure and now verifies one current
+binding. A subsequent owner rollback of the restored rename returns the original
+observed name without resurrecting the superseded override. The complete focused
+flow passed in 74.85 seconds. Identity bindings retain their established identity
+owner key. Curation repair/generation work is detailed in the maintenance subplan.
