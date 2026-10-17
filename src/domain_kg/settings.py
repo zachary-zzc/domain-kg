@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     backend_config: Path | None = None
     provider_config: Path | None = None
     retention_config: Path | None = None
+    restore_cleanup_config: Path | None = None
     embedding_dimensions: int = Field(default=1536, ge=1, le=4096)
     mongo_uri: SecretStr = SecretStr(
         "mongodb://127.0.0.1:27027/?replicaSet=rs0&directConnection=true"

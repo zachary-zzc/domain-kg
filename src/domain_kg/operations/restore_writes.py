@@ -129,7 +129,16 @@ class RestoreWrites:
 
         task = asyncio.create_task(execute())
         cancelled = await drain(task)
-        failed = task.cancelled() or task.exception() is not None
+        error = None if task.cancelled() else task.exception()
+        local_refusal = isinstance(error, DomainError) and error.code in (
+            ErrorCode.VERSION_CONFLICT,
+            ErrorCode.POLICY_CHANGED,
+            ErrorCode.RESOURCE_NOT_ACCESSIBLE,
+            ErrorCode.FORBIDDEN,
+        )
+        # Local policy/lease checks either precede I/O or follow an acknowledged
+        # call. They do not represent an unacknowledged remote mutation.
+        failed = task.cancelled() or (error is not None and not local_refusal)
         finishing = asyncio.create_task(self._finish(key, "uncertain" if failed else "settled"))
         cancelled = await drain(finishing) or cancelled
         finishing.result()

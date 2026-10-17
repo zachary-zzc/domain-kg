@@ -20,6 +20,7 @@ from domain_kg.operations.models import (
     BackupCommand,
     ExportCommand,
     MaintenanceCommand,
+    RestoreCleanupCommand,
     RestoreCommand,
     RetentionCommand,
 )
@@ -99,6 +100,16 @@ def operation_router(runtime: ServiceRuntime) -> APIRouter:
     async def restore_info(request: Request, kg_id: UUID, job_id: UUID) -> RestoreInfo:
         return await runtime.restores.get(
             await access(request, kg_id, action=Action.RESTORE), kg_id, job_id
+        )
+
+    @router.post("/kgs/{kg_id}/restores/jobs/{job_id}/cleanup", status_code=202)
+    async def cleanup_restore(
+        request: Request, kg_id: UUID, job_id: UUID, command: RestoreCleanupCommand
+    ) -> JobReceipt:
+        if command.kg_id != kg_id or command.restore_job_id != job_id:
+            raise DomainError(ErrorCode.VALIDATION_ERROR, "Path and command identities must match.")
+        return await runtime.owner_operations.submit(
+            await access(request, kg_id, mutate=True, action=Action.RESTORE), command
         )
 
     @router.post("/kgs/{kg_id}/retention", status_code=202)

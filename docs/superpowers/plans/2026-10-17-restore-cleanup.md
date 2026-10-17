@@ -8,17 +8,17 @@ bucket or vector service. Do not erase an active catalog namespace.
   current owner. Shield/drain issued I/O through repeated cancellation. Retain
   pending or uncertain writes conservatively; never assume lease expiry proves
   that a remote write has stopped. Keep exact copied-object references.
-- [ ] Admit typed owner cleanup for an exact failed/cancelled restore job. Freeze
+- [x] Admit typed owner cleanup for an exact failed/cancelled restore job. Freeze
   its fresh namespace, placement and bounded settled write inventory. Fence
   restoration retries permanently and serialize admission against writers.
-- [ ] Erase only exact target objects/versions/uploads and scoped graph/vector
+- [x] Erase only exact target objects/versions/uploads and scoped graph/vector
   projections. Remove allowlisted target authority/control rows. Revalidate the
   cleanup lease, current owner, inactive state and approved placement around I/O.
-- [ ] Verify absence before an atomic completion/audit and original-quota release.
+- [x] Verify absence before an atomic completion/audit and original-quota release.
   Replay and partial failures must not double-refund or allow activation. Missing
   or uncertain historical write records block cleanup without refund.
-- [ ] Add thin HTTP/console controls and a dedicated model-free worker. Show
+- [x] Add thin HTTP/console controls and a dedicated model-free worker. Show
   actionable pending/blocked states without credentials or private paths.
-- [ ] Run tiny real-store corruption/revocation/cancellation/failure/replay tests,
+- [x] Run tiny real-store corruption/revocation/cancellation/failure/replay tests,
   light unit/protocol regressions, Ruff/mypy; commit each verified milestone and
   update progress. Whole Task 18 remains open for its other acceptance gates.

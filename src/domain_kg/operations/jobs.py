@@ -14,9 +14,12 @@ from domain_kg.materials.service import digest
 from domain_kg.models import ScopedRef
 from domain_kg.operations.audit import AuditTrail
 from domain_kg.operations.models import OwnerCommand, OwnerOperation, SnapshotPointer
+from domain_kg.operations.restore_cleanup_policy import RestoreCleanupPolicy
 from domain_kg.operations.retention_policy import RetentionPolicy
 
-OWNER_KINDS = frozenset({"backup", "export", "restore", "maintenance", "retention"})
+OWNER_KINDS = frozenset(
+    {"backup", "export", "restore", "maintenance", "retention", "restore_cleanup"}
+)
 
 
 def operation_action(kind: str) -> Action:
@@ -26,15 +29,21 @@ def operation_action(kind: str) -> Action:
         Action.BACKUP
         if kind == "backup"
         else Action.RESTORE
-        if kind == "restore"
+        if kind in ("restore", "restore_cleanup")
         else Action.CONFIGURE
     )
 
 
 class OwnerOperations:
-    def __init__(self, queue: JobQueue, retention_policy: RetentionPolicy | None = None) -> None:
+    def __init__(
+        self,
+        queue: JobQueue,
+        retention_policy: RetentionPolicy | None = None,
+        cleanup_policy: RestoreCleanupPolicy | None = None,
+    ) -> None:
         self.queue, self.database = queue, queue.database
         self.retention_policy = retention_policy or RetentionPolicy()
+        self.cleanup_policy = cleanup_policy or RestoreCleanupPolicy()
         self.audit = AuditTrail(queue)
 
     async def initialize(self) -> None:
@@ -103,6 +112,10 @@ class OwnerOperations:
                 await RetentionTargets(self.queue).record(record, session)
             except (ValidationError, KeyError, TypeError, ValueError):
                 raise invalid() from None
+        elif record.command.kind == "restore_cleanup":
+            from domain_kg.operations.restore_cleanup_targets import RestoreCleanupTargets
+
+            await RestoreCleanupTargets(self.queue).record(record, session)
         return record
 
     async def submit(self, access: AccessContext, command: OwnerCommand) -> JobReceipt:
@@ -125,6 +138,10 @@ class OwnerOperations:
             from domain_kg.operations.retention_targets import RetentionTargets
 
             await RetentionTargets(self.queue).initialize()
+        elif command.kind == "restore_cleanup":
+            from domain_kg.operations.restore_cleanup_targets import RestoreCleanupTargets
+
+            await RestoreCleanupTargets(self.queue).initialize()
         key = self.queue.transactions.key(current, command.kg_id, command.idempotency_key)
         fingerprint = digest(command.model_dump(mode="json"))
         operation_id, job_id = uuid4(), uuid4()
@@ -214,6 +231,18 @@ class OwnerOperations:
                 try:
                     await RetentionTargets(self.queue, self.retention_policy).allocate(
                         record, session
+                    )
+                except (ValidationError, KeyError, TypeError, ValueError):
+                    raise invalid() from None
+            elif command.kind == "restore_cleanup":
+                from domain_kg.operations.restore_cleanup_targets import (
+                    RestoreCleanupTargets,
+                    invalid,
+                )
+
+                try:
+                    await RestoreCleanupTargets(self.queue, self.cleanup_policy).allocate(
+                        current, record, session
                     )
                 except (ValidationError, KeyError, TypeError, ValueError):
                     raise invalid() from None

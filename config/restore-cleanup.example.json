@@ -1,0 +1,9 @@
+{
+  "max_write_records": 10000,
+  "max_objects": 1000,
+  "max_graph_nodes": 10000,
+  "max_vector_points": 10000,
+  "max_rows_per_collection": 10000,
+  "batch_size": 100,
+  "erasure": {"page_size": 100, "max_pages": 20, "max_records": 1000}
+}

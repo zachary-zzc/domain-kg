@@ -146,3 +146,34 @@ The equivalent owner endpoints are `POST /api/v1/kgs/{kg_id}/restores` (typed
 progress). A failed restore remains inactive; cancellation/retry use the usual
 job controls. Expired package cleanup does not erase these targets or return
 original-storage holds.
+
+## Discard a failed inactive restore
+
+The original restore job page offers **Discard inactive target** only for a
+failed/cancelled tracked target with no pending or uncertain writes. This explicit
+owner action permanently fences the original restore from retry. The cleanup
+job can be retried independently. It deletes only recorded target objects
+(including versions/uploads), scoped target projections and allowlisted target
+ledger rows; it preserves shared infrastructure and the live source KG.
+
+`DOMAIN_KG_RESTORE_CLEANUP_CONFIG=config/restore-cleanup.example.json` provides
+server limits: 10,000 write records, 1,000 copied objects, 10,000 graph nodes,
+10,000 vector points and 10,000 rows per collection, batches of 100. The policy
+file is capped at 64 KiB. Listing uses 100 records/page, 20 pages and at most
+1,000 records. Limits are frozen for each admitted job. Exceeding a limit or
+finding unregistered bytes stops completion and retains quota for investigation.
+
+```bash
+uv run --no-sync python -m domain_kg.worker --restore-cleanup-only --once
+```
+
+The typed endpoint is `POST /api/v1/kgs/{kg_id}/restores/jobs/{job_id}/cleanup`
+with `kg_id`, `restore_job_id`, `expected_published_revision`, `idempotency_key`.
+The source and path IDs must agree. No provider file or model is loaded by this
+worker mode. Quota release, completion and audit share one Mongo transaction
+only after physical absence checks. A temporary commit failure uses the existing
+bounded automatic retry; explicit cancelled/failed jobs use the normal retry UI.
+
+Quiesce old restore workers before upgrading. Targets allocated before supported
+write tracking, and targets with pending/uncertain writes, are deliberately not
+auto-cleaned; lease expiry alone is not evidence that remote writes ended.

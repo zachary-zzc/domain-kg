@@ -152,7 +152,7 @@ class JobQueue:
 
     @staticmethod
     def _action(kind: str) -> Action:
-        if kind in ("backup", "export", "restore", "maintenance", "retention"):
+        if kind in ("backup", "export", "restore", "maintenance", "retention", "restore_cleanup"):
             from domain_kg.operations.jobs import operation_action
 
             return operation_action(kind)
@@ -372,6 +372,7 @@ class JobQueue:
                 "restore",
                 "maintenance",
                 "retention",
+                "restore_cleanup",
             }
         ):
             raise ValueError("job kinds require a configured handler")
@@ -453,7 +454,14 @@ class JobQueue:
             org_id=job.org_id,
             session=session,
         )
-        if job.kind in ("backup", "export", "restore", "maintenance", "retention"):
+        if job.kind in (
+            "backup",
+            "export",
+            "restore",
+            "maintenance",
+            "retention",
+            "restore_cleanup",
+        ):
             from domain_kg.operations.jobs import OwnerOperations
 
             await OwnerOperations(self).authorize(access, raw, session)
@@ -748,6 +756,11 @@ class JobQueue:
             raise lease_conflict()
 
     async def finish(self, job: LeasedJob) -> None:
+        if job.kind == "restore_cleanup":
+            from domain_kg.operations.restore_cleanup_results import RestoreCleanupResults
+
+            if await RestoreCleanupResults(self).accepted(job):
+                return
         if job.kind == "retention":
             from domain_kg.operations.retention_results import RetentionResults
 
@@ -773,7 +786,14 @@ class JobQueue:
 
             if await ExportService(self).accepted(job):
                 return
-        if job.kind in ("backup", "export", "restore", "maintenance", "retention"):
+        if job.kind in (
+            "backup",
+            "export",
+            "restore",
+            "maintenance",
+            "retention",
+            "restore_cleanup",
+        ):
             await self.authorize(job)
             raise DomainError(
                 ErrorCode.REVISION_NOT_READY, "The operation has no verified package."
@@ -825,6 +845,10 @@ class JobQueue:
         await self.transactions.transaction(commit)
 
     async def accepted(self, job: LeasedJob) -> bool:
+        if job.kind == "restore_cleanup":
+            from domain_kg.operations.restore_cleanup_results import RestoreCleanupResults
+
+            return await RestoreCleanupResults(self).accepted(job)
         if job.kind == "retention":
             from domain_kg.operations.retention_results import RetentionResults
 
@@ -914,7 +938,14 @@ class JobQueue:
         )
         if raw is None:
             raise inaccessible_reference()
-        if raw["kind"] in ("backup", "export", "restore", "maintenance", "retention"):
+        if raw["kind"] in (
+            "backup",
+            "export",
+            "restore",
+            "maintenance",
+            "retention",
+            "restore_cleanup",
+        ):
             from domain_kg.operations.jobs import OwnerOperations
 
             await OwnerOperations(self).authorize(current, raw, session)
@@ -1016,6 +1047,19 @@ class JobQueue:
                 raise DomainError(
                     ErrorCode.VERSION_CONFLICT, "This job cannot change to that state."
                 )
+            if raw["kind"] == "restore" and operation == "retry":
+                if await self.database.restore_targets.find_one(
+                    {
+                        "org_id": raw["org_id"],
+                        "kg_id": raw["kg_id"],
+                        "id": raw["target_id"],
+                        "cleanup_job_id": {"$exists": True},
+                    },
+                    session=session,
+                ):
+                    raise DomainError(
+                        ErrorCode.VERSION_CONFLICT, "This target is permanently fenced for cleanup."
+                    )
             stage = "cancelled" if operation == "cancel" else "queued"
             result = await self.database.jobs.find_one_and_update(
                 {"_id": raw["_id"]},
@@ -1044,7 +1088,14 @@ class JobQueue:
                 },
                 session=session,
             )
-            if raw["kind"] in ("backup", "export", "restore", "maintenance", "retention"):
+            if raw["kind"] in (
+                "backup",
+                "export",
+                "restore",
+                "maintenance",
+                "retention",
+                "restore_cleanup",
+            ):
                 from domain_kg.operations.jobs import OwnerOperations
 
                 operations = OwnerOperations(self)

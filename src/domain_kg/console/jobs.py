@@ -8,11 +8,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import TypeAdapter, ValidationError
 
 from domain_kg.console.forms import read_form
+from domain_kg.console.material_commands import command_context, invalid_form, redirect
 from domain_kg.console.rendering import browser_session, page
 from domain_kg.console.workspace import filters_for, read_context
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import Action
 from domain_kg.models import IdempotencyKey, PageRequest
+from domain_kg.operations.models import RestoreCleanupCommand
 from domain_kg.operations.restore_results import RestoreResults
 from domain_kg.transport.runtime import ServiceRuntime
 
@@ -86,9 +88,27 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
                 "restore_url": restore_url,
                 "restore_info": restore_info,
                 "command_key": str(uuid4()),
+                "published_revision": scope.view.revision,
             },
             scope=scope,
         )
+
+    @router.post("/kgs/{kg_id}/jobs/{job_id}/cleanup-restore")
+    async def cleanup_restore(request: Request, kg_id: UUID, job_id: UUID) -> RedirectResponse:
+        fields, _, access = await command_context(runtime, request, kg_id, Action.RESTORE)
+        if set(fields) != {"idempotency_key", "expected_published_revision"}:
+            raise invalid_form()
+        try:
+            command = RestoreCleanupCommand(
+                kg_id=kg_id,
+                restore_job_id=job_id,
+                expected_published_revision=int(fields["expected_published_revision"]),
+                idempotency_key=fields["idempotency_key"],
+            )
+        except (ValueError, ValidationError):
+            raise invalid_form() from None
+        result = await runtime.owner_operations.submit(access, command)
+        return redirect(f"/admin/kgs/{kg_id}/jobs/{result.job_id}")
 
     @router.post("/kgs/{kg_id}/jobs/{job_id}/{operation}")
     async def control(

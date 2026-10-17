@@ -19,6 +19,7 @@ from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.operations.export import ExportService
 from domain_kg.operations.maintenance import MaintenanceService
 from domain_kg.operations.restore import RestoreService
+from domain_kg.operations.restore_cleanup import RestoreCleanupService
 from domain_kg.operations.retention import RetentionService
 from domain_kg.providers.profiles import ProviderRegistry
 from domain_kg.providers.service import ProviderService
@@ -43,11 +44,14 @@ async def serve(
     kg_restore_only: bool = False,
     maintenance_only: bool = False,
     retention_only: bool = False,
+    restore_cleanup_only: bool = False,
 ) -> None:
     runner.pipeline.require_configured()
     while True:
         kinds = (
-            ("retention",)
+            ("restore_cleanup",)
+            if restore_cleanup_only
+            else ("retention",)
             if retention_only
             else ("maintenance",)
             if maintenance_only
@@ -94,6 +98,7 @@ async def main(
     kg_restore_only: bool = False,
     maintenance_only: bool = False,
     retention_only: bool = False,
+    restore_cleanup_only: bool = False,
 ) -> None:
     settings = Settings()
     client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
@@ -106,11 +111,17 @@ async def main(
         queue = JobQueue(policy, router)
         approved_providers = (
             ProviderRegistry()
-            if backup_only or export_only or operations_only or maintenance_only or retention_only
+            if backup_only
+            or export_only
+            or operations_only
+            or maintenance_only
+            or retention_only
+            or restore_cleanup_only
             else ProviderRegistry.from_file(settings.provider_config)
         )
         if not approved_providers.profiles and not (
-            retention_only
+            restore_cleanup_only
+            or retention_only
             or maintenance_only
             or repair_only
             or restore_only
@@ -128,7 +139,9 @@ async def main(
         runner = JobRunner(
             queue,
             configured_pipeline(queue, providers),
-            operations=RetentionService(queue)
+            operations=RestoreCleanupService(queue)
+            if restore_cleanup_only
+            else RetentionService(queue)
             if retention_only
             else MaintenanceService(queue)
             if maintenance_only
@@ -160,6 +173,7 @@ async def main(
             kg_restore_only=kg_restore_only,
             maintenance_only=maintenance_only,
             retention_only=retention_only,
+            restore_cleanup_only=restore_cleanup_only,
         )
     finally:
         await router.close()
@@ -170,6 +184,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--restore-cleanup-only",
+        action="store_true",
+        help="clean permanently fenced inactive restore targets serially without models",
+    )
     mode.add_argument(
         "--retention-only",
         action="store_true",
@@ -237,6 +256,7 @@ if __name__ == "__main__":
                 kg_restore_only=args.kg_restore_only,
                 maintenance_only=args.maintenance_only,
                 retention_only=args.retention_only,
+                restore_cleanup_only=args.restore_cleanup_only,
             )
         )
     except DomainError as exc:

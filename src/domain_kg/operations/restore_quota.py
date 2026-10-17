@@ -45,9 +45,10 @@ class RestoreQuotaReservation(ScopedRef):
     target: Namespace
     source_header_sha: SHA256
     byte_count: NonNegative
-    state: Literal["reserved", "committed"] = "reserved"
+    state: Literal["reserved", "committed", "released"] = "reserved"
     created_at: UTCDateTime
     accepted_at: UTCDateTime | None = None
+    released_at: UTCDateTime | None = None
 
     @model_validator(mode="after")
     def fresh_target(self) -> Self:
@@ -70,7 +71,7 @@ class RestoreQuota:
     @staticmethod
     def saved(row: dict[str, Any]) -> RestoreQuotaReservation:
         value = {name: item for name, item in row.items() if name != "_id"}
-        for field in ("created_at", "accepted_at"):
+        for field in ("created_at", "accepted_at", "released_at"):
             timestamp = value.get(field)
             if isinstance(timestamp, datetime) and timestamp.tzinfo is None:
                 value[field] = timestamp.replace(tzinfo=UTC)

@@ -24,7 +24,14 @@ class JobRunner:
         self.queue, self.pipeline, self.operations = queue, pipeline, operations
 
     async def _steps(self, job: LeasedJob) -> None:
-        if job.kind in ("backup", "export", "restore", "maintenance", "retention"):
+        if job.kind in (
+            "backup",
+            "export",
+            "restore",
+            "maintenance",
+            "retention",
+            "restore_cleanup",
+        ):
             await self.queue.authorize(job)
             if self.operations is None:
                 raise DomainError(

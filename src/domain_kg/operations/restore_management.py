@@ -10,7 +10,7 @@ from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.models import JobReceipt, JobStage
 from domain_kg.models import Namespace, NonNegative
 from domain_kg.operations.jobs import OwnerOperations
-from domain_kg.operations.models import RestoreCommand
+from domain_kg.operations.models import RestoreCleanupCommand, RestoreCommand
 from domain_kg.operations.restore_targets import RestoreTargets
 from domain_kg.providers.profiles import ProviderRegistry
 
@@ -26,6 +26,8 @@ class RestoreInfo(Namespace):
     write_tracking: bool = False
     pending_writes: NonNegative = 0
     uncertain_writes: NonNegative = 0
+    cleanup_job_id: UUID | None = None
+    cleanup_available: bool = False
 
     @model_validator(mode="after")
     def fresh_namespace(self) -> Self:
@@ -94,8 +96,29 @@ class RestoreManagement:
                 "id": str(target.id),
                 "write_tracking_version": 1,
             },
-            {"_id": 1},
+            {"_id": 1, "cleanup_job_id": 1},
         )
+        if tracking and tracking.get("cleanup_job_id"):
+            linked = await self.queue.database.jobs.find_one(
+                {
+                    "org_id": str(current.org_id),
+                    "kg_id": str(kg),
+                    "id": tracking["cleanup_job_id"],
+                    "kind": "restore_cleanup",
+                }
+            )
+            if linked is None:
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Restore cleanup link is inconsistent."
+                )
+            cleanup = await self.operations.authorize(current, linked)
+            if (
+                not isinstance(cleanup.command, RestoreCleanupCommand)
+                or cleanup.command.restore_job_id != job_id
+            ):
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "Restore cleanup link is inconsistent."
+                )
         result = RestoreInfo(
             org_id=current.org_id,
             kg_id=kg,
@@ -109,6 +132,12 @@ class RestoreManagement:
             write_tracking=tracking is not None,
             pending_writes=pending,
             uncertain_writes=uncertain,
+            cleanup_job_id=tracking.get("cleanup_job_id") if tracking else None,
+            cleanup_available=tracking is not None
+            and not tracking.get("cleanup_job_id")
+            and pending == uncertain == 0
+            and receipt.stage in ("failed", "cancelled")
+            and target.state != "activated",
         )
         await self.queue.policy.revalidate(current, action=Action.RESTORE)
         return result

@@ -8,9 +8,11 @@ from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import Field
 
 from domain_kg.errors import DomainError, ErrorCode
+from domain_kg.materials.models import BlobRef
 from domain_kg.models import FrozenModel
 from domain_kg.operations.packages import PackageObject
 from domain_kg.operations.storage import PackageStore
+from domain_kg.storage.blobs import BlobStore
 
 
 class ErasureLimits(FrozenModel):
@@ -62,7 +64,9 @@ class PackageErasure:
                 task.exception()  # Consume an I/O error while preserving caller cancellation.
             raise
 
-    async def _inventory(self, key: str, kind: Literal["versions", "uploads"]) -> list[str]:
+    async def _inventory(
+        self, key: str, kind: Literal["versions", "uploads"], *, all_under_prefix: bool = False
+    ) -> list[str]:
         identifier = "VersionId" if kind == "versions" else "UploadId"
         method = "list_object_versions" if kind == "versions" else "list_multipart_uploads"
         arguments: dict[str, Any] = {"Prefix": key}
@@ -100,7 +104,7 @@ class PackageErasure:
                         ErrorCode.QUOTA_EXCEEDED,
                         "Retained object inventory exceeds its cleanup budget.",
                     )
-                if row["Key"] == key:
+                if all_under_prefix or row["Key"] == key:
                     result.append(row[identifier])
             if not page["IsTruncated"]:
                 return result
@@ -163,7 +167,29 @@ class PackageErasure:
 
     async def erase(self, reference: PackageObject) -> None:
         reference = PackageObject.model_validate(reference)
-        key = self.store._key(reference)
+        await self._erase_key(self.store._key(reference))
+
+    async def erase_original(self, reference: BlobRef) -> None:
+        reference = BlobRef.model_validate(reference)
+        await self._erase_key(BlobStore(self.store.binding)._key(reference, reference.object_id))
+
+    async def verify_original_namespace_absent(self) -> None:
+        namespace = self.store.binding.namespace
+        prefix = f"{namespace.org_id}/{namespace.kg_id}/"
+        try:
+            if await self._inventory(
+                prefix, "versions", all_under_prefix=True
+            ) or await self._inventory(prefix, "uploads", all_under_prefix=True):
+                raise inconsistent()
+            await self.authorize()
+        except (ClientError, BotoCoreError):
+            raise DomainError(
+                ErrorCode.BACKEND_UNAVAILABLE,
+                "Target object cleanup is unavailable.",
+                retryable=True,
+            ) from None
+
+    async def _erase_key(self, key: str) -> None:
         try:
             async with self.store.binding.upload_slot:
                 # Complete bounded inventory before the first destructive request.

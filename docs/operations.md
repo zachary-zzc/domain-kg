@@ -471,3 +471,22 @@ passed in 216.34 seconds; four tracking/status checks passed in 102.71 seconds.
 Ruff and strict mypy passed. No real model was called. The previous timed preview
 finished successfully in 722.17 seconds and cleaned up; it is currently closed.
 Cleanup/refund itself remains a separate unfinished step.
+
+Inactive restore cleanup is now locally verified. Owner admission freezes one
+terminal restore's namespace, placement, settled object inventory and uncommitted
+quota reservation. It permanently fences restoration retry. The model-free worker
+checks current owner/lease around storage I/O, erases exact originals/versions/
+unfinished uploads and scoped graph/vector rows without dropping shared stores,
+then deletes target ledger rows and releases quota with completion/audit in one
+Mongo transaction. Unknown target objects block refund even after partial erasure.
+Repeated completion cannot refund twice. Old untracked or uncertain targets remain
+blocked. Local lease/policy refusals settle write tracking; unacknowledged remote
+errors remain uncertain.
+
+The first focused run passed 11 checks in 171.37 seconds. The extended run proved
+pending/uncertain admission rejection and rollback but exposed an incorrect test
+requesting manual retry of an automatically requeued job (299 pass/one fail).
+The corrected final run passed 300 checks in 115.19 seconds, including owner
+console/API, CSRF, reader/editor denial, source preservation, transactional rollback
+and automatic retry. Ruff and strict mypy pass across 220 source modules. All
+providers were synthetic and Docker retained its 1.476 GB hard limits.
