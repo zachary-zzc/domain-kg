@@ -1,8 +1,10 @@
-# Recursive extraction experiment implementation plan
+# Bounded iterative extraction experiment implementation plan
 
 > Execute natively using executing-plans, test-driven-development and
 > verification-before-completion. The user approved bounded recursive testing
 > after discussing decomposed extraction, independent checks and targeted repair.
+> User correction: optimize iteratively; stop and summarize after at most five
+> unsuccessful diagnostic/change/retest attempts, counting earlier failed routes.
 
 **Goal:** Measure whether bounded recursive extraction improves the existing
 local 0.8B and 4B models, retaining failures and cost as well as successes.
@@ -90,3 +92,15 @@ This pass tests the proposed workflow before integrating it into ingestion.
 Automatic entity merging, corpus reprocessing, new model training/downloads and
 full-document graph publication require later measured work. The existing image
 and its verified production source remain unchanged by this experiment.
+
+## Iteration stop rule (user correction)
+
+Count complete diagnostic/change/retest attempts, not individual model calls.
+Do not reset the counter when switching models or prompts. Attempt 1: 4B runtime
+timeouts, no quality result. Attempt 2: 0.8B decomposed extraction plus same-model
+verification loses all three development reference facts. At most three further
+strategies may be tried. Every attempt is recorded with hypothesis, change,
+measured result and failure reason. Stop at five unsuccessful attempts; do not
+add a sixth variation. Success requires all three development reference facts
+with no extra false claims, then no regression on the known positive/frozen
+contrast cases. These tiny provisional references do not establish corpus quality.
