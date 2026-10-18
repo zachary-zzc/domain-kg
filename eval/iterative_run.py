@@ -20,10 +20,13 @@ from scripts.native_model import CACHE, ROOT, model
 WORK = ROOT / ".cache/iterative-kg"
 
 
-def compact_request(chunk, schema, model_name):
+def compact_request(chunk, schema, model_name, *, predicate=None):
+    selected = [p for p in schema.predicates if predicate is None or p.name == predicate]
+    if not selected:
+        raise ValueError("Unknown predicate question")
     response = FlatContent.model_json_schema()
     props = response["$defs"]["FlatRelation"]["properties"]
-    props["predicate"]["enum"] = [p.name for p in schema.predicates]
+    props["predicate"]["enum"] = [p.name for p in selected]
     props["polarity"]["enum"] = ["positive", "negative", "uncertain"]
     props["refs"]["items"]["enum"] = list(range(len(chunk.spans)))
     response_format = {
@@ -61,7 +64,20 @@ def compact_request(chunk, schema, model_name):
                         "source_lines": [
                             {"id": i, "text": s.quote} for i, s in enumerate(chunk.spans)
                         ],
-                        "predicates": {p.name: DEFINITIONS[p.name] for p in schema.predicates},
+                        "predicates": {p.name: DEFINITIONS[p.name] for p in selected},
+                        **(
+                            {
+                                "question": {
+                                    "is_a": "What is explicitly a kind/category of what?",
+                                    "produces": "Who produces what? For 'X is made by Y', answer Y "
+                                    "produces X. Resolve 'it' from preceding source lines.",
+                                    "uses": "Who explicitly uses what? 'Needed for' differs from "
+                                    "as stating an agent uses something.",
+                                }[predicate]
+                            }
+                            if predicate
+                            else {}
+                        ),
                     },
                     ensure_ascii=False,
                     separators=(",", ":"),
@@ -123,7 +139,7 @@ async def run(number, hypothesis):
     report = {
         "attempt": number,
         "hypothesis": hypothesis,
-        "strategy": "compact_relations_v1",
+        "strategy": "compact_relations_v1" if number == 3 else "predicate_questions_v1",
         "model": "0.8b",
         "model_sha256": settings["sha256"],
         "git_revision": revision.decode().strip(),
@@ -157,11 +173,19 @@ async def run(number, hypothesis):
                 record = {"id": case["id"], "split": case["split"], "gold": case["gold"]}
                 report["records"].append(record)
                 try:
-                    raw = await calls.invoke(
-                        "compact", compact_request(chunk, schema, settings["served_model_name"])
-                    )
-                    value, rejected = ground(raw, chunk, schema)
-                    record.update(claims=claims(value), rejected=rejected)
+                    predictions, rejected = {}, []
+                    for predicate in [None] if number == 3 else dataset["predicate_subset"]:
+                        raw = await calls.invoke(
+                            "compact" if predicate is None else "question_" + predicate,
+                            compact_request(
+                                chunk, schema, settings["served_model_name"], predicate=predicate
+                            ),
+                        )
+                        value, errors = ground(raw, chunk, schema)
+                        for claim in claims(value):
+                            predictions.setdefault(tuple(claim), claim)
+                        rejected.extend(errors)
+                    record.update(claims=list(predictions.values()), rejected=rejected)
                     record["score"] = relation_score(record["claims"], case["gold"])
                 except Exception as error:
                     record.update(

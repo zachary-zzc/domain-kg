@@ -105,3 +105,17 @@ def test_shared_endpoints_cannot_collide_when_new_entities_follow_existing_ones(
     )
     assert not rejected and len(content.assertions) == 3
     assert len({e.local_id for e in content.entities}) == 4
+
+
+def test_predicate_question_exposes_only_one_relation_choice():
+    import json
+
+    from test_recursive_extraction import source
+
+    from eval.iterative_run import compact_request
+
+    chunk, schema = source()
+    request = compact_request(chunk, schema, "local", predicate="produces")
+    response = request["response_format"]["json_schema"]["schema"]
+    assert response["$defs"]["FlatRelation"]["properties"]["predicate"]["enum"] == ["produces"]
+    assert set(json.loads(request["messages"][1]["content"])["predicates"]) == {"produces"}
