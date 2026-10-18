@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "annotation": "Frozen agent-authored provisional references, not independent clinical review",
+  "predicate_subset": ["is_a", "produces", "uses"],
+  "cases": [
+    {
+      "id": "cholesterol", "split": "development", "blocks": [138, 139],
+      "gold": [
+        ["Cholesterol", "is_a", "lipid", "positive"],
+        ["liver", "produces", "Cholesterol", "positive"]
+      ]
+    },
+    {
+      "id": "coeliac", "split": "development", "blocks": [129, 130, 131],
+      "gold": [["Coeliac disease", "is_a", "autoimmune condition", "positive"]]
+    },
+    {
+      "id": "thyroid", "split": "known_positive_regression", "blocks": [133],
+      "gold": [["thyroid gland", "produces", "hormone", "positive"]]
+    },
+    {
+      "id": "passive", "split": "frozen_contrast",
+      "lines": ["The signal molecule is produced by the gland."],
+      "gold": [["gland", "produces", "signal molecule", "positive"]]
+    },
+    {
+      "id": "negation", "split": "frozen_contrast",
+      "lines": ["Mira does not use insulin."],
+      "gold": [["Mira", "uses", "insulin", "negative"]]
+    },
+    {
+      "id": "unrelated", "split": "frozen_contrast",
+      "lines": [
+        "Mira is mentioned in this paragraph.",
+        "Insulin is mentioned in another paragraph."
+      ],
+      "gold": []
+    }
+  ]
+}
