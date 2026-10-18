@@ -6,6 +6,12 @@ preparations and scoped graph overview do not establish extraction quality.
 
 整篇抽取仍未完成。4B 最终仅 1/3 短样本通过；未发布不合格结果，也未使用模拟图替代。
 
+19 October 2026: the bounded iterative experiment stopped after five unsuccessful
+strategies. The best 0.8B compact protocol found two of three provisional
+development relations with one false claim; same-weight review was unreliable.
+The new 4B trial timed out and supplies no semantic score. No full-document run
+or publication followed. See [the complete iteration report](iterative-extraction-report.md).
+
 ## Provider configuration
 
 Private file: `/Users/zachary/.cache/domain-kg/providers.medical-api.local.json`.
