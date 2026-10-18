@@ -191,6 +191,26 @@ async def test_foreign_schema_is_rejected_before_any_model_call():
         await api().run_recursive(chunk, schema, complete)
 
 
+async def test_reviewer_uses_short_ids_but_must_cite_both_endpoints():
+    chunk, schema = source()
+
+    async def complete(stage, payload, response_model):
+        if stage == "mentions":
+            return ENTITIES
+        if stage == "relations":
+            return {"relations": [relation()]}
+        if stage == "verify":
+            assert all(len(c["id"]) <= 3 for c in payload["candidates"])
+            verdicts = reviews(payload)
+            verdicts["verdicts"][0]["refs"] = [0]  # This line does not contain liver.
+            return verdicts
+        return {"relations": []}
+
+    result = await api().run_recursive(chunk, schema, complete, max_repairs=0)
+    assert not result.accepted.assertions
+    assert result.issues
+
+
 @pytest.mark.parametrize("value", [-1, 3, True])
 async def test_recursive_budget_cannot_be_expanded(value):
     chunk, schema = source()

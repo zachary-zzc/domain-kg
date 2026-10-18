@@ -183,7 +183,7 @@ async def run(size):
     report = {
         "status": "running",
         "scope": "experimental_three_predicate_source_extraction",
-        "protocol": "recursive-v1",
+        "protocol": "recursive-v2-short-verdicts",
         "model": size,
         "model_sha256": settings["sha256"],
         "cases_sha256": digest(CASES),
@@ -273,6 +273,8 @@ async def run(size):
                         ),
                     }
                     await guard.require_alive()
+                    if calls.limits.consecutive_timeouts >= 2:
+                        raise RuntimeError("Two consecutive local timeouts; experiment halted")
                 (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
                 print(
                     json.dumps(
@@ -284,7 +286,11 @@ async def run(size):
                     ),
                     flush=True,
                 )
-            report["status"] = "completed_experiment"
+            report["status"] = (
+                "completed_with_case_failures"
+                if any(record["failures"] for record in report["records"])
+                else "completed_experiment"
+            )
     except BaseException as error:
         report["status"] = "incomplete_experiment"
         report["runtime_error"] = {"type": type(error).__name__, "detail": str(error)[:240]}
@@ -293,6 +299,8 @@ async def run(size):
         if calls:
             await calls.close()
             report["calls"] = calls.limits.calls
+            report["call_count_definition"] = "attempted_local_http_calls_not_accepted_inferences"
+            report["completed_model_responses"] = sum("usage" in c for c in calls.records)
             report["output_tokens"] = calls.limits.output_tokens
         if guard:
             report["peak_rss_bytes"] = guard.peak_rss_bytes

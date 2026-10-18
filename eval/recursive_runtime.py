@@ -15,7 +15,7 @@ from domain_kg.graph.models import DomainSchema
 from domain_kg.ingestion.models import ParsedChunk, SourceLocation, Span
 from domain_kg.providers.compact import NamedContent, expand
 from domain_kg.providers.extraction import extraction_payload, strict_schema
-from eval.recursive_models import Mentions, Proposals
+from eval.recursive_models import Mentions, Proposals, Verdicts
 from eval.recursive_prompts import INSTRUCTIONS
 
 
@@ -92,6 +92,7 @@ class CallLimits:
     max_calls: int = 48
     calls: int = 0
     output_tokens: int = 0
+    consecutive_timeouts: int = 0
     started: float = field(default_factory=time.monotonic)
 
     def __post_init__(self):
@@ -113,6 +114,8 @@ class CallLimits:
             raise ValueError("Invalid call budget")
 
     def reserve(self):
+        if self.consecutive_timeouts >= 2:
+            raise RuntimeError("Two consecutive local timeouts; experiment halted")
         if (
             self.calls >= self.max_calls
             or time.monotonic() - self.started >= 1800
@@ -120,6 +123,9 @@ class CallLimits:
         ):
             raise RuntimeError("Experiment model budget exhausted")
         self.calls += 1
+
+    def outcome(self, *, timed_out):
+        self.consecutive_timeouts = self.consecutive_timeouts + 1 if timed_out else 0
 
 
 class LocalCalls:
@@ -183,8 +189,11 @@ class LocalCalls:
                 raise RuntimeError("Truncated, refused or actionable model output")
             result = json.loads(choice["message"]["content"])
             await self.guard.require_alive()
+            self.limits.outcome(timed_out=False)
             return result
         except BaseException as error:
+            if isinstance(error, (TimeoutError, httpx.TimeoutException)):
+                self.limits.outcome(timed_out=True)
             record["error"] = type(error).__name__
             raise
         finally:
@@ -217,6 +226,10 @@ class LocalCalls:
             if names:
                 props["subject"]["enum"] = names
                 props["target"]["enum"] = names
+        if response_model is Verdicts:
+            schema["$defs"]["Verdict"]["properties"]["id"]["enum"] = [
+                candidate["id"] for candidate in payload["candidates"]
+            ]
         request = {
             "model": self.profile.extraction_model,
             "temperature": 0,

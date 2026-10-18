@@ -142,6 +142,8 @@ async def run_recursive(
         if round_number == 0:
             snapshots["decomposed"] = content([a for _, a in candidates.values()])
         if candidates:
+            # Long content hashes remain internal; small models copy short scoped labels.
+            candidates = {f"c{i}": value for i, value in enumerate(candidates.values())}
             payload = hints | {
                 "candidates": [
                     {"id": key, **p.model_dump(mode="json")} for key, (p, _) in candidates.items()
@@ -153,7 +155,10 @@ async def run_recursive(
                 if len(set(ids)) != len(ids) or set(ids) != set(candidates):
                     raise ValueError("review_ids_must_match_exact_candidates")
                 for verdict in verdicts.verdicts:
-                    references(chunk, verdict.refs)
+                    spans = references(chunk, verdict.refs)
+                    if verdict.status == "supported":
+                        assertion = candidates[verdict.id][1]
+                        content([assertion.model_copy(update={"spans": spans})])
                 for verdict in verdicts.verdicts:
                     proposal, assertion = candidates[verdict.id]
                     if verdict.status == "supported":
@@ -172,7 +177,7 @@ async def run_recursive(
                                 "candidate": proposal.model_dump(mode="json"),
                             }
                         )
-            except (ValueError, ValidationError) as error:
+            except (ValueError, ValidationError, DomainError) as error:
                 current_issues.append({"kind": "invalid_review", "detail": str(error)[:200]})
         snapshots[f"verified_{round_number}"] = content(accepted.values())
         issues.extend(current_issues)

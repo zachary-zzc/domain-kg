@@ -56,3 +56,11 @@ def test_failed_cases_still_count_as_missing_reference_facts_in_aggregate():
     assert result["failed_cases"] == 1
     assert result["fn"] == 1
     assert result["recall"] == 0
+
+
+def test_two_consecutive_timeouts_halt_instead_of_spending_the_rest_of_the_budget():
+    limits = api().CallLimits(endpoint="http://127.0.0.1:29500/v1")
+    limits.outcome(timed_out=True)
+    limits.outcome(timed_out=True)
+    with pytest.raises(RuntimeError, match="consecutive"):
+        limits.reserve()
