@@ -1,8 +1,9 @@
 # Packaging and deployment preparation
 
-This repository supplies deployment artifacts. No image build, container startup,
-external CI run, push or deployment was performed by adding them. Keep the laptop
-on the existing native API/worker setup and capped database Compose services.
+The application image is now built and verified locally on Linux/arm64. External
+CI, image publication, deployment and cross-environment migration remain deferred
+until the operator selects that environment. Keep the laptop databases on the
+existing capped Compose services.
 
 ## Reproducible inputs
 
@@ -30,9 +31,29 @@ registry digest. Its build installs hashed binary dependencies and the already
 checked application wheel. The runtime uses UID/GID 10001, one API process and no
 embedded database or model. `.dockerignore` permits only the Dockerfile, runtime
 lock and wheel into the build context. A release operator can build it with
-`docker build -t domain-kg:review .` after producing `dist/`; this image build and
-its Linux parser/runtime checks remain acceptance work. Update the image digest
-and dependency locks deliberately, then repeat those checks.
+`docker build -t domain-kg:local .` after producing `dist/`. The image downloads
+and hash-validates its pinned cl100k vocabulary during construction; source
+chunking requires no runtime vocabulary download. The ASGI factory creates
+server-owned settings explicitly. Update the image digest and dependency locks
+deliberately, then repeat these checks:
+
+```sh
+uv build --offline
+uv run --no-sync python scripts/check_distribution.py dist
+docker build --memory=1g --cpu-quota=100000 -t domain-kg:local .
+uv run --no-sync python scripts/check_image.py domain-kg:local --output .cache/image-report.json
+```
+
+`check_image.py` exercises the image's actual default command using synthetic
+inputs streamed over stdin. Its container has no external network, a read-only
+root, UID/GID 10001, no capabilities, no-new-privileges, 64 PIDs, one CPU, a
+512-MiB memory/swap ceiling and a 128-MiB temporary filesystem. It verifies
+offline bilingual tokenization, sandboxed text and native two-page PDF parsing
+with exact citations, console assets, the worker CLI, HTTP liveness and a 401
+Bearer challenge from unauthenticated MCP. No private files are mounted and the
+probe/testing code is absent from the wheel. The first measured local pass used
+image `sha256:393621c88ad6357727f4257c3c7170639287746480e6c6c50e3cec50a72de1fd`;
+rebuild after application changes rather than treating that digest as current.
 
 The GitHub workflow pins official checkout/setup-python action commits and uv
 0.10.7. It checks Ruff, mypy, unit/protocol behavior, runtime-lock drift and package
