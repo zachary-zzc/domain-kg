@@ -1,0 +1,12 @@
+{"id":"dev-entity","split":"development","category":"identifier","query":"Alpha","expected":["public"]}
+{"id":"dev-plain","split":"development","category":"identifier","query":"identifier-A7","expected":["plain"]}
+{"id":"held-relation","split":"held_out","category":"relationship","query":"Alpha uses Beta","expected":["public"]}
+{"id":"held-source","split":"held_out","category":"identifier","query":"urn:fixture:alpha","expected":["public"]}
+{"id":"held-bilingual","split":"held_out","category":"bilingual","query":"阿尔法使用贝塔","expected":["plain"]}
+{"id":"held-plain","split":"held_out","category":"identifier","query":"urn:fixture:identifier-A7","expected":["plain"]}
+{"id":"held-tag","split":"held_out","category":"filter","query":"Alpha","filters":{"tags_all":["public"]},"expected":["public"]}
+{"id":"held-excluded-tag","split":"held_out","category":"no_answer","query":"Alpha","filters":{"tags_all":["absent-tag"]},"expected":[],"must_be_empty":true}
+{"id":"held-hidden","split":"held_out","category":"permission","query":"PRIVATE_NEAREST","filters":{"tags_all":["hidden"]},"expected":[],"must_be_empty":true}
+{"id":"held-author","split":"held_out","category":"filter","query":"identifier-A7","filters":{"languages":["zh"]},"expected":["plain"]}
+{"id":"held-absent","split":"held_out","category":"no_answer","query":"No supporting evidence for this nonexistent project","expected":[]}
+{"id":"held-schema","split":"held_out","category":"graph_filter","query":"Alpha","filters":{"predicates":["uses"]},"expected":["public"]}

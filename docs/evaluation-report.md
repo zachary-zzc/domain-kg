@@ -1,0 +1,51 @@
+# Local platform evaluation
+
+The local evaluation runner is available as:
+
+```sh
+TIKTOKEN_CACHE_DIR="$PWD/.cache/tiktoken" uv run --no-sync python -m eval.run \
+  --config eval/pilot.toml --output .cache/evaluation
+```
+
+Start the existing four smoke stores and verify their replica set first. The
+runner verifies their configured hard memory/swap limits and never starts a
+model or service. It freezes the case/config hashes and writes the command log
+and report outside Git. A failing run cannot retain an earlier report as its
+current result. Unit tests exercise duplicate-source ranking, no-answer handling
+and invalid cutoffs.
+
+## Measured local run, 18 October 2026
+
+The first explicit opt-in run passed in 89.86 seconds: 12 questions (two
+development, ten held out) over three tiny synthetic materials, each exercised
+in vector, lexical, graph, fast and deep modes. All 41 returned citations resolved
+to exact source spans, no hidden-material result was returned, and both absent
+filter scopes and hidden-only scopes remained empty. There were 30 synthetic
+query embeddings, zero generative query calls and zero live model calls.
+
+These are source-level metrics at **top_k=1** using controlled three-dimensional
+embeddings and a deterministic extractor. They do not measure real semantic
+embedding/extraction quality, clinical accuracy, production throughput, or the
+acceptance document's 100,000-chunk workload.
+
+| Mode | Answerable-source recall@1 | No-answer false positives | Mean search wall time |
+| --- | ---: | ---: | ---: |
+| Vector | 0.714 | 1 | 0.645 s |
+| Lexical | 0.857 | 0 | 0.604 s |
+| Graph | 0.429 | 0 | 0.535 s |
+| Fast | 1.000 | 1 | 0.950 s |
+| Deep | 0.857 | 1 | 1.300 s |
+
+Graph-only retrieval cannot recover plain text without graph assertions. The
+unfiltered no-answer query also demonstrates that similarity/rank alone does
+not establish supporting evidence. Relevance cutoffs require separate real
+development data; these test vectors must not tune production thresholds.
+
+## Open evaluation gates
+
+The local report is an executable platform regression, not full Task 19
+acceptance. The 120 independently checked pilot questions, real-model corpus
+quality, same-budget reranker/upstream comparisons, multi-user team pilot and
+large-workload measurements remain separate. Real corpus evaluation depends on
+Task 9; external identity/client acceptance and deployment are deferred in the
+current local-first scope.

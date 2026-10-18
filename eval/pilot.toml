@@ -1,0 +1,7 @@
+version = 1
+provider_mode = "synthetic"
+cases = "cases.jsonl"
+modes = ["vector", "lexical", "graph", "fast", "deep"]
+top_k = 1
+max_cases = 32
+timeout_seconds = 900
