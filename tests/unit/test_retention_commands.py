@@ -6,6 +6,18 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 
+def test_incomplete_backup_collection_is_an_explicit_resource_selection():
+    from domain_kg.operations.models import RetentionCommand
+
+    command = RetentionCommand(
+        kg_id=uuid4(),
+        expected_published_revision=0,
+        resources="incomplete_backups",
+        idempotency_key="collect-failed-backup",
+    )
+    assert command.resources == "incomplete_backups"
+
+
 def test_retention_command_requires_an_explicit_resource_selection():
     from domain_kg.jobs.models import JobCommand
     from domain_kg.operations.models import OwnerCommand, RetentionCommand

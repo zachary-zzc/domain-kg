@@ -12,6 +12,7 @@ from domain_kg.jobs.queue import JobQueue, now
 from domain_kg.materials.service import digest
 from domain_kg.operations.audit import AuditTrail
 from domain_kg.operations.export_models import ExportStore
+from domain_kg.operations.incomplete_backups import IncompleteBackups, IncompleteBackupTarget
 from domain_kg.operations.models import OwnerOperation
 from domain_kg.operations.package_erasure import PackageErasure
 from domain_kg.operations.packages import PackageObject
@@ -48,7 +49,7 @@ class RetentionService:
         self,
         job: LeasedJob,
         plan: RetentionPlan,
-        target: RetainedTarget | None = None,
+        target: RetainedTarget | IncompleteBackupTarget | None = None,
         session: AsyncClientSession | None = None,
     ) -> AccessContext:
         access, operation = await self._operation(job, session)
@@ -69,7 +70,11 @@ class RetentionService:
                     "org_id": str(job.org_id),
                     "kg_id": str(job.kg_id),
                     "kind": target.kind,
-                    "operation_id": str(target.operation_id),
+                    "operation_id": str(
+                        target.claim_operation_id
+                        if isinstance(target, IncompleteBackupTarget)
+                        else target.operation_id
+                    ),
                     "attempt_id": str(target.attempt_id),
                     "cleanup_job_id": str(job.id),
                 },
@@ -112,6 +117,9 @@ class RetentionService:
             for target in plan.targets:
                 access = await self._guard(job, plan, target)
                 binding = (await self.queue.router.for_sources(access, job.kg_id)).blobs
+                if isinstance(target, IncompleteBackupTarget):
+                    await self._incomplete(job, operation, plan, target, PackageStore(binding))
+                    continue
                 store = (PackageStore if target.kind == "backup" else ExportStore)(binding)
                 inventory = RetentionInventory(self.queue, plan, target)
                 await inventory.prepare(store, partial(self._guard, job, plan, target))
@@ -120,12 +128,81 @@ class RetentionService:
         except (ValidationError, KeyError, ValueError, TypeError):
             raise invalid() from None
 
+    def _incomplete_key(
+        self, plan: RetentionPlan, target: IncompleteBackupTarget
+    ) -> dict[str, str]:
+        return {
+            "org_id": str(plan.org_id),
+            "kg_id": str(plan.kg_id),
+            "cleanup_job_id": str(plan.job.id),
+            "kind": target.kind,
+            "operation_id": str(target.operation_id),
+            "attempt_id": str(target.attempt_id),
+        }
+
+    async def _incomplete(
+        self,
+        job: LeasedJob,
+        operation: OwnerOperation,
+        plan: RetentionPlan,
+        target: IncompleteBackupTarget,
+        store: PackageStore,
+    ) -> None:
+        references = await IncompleteBackups(self.queue).objects(operation, target)
+        if sum(ref.size_bytes for ref in references) > plan.policy.max_verify_bytes:
+            raise invalid()
+
+        async def guard() -> None:
+            await self._guard(job, plan, target)
+
+        erasure = PackageErasure(store, authorize=guard, limits=plan.policy.erasure)
+        for reference in references:
+            await erasure.erase(reference)
+        await guard()
+        await self.database.retention_inventories.update_one(
+            self._incomplete_key(plan, target),
+            {
+                "$set": {
+                    "sealed": True,
+                    "erased": True,
+                    "erased_at": now(),
+                    "count": len(references),
+                    "objects_hash": target.objects_hash,
+                }
+            },
+            upsert=True,
+        )
+
     async def _complete(self, job: LeasedJob, plan: RetentionPlan) -> None:
         async def commit(session: AsyncClientSession) -> None:
             access = await self._guard(job, plan, session=session)
+            _, operation = await self._operation(job, session)
             await self.queue.transactions.fence(access, access.action, session)
             for target in plan.targets:
                 await self._guard(job, plan, target, session)
+                if isinstance(target, IncompleteBackupTarget):
+                    await IncompleteBackups(self.queue).objects(operation, target, session)
+                    if not await self.database.retention_inventories.find_one(
+                        self._incomplete_key(plan, target)
+                        | {
+                            "sealed": True,
+                            "erased": True,
+                            "objects_hash": target.objects_hash,
+                        },
+                        session=session,
+                    ):
+                        raise invalid()
+                    await self.database.backup_attempts.update_one(
+                        {
+                            "org_id": str(plan.org_id),
+                            "kg_id": str(plan.kg_id),
+                            "id": str(target.attempt_record_id),
+                            "cleanup_job_id": str(job.id),
+                        },
+                        {"$set": {"cleanup_state": "erased", "erased_at": now()}},
+                        session=session,
+                    )
+                    continue
                 inventory = RetentionInventory(self.queue, plan, target)
                 if not await self.database.retention_inventories.find_one(
                     inventory.key | {"sealed": True, "erased": True}, session=session

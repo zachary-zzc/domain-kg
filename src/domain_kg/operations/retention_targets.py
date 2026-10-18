@@ -12,6 +12,7 @@ from domain_kg.materials.service import digest
 from domain_kg.models import SHA256, FrozenModel, ScopedRef, UTCDateTime
 from domain_kg.operations.backup_models import BackupSeal
 from domain_kg.operations.export_models import ExportManifest
+from domain_kg.operations.incomplete_backups import IncompleteBackups, IncompleteBackupTarget
 from domain_kg.operations.models import OwnerOperation, RetentionCommand
 from domain_kg.operations.retention_policy import RetentionPolicy
 
@@ -32,21 +33,40 @@ class RetainedTarget(FrozenModel):
 class RetentionPlan(ScopedRef):
     job: ScopedRef
     storage_profile_id: UUID
-    resources: Literal["backups", "exports", "both"]
+    resources: Literal["backups", "exports", "both", "incomplete_backups"]
     policy: RetentionPolicy
     created_at: UTCDateTime
     cutoff: UTCDateTime
-    targets: Annotated[tuple[RetainedTarget, ...], Field(max_length=100)]
+    targets: Annotated[tuple[RetainedTarget | IncompleteBackupTarget, ...], Field(max_length=100)]
 
     @model_validator(mode="after")
     def exact_targets(self) -> Self:
         if (self.job.org_id, self.job.kg_id) != (self.org_id, self.kg_id) or (
             self.cutoff != self.policy.cutoff(self.created_at)
             or len(self.targets) > self.policy.max_targets
-            or len({(t.kind, t.operation_id) for t in self.targets}) != len(self.targets)
+            or len(
+                {
+                    (
+                        t.kind,
+                        t.claim_operation_id
+                        if isinstance(t, IncompleteBackupTarget)
+                        else t.operation_id,
+                    )
+                    for t in self.targets
+                }
+            )
+            != len(self.targets)
         ):
             raise ValueError("cleanup boundary differs")
         for target in self.targets:
+            if isinstance(target, IncompleteBackupTarget):
+                if (
+                    self.resources != "incomplete_backups"
+                    or target.settled_at > self.cutoff
+                    or not 1 <= target.object_count <= self.policy.max_objects_per_target
+                ):
+                    raise ValueError("incomplete cleanup requires a stopped, settled capture")
+                continue
             seal = target.descriptor
             if isinstance(seal, BackupSeal):
                 ref = seal.manifest
@@ -91,7 +111,16 @@ class RetentionTargets:
             raise inaccessible_reference()
         created = now()
         ns = {"org_id": str(operation.org_id), "kg_id": str(operation.kg_id)}
-        targets: list[RetainedTarget] = []
+        targets: list[RetainedTarget | IncompleteBackupTarget] = []
+        if command.resources == "incomplete_backups":
+            targets.extend(
+                await IncompleteBackups(self.queue).allocate(
+                    operation,
+                    self.policy,
+                    created,
+                    session,
+                )
+            )
         for kind in ("backup", "export"):
             if command.resources not in ("both", kind + "s"):
                 continue
@@ -199,9 +228,12 @@ class RetentionTargets:
     async def validate(
         self,
         operation: OwnerOperation,
-        target: RetainedTarget,
+        target: RetainedTarget | IncompleteBackupTarget,
         session: AsyncClientSession | None = None,
     ) -> None:
+        if isinstance(target, IncompleteBackupTarget):
+            await IncompleteBackups(self.queue).validate(operation, target, session)
+            return
         ns = {"org_id": str(operation.org_id), "kg_id": str(operation.kg_id)}
         row = await self.database.jobs.find_one(
             ns

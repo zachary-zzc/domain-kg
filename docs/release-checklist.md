@@ -17,6 +17,8 @@ never counts as acceptance.
   including repeat backup/rebuild after restoration.
 - [ ] Complete safe abandoned generation/capture collection and local maintenance
   controls; time elapsed alone does not prove a stale writer has stopped.
+- [x] Collect acknowledged, stopped incomplete backups and earlier failed attempts
+  after successful retry; preserve uncertain/legacy writes and the accepted backup.
 - [ ] Run fresh final unit/protocol/frontend and appropriate real-store regressions.
 - [ ] Rebuild the final image from the verified application revision and retain
   its immutable local ID and verification report.

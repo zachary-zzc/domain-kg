@@ -1086,6 +1086,21 @@ class JobQueue:
                 raise DomainError(
                     ErrorCode.VERSION_CONFLICT, "This job cannot change to that state."
                 )
+            if raw["kind"] == "backup" and operation == "retry":
+                if await self.database.backup_attempts.find_one(
+                    {
+                        "org_id": raw["org_id"],
+                        "kg_id": raw["kg_id"],
+                        "job_id": raw["id"],
+                        "attempt_id": raw.get("attempt_id"),
+                        "cleanup_job_id": {"$exists": True},
+                        "cleanup_state": {"$ne": "erased"},
+                    },
+                    session=session,
+                ):
+                    raise DomainError(
+                        ErrorCode.VERSION_CONFLICT, "Complete the backup cleanup before retrying."
+                    )
             if raw["kind"] == "restore" and operation == "retry":
                 if await self.database.restore_targets.find_one(
                     {

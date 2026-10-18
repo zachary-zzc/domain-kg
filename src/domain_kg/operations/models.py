@@ -55,7 +55,7 @@ class RetentionCommand(FrozenModel):
     kind: Literal["retention"] = "retention"
     kg_id: UUID
     expected_published_revision: NonNegative
-    resources: Literal["backups", "exports", "both"]
+    resources: Literal["backups", "exports", "both", "incomplete_backups"]
     idempotency_key: IdempotencyKey
 
 

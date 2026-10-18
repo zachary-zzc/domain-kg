@@ -1,5 +1,34 @@
 # Operations implementation status
 
+## Incomplete backup cleanup, local follow-up
+
+Owners may select **Incomplete stopped backups** in Operations → Clean expired
+packages, or submit `resources="incomplete_backups"` to the existing retention
+endpoint. The same serial `--retention-only` worker performs the work. Ordinary
+backup/export expiry selections keep their previous behavior.
+
+Every new backup object write now records a scoped pending intent before I/O,
+drains cancellation, and records acknowledgement or uncertainty. Backup acceptance
+requires zero pending/uncertain writes. A failed capture records that its handler
+stopped; a TTL or expired lease alone never establishes that fact. Collection
+requires the configured additional retention period, stopped handler, all writes
+settled, the exact operation/attempt references, current owner permission, and
+unchanged storage configuration. Legacy untracked, crashed/pending and uncertain
+attempts remain protected and are not silently treated as empty packages.
+
+Cleanup freezes exact immutable object references and serializes admission with
+backup retry. It supports acknowledged old attempts after a later attempt has
+successfully sealed, preserving that new backup. Partial deletion never accepts
+the cleanup job; replay/retry verifies absence and completes only its original
+target inventory. Originals, accepted projections and current grants are unchanged.
+
+Verification: ten focused real-store cases plus the fourteen required
+backup/quota/audit checks passed together in 313.44 seconds. Cases cover actual
+lost remote acknowledgement, pending/uncertain/legacy refusal, older-attempt
+cleanup after successful retry, interrupted deletion, old-worker refusal, and
+forged KG/backup/attempt references. Full non-store regression: 367 passed in
+10.90 seconds; Ruff and strict mypy pass for 237 source files. No live model ran.
+
 Owner-operation admission and internally sealed backup packages have passed their
 local gates. Public owner backup/export controls are implemented; restore,
 generation migration and deployment acceptance continue under

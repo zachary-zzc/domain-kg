@@ -21,6 +21,7 @@ from domain_kg.materials.models import BlobRef
 from domain_kg.models import ScopedRef, SourceVersion
 from domain_kg.operations.authority import AuthorityCapture
 from domain_kg.operations.backup_models import BackupManifest, BackupSeal
+from domain_kg.operations.backup_writes import BackupWrites, attempt_key, drain
 from domain_kg.operations.capture import BackupCapture
 from domain_kg.operations.jobs import OwnerOperations
 from domain_kg.operations.models import BackupCommand, OwnerOperation
@@ -93,7 +94,9 @@ class BackupService:
                 ErrorCode.QUOTA_EXCEEDED, "Backup package exceeds its capture budget."
             )
         await self.capture.guard(context.job)
-        await context.packages.put(reference, chunks)
+        await BackupWrites(self.queue).run(
+            context.job, reference, lambda: context.packages.put(reference, chunks)
+        )
         async for _ in context.packages.open(reference):
             await self.capture.guard(context.job)
         await self.database.backup_objects.insert_one(
@@ -280,15 +283,21 @@ class BackupService:
         if job.kind != "backup":
             raise inaccessible_reference()
         await self._initialize()
+        finished = False
         try:
             async with asyncio.timeout(300):
                 await self._run(job)
+            finished = True
         except (ValidationError, ValueError, KeyError, TypeError):
             raise DomainError(
                 ErrorCode.PROJECTION_INCONSISTENT,
                 "The backup authority or package is inconsistent.",
             ) from None
         finally:
+            if not finished:
+                stopping = asyncio.create_task(BackupWrites(self.queue).stopped(job))
+                await drain(stopping)
+                stopping.result()
             await self.capture.release(job)
 
     async def _run(self, job: LeasedJob) -> None:
@@ -405,6 +414,19 @@ class BackupService:
                 "state": "sealed",
             }
             await self.database.backup_results.insert_one(row, session=session)
+            tracked = await self.database.backup_attempts.update_one(
+                attempt_key(job)
+                | {
+                    "tracking_version": 1,
+                    "pending_count": 0,
+                    "uncertain_count": 0,
+                    "cleanup_job_id": {"$exists": False},
+                },
+                {"$set": {"state": "sealed"}},
+                session=session,
+            )
+            if not tracked.matched_count:
+                raise DomainError(ErrorCode.REVISION_NOT_READY, "Backup writes are not settled.")
             changed = await self.database.jobs.update_one(
                 self.queue._active(job),
                 {

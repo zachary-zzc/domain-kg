@@ -36,13 +36,13 @@ Files: `Dockerfile`, `.dockerignore`, `scripts/check_distribution.py`,
 `scripts/check_image.py`, runtime tokenizer preparation, packaging tests,
 `docs/deployment.md`.
 
-- [ ] Reproduce missing-tokenizer/offline-image behavior before changing code.
-- [ ] Pin and verify required public tokenizer data at build time; never fetch
+- [x] Reproduce missing-tokenizer/offline-image behavior before changing code.
+- [x] Pin and verify required public tokenizer data at build time; never fetch
   model weights. Install the checked application wheel and include console assets.
-- [ ] Build a local image and verify non-root/read-only execution, private default
+- [x] Build a local image and verify non-root/read-only execution, private default
   MCP, liveness, worker entry points and isolated native PDF/text parsing with
   outbound network disabled. Record image identity and exact checks.
-- [ ] Run relevant unit/protocol, lint/type and package checks; commit verified work.
+- [x] Run relevant unit/protocol, lint/type and package checks; commit verified work.
 
 ### Task 2: Complete local authority/history and safe operations
 
