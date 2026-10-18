@@ -30,6 +30,31 @@ class FlatContent(FrozenModel):
     relations: Annotated[tuple[FlatRelation, ...], Field(max_length=3)]
 
 
+SURFACE_VERBS = (
+    "is a",
+    "is an",
+    "known as",
+    "produces",
+    "makes",
+    "made by",
+    "produced by",
+    "uses",
+    "does not use",
+    "used by",
+)
+
+
+class SurfaceRelation(FrozenModel):
+    subject: Annotated[str, Field(min_length=1, max_length=128)]
+    verb: Annotated[str, Field(min_length=1, max_length=40)]
+    target: Annotated[str, Field(min_length=1, max_length=128)]
+    refs: References
+
+
+class SurfaceContent(FrozenModel):
+    relations: Annotated[tuple[SurfaceRelation, ...], Field(max_length=3)]
+
+
 class Iterations:
     def __init__(self, path: Path):
         self.path = path
@@ -66,9 +91,14 @@ class Iterations:
 
 
 def source_name(value, chunk):
+    value = value.strip()
+    if any(
+        re.search(r"(?<!\w)" + re.escape(value) + r"(?!\w)", span.quote) for span in chunk.spans
+    ):
+        return value
     matches = set()
     for span in chunk.spans:
-        for match in re.finditer(re.escape(value.strip()), span.quote, re.I):
+        for match in re.finditer(r"(?<!\w)" + re.escape(value) + r"(?!\w)", span.quote, re.I):
             matches.add(match.group())
     if len(matches) != 1:
         raise ValueError("Endpoint must uniquely align to an original source spelling")
@@ -118,3 +148,55 @@ def ground(raw, chunk, schema):
     )
     validate_extraction(chunk, schema, batch(chunk, schema, result))
     return result, rejected
+
+
+def ground_surface(raw, chunk, schema):
+    """Narrow English surface patterns, not general entailment or medical validation."""
+    proposals = SurfaceContent.model_validate(raw)
+    grounded, rejected = [], []
+    for candidate in proposals.relations:
+        try:
+            spans = references(chunk, candidate.refs)
+            text = re.sub(r"\s+", " ", " ".join(s.quote for s in spans))
+            subject, target = (source_name(n, chunk) for n in (candidate.subject, candidate.target))
+            if subject.casefold() in {"it", "this", "that", "they", "he", "she"}:
+                raise ValueError("A pronoun requires an explicit named antecedent candidate")
+            s, t = re.escape(subject), re.escape(target)
+            verb = candidate.verb.casefold()
+            polarity = "positive"
+            if verb in {"is a", "is an"}:
+                predicate, pattern = "is_a", s + r"\s+is\s+an?\s+" + t
+            elif verb == "known as":
+                predicate = "is_a"
+                pattern = s + r"\s+is\s+an?\s+[^.!?;]{1,100}?\s+known as\s+an?\s+" + t
+            elif verb in {"made by", "produced by", "used by"}:
+                predicate = "uses" if verb == "used by" else "produces"
+                passive = r"\s+(?:(?:is|was|are|were)\s+)?(?:mainly\s+)?" + verb
+                direct = s + passive + r"\s+(?:the\s+)?" + t
+                # Explicitly bounded heuristic: immediately preceding subject sentence only.
+                antecedent = s + r"\s+is\s+[^.!?]*\.\s*It" + passive + r"\s+(?:the\s+)?" + t
+                pattern = "(?:" + direct + "|" + antecedent + ")"
+                subject, target = target, subject
+            elif verb in {"produces", "makes", "uses", "does not use"}:
+                predicate = "produces" if verb in {"produces", "makes"} else "uses"
+                polarity = "negative" if verb == "does not use" else "positive"
+                pattern = s + r"\s+" + verb + r"\s+(?:(?:a|an|the)\s+)?" + t
+            else:
+                raise ValueError("Unknown literal relation phrase")
+            if not re.search(r"(?<!\w)" + pattern + r"(?!\w)", text, re.I):
+                raise ValueError("No matching source clause; co-occurrence is insufficient")
+            grounded.append(
+                {
+                    "subject": subject,
+                    "predicate": predicate,
+                    "target": target,
+                    "polarity": polarity,
+                    "refs": list(candidate.refs),
+                }
+            )
+        except (ValueError, DomainError) as error:
+            rejected.append(
+                {"candidate": candidate.model_dump(mode="json"), "reason": str(error)[:200]}
+            )
+    result, canonical_rejected = ground({"relations": grounded}, chunk, schema)
+    return result, rejected + canonical_rejected
