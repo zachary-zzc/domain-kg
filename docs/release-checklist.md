@@ -5,6 +5,9 @@ cross-environment migration will be agreed separately. Task 9 real extraction
 quality remains outside this completion pass. An opt-in test being skipped
 never counts as acceptance.
 
+The user confirmed that this pass completes the platform on its current
+configuration. Model/schema upgrade workflows will be decided later.
+
 ## Local verified evidence
 
 - [x] Build an application wheel/source pair and inspect its private-file boundary.
@@ -22,7 +25,7 @@ never counts as acceptance.
 - [x] Collect acknowledged, stopped incomplete backups and earlier failed attempts
   after successful retry; preserve uncertain/legacy writes and the accepted backup.
 - [ ] Run fresh final unit/protocol/frontend and appropriate real-store regressions.
-- [ ] Rebuild the final image from the verified application revision and retain
+- [x] Rebuild the final image from the verified application revision and retain
   its immutable local ID and verification report.
 
 ## Separate acceptance dependencies

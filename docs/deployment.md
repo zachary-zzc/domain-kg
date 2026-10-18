@@ -55,6 +55,15 @@ probe/testing code is absent from the wheel. The first measured local pass used
 image `sha256:393621c88ad6357727f4257c3c7170639287746480e6c6c50e3cec50a72de1fd`;
 rebuild after application changes rather than treating that digest as current.
 
+The current local artifact is built from application revision `02a23d8` and
+passed the same isolation probe. Its immutable image ID is
+`sha256:e328ab790487098116577cc986ae5558ee9020e483001b186173b6b51e045738`.
+The ignored `.cache/domain-kg-local-image.tar` archive was exported and actually
+loaded again with Docker. Archive SHA256:
+`8627514187a312d7e9faa2a6ea590da1a93d501fdb915f70c36ba1975aa49c70`.
+The runtime report is `.cache/image-report.json`; the local release manifest
+continues to say verification is in progress until the final suite finishes.
+
 The GitHub workflow pins official checkout/setup-python action commits and uv
 0.10.7. It checks Ruff, mypy, unit/protocol behavior, runtime-lock drift and package
 contents. It has read-only repository permission and no provider keys, database

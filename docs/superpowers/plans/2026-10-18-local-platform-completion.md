@@ -5,6 +5,10 @@
 > and images locally; external deployment and cross-environment migration will
 > be agreed separately. Task 9 live extraction quality remains a separate gate.
 
+**Scope confirmation:** The user explicitly chose the current-configuration
+platform for this pass. Embedding-model and domain-schema upgrade workflows
+will be decided later, separately from environment migration.
+
 **Goal:** Finish and verify the local platform, including a usable application
 image, safe operations, and reproducible local release checks.
 
