@@ -16,6 +16,7 @@ from domain_kg.models import SHA256, FrozenModel, Namespace, NonNegative, UTCDat
 from domain_kg.operations.models import OwnerOperation
 from domain_kg.operations.retention_policy import RetentionPolicy
 from domain_kg.revisions.projections import digest
+from domain_kg.revisions.writes import placement_hash
 
 
 def invalid() -> DomainError:
@@ -185,7 +186,7 @@ class GenerationCollection:
         profile = await self.queue.router.registry.profile(
             target.storage_profile_id, operation.org_id
         )
-        if digest(profile.model_dump(mode="json")) != target.storage_profile_hash:
+        if placement_hash(profile) != target.storage_profile_hash:
             raise invalid()
         if await self.database.read_pins.find_one(
             ns

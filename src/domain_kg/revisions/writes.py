@@ -7,12 +7,19 @@ from uuid import UUID, uuid4
 
 from pymongo.asynchronous.client_session import AsyncClientSession
 
+from domain_kg.catalog.models import StorageProfile
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.jobs.models import LeasedJob
 from domain_kg.jobs.queue import JobQueue, now
 from domain_kg.revisions.projections import digest
 
 T = TypeVar("T")
+
+
+def placement_hash(profile: StorageProfile) -> str:
+    value = profile.model_dump(mode="json")
+    value["allowed_org_ids"] = sorted(str(identifier) for identifier in profile.allowed_org_ids)
+    return digest(value)
 
 
 async def drain(task: asyncio.Task[Any]) -> bool:
@@ -73,7 +80,7 @@ class ProjectionWrites:
             profile = await self.queue.router.registry.profile(
                 UUID(kg["storage_profile_id"]), job.org_id
             )
-            profile_hash = digest(profile.model_dump(mode="json"))
+            profile_hash = placement_hash(profile)
             if manifest_id is not None:
                 attempt = await self.database.projection_attempts.find_one(
                     ns | {"id": str(manifest_id), "batch.generation": str(generation)},
