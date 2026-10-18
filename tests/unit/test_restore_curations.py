@@ -10,6 +10,7 @@ from domain_kg.errors import DomainError
 from domain_kg.graph.schema import schema_for
 from domain_kg.operations.restore_documents import RestoreDocuments
 from domain_kg.revisions.curation_publication import directive
+from domain_kg.revisions.models import RevisionReceipt
 from domain_kg.revisions.projections import digest
 
 
@@ -80,3 +81,28 @@ def test_history_rejects_unknown_entity_and_cross_scope_source():
     row["source_versions"][str(values[2].material_id)] = str(uuid4())
     with pytest.raises(DomainError):
         service.revision(row)
+
+
+@pytest.mark.parametrize("kind", ["node", "relation"])
+def test_published_historical_receipt_rebinds_namespace_without_changing_human_revision(kind):
+    from domain_kg.operations.restore_curations import RestoreCurations
+
+    values, row = history(kind)
+    mapping = remapper(values)
+    receipt = RevisionReceipt(
+        **mapping.origin.model_dump(),
+        revision_id=row["id"],
+        state="published",
+        published_revision=7,
+    )
+    row["receipt"] = receipt.model_dump(mode="json")
+    service = RestoreCurations(RestoreDocuments(mapping, originals=()))
+    result = service.receipt(row, service.revision(row))
+    restored = RevisionReceipt.model_validate(result["receipt"])
+    assert restored.kg_id == mapping.target.kg_id
+    assert restored.revision_id == receipt.revision_id and restored.published_revision == 7
+    assert row["receipt"] == receipt.model_dump(mode="json")
+    for field, value in (("kg_id", str(uuid4())), ("revision_id", str(uuid4()))):
+        forged = row | {"receipt": row["receipt"] | {field: value}}
+        with pytest.raises(DomainError):
+            service.receipt(forged, result)

@@ -321,7 +321,7 @@ class BackupService:
                 )
             parts.append(await self._copy_blob(context, blob, "original"))
         async for row in self.database.job_artifacts.find(
-            ns | {"job_id": {"$in": list(selected.job_ids)}}
+            ns | {"job_id": {"$in": list(selected.job_ids)}, "purged_at": {"$exists": False}}
         ):
             artifact = JobArtifact.model_validate(
                 {key: value for key, value in row.items() if key != "_id"}

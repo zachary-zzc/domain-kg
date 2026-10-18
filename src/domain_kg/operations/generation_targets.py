@@ -1,9 +1,9 @@
 """Bounded immutable rebuild inputs; no backend configuration is supplied by a caller."""
 
-from typing import Any, Self
+from typing import Annotated, Any, Self
 from uuid import UUID, uuid4
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pymongo.asynchronous.client_session import AsyncClientSession
 
 from domain_kg.catalog.models import StorageProfile
@@ -46,6 +46,10 @@ def material_hash(row: dict[str, Any]) -> str:
     )
 
 
+class GenerationDependency(ScopedRef):
+    access_hash: SHA256
+
+
 class GenerationInput(ScopedRef):
     operation_id: UUID
     owner_key: str
@@ -53,28 +57,46 @@ class GenerationInput(ScopedRef):
     base: AcceptedProjection
     source_access_hash: SHA256 | None = None
     curation_hash: SHA256 | None = None
+    dependencies: Annotated[tuple[GenerationDependency, ...], Field(max_length=100)] = ()
 
     @model_validator(mode="after")
     def exact_parent(self) -> Self:
-        if any(
-            (value.org_id, value.kg_id) != (self.org_id, self.kg_id)
-            for value in (self.parent, self.base)
-        ) or (
-            (self.parent.source is None) != (self.source_access_hash is None)
-            or (self.parent.curation is None) != (self.curation_hash is None)
-            or any(
-                getattr(self.parent, key) != getattr(self.base, key)
-                for key in (
-                    "source",
-                    "curation",
-                    "content_hash",
-                    "chunk_artifact_id",
-                    "import_origin",
+        if (
+            any(
+                (value.org_id, value.kg_id) != (self.org_id, self.kg_id)
+                for value in (self.parent, self.base)
+            )
+            or (
+                (self.parent.source is None) != (self.source_access_hash is None)
+                or (self.parent.curation is None) != (self.curation_hash is None)
+                or any(
+                    getattr(self.parent, key) != getattr(self.base, key)
+                    for key in (
+                        "source",
+                        "curation",
+                        "content_hash",
+                        "chunk_artifact_id",
+                        "import_origin",
+                    )
                 )
+            )
+            or (self.dependencies and self.parent.curation is None)
+            or len({value.id for value in self.dependencies}) != len(self.dependencies)
+            or any(
+                (value.org_id, value.kg_id) != (self.org_id, self.kg_id)
+                for value in self.dependencies
             )
         ):
             raise ValueError("generation input requires its same-KG owner and material fence")
         return self
+
+
+def serialized_input(item: GenerationInput) -> dict[str, Any]:
+    value = item.model_dump(mode="json")
+    # Preserve hashes of previously accepted rebuilds without dependency fences.
+    if not item.dependencies:
+        value.pop("dependencies")
+    return value
 
 
 class GenerationTarget(ScopedRef):
@@ -164,9 +186,6 @@ class GenerationTargets:
             if root is None or root.get("binding_count") != len(rows):
                 raise invalid()
         inputs = []
-        source_ids = {
-            row["binding"]["source"]["material_id"] for row in rows if row["binding"].get("source")
-        }
         for row in rows:
             parent = AcceptedProjection.model_validate(row["binding"])
             if (parent.org_id, parent.kg_id, parent.generation) != (
@@ -177,6 +196,7 @@ class GenerationTargets:
                 raise invalid()
             fence = None
             curation_hash = None
+            dependencies = []
             if parent.source:
                 material = await self.database.material_access.find_one(
                     ns | {"id": str(parent.source.material_id)}, session=session
@@ -198,10 +218,32 @@ class GenerationTargets:
                 )
                 if record is None:
                     raise invalid()
-                if not set(record["material_ids"]).issubset(source_ids):
-                    raise DomainError(
-                        ErrorCode.REVISION_NOT_READY,
-                        "Retired curation dependencies need a separate history migration.",
+                for identifier in sorted(record["material_ids"]):
+                    material = await self.database.material_access.find_one(
+                        ns | {"id": identifier}, session=session
+                    )
+                    if material is None:
+                        raise invalid()
+                    if material.get("purge_state") in ("pending", "purging", "detached"):
+                        raise DomainError(
+                            ErrorCode.REVISION_NOT_READY, "Curation source retirement is pending."
+                        )
+                    if material.get("purged") and not (
+                        material.get("tombstoned") is True
+                        and material.get("purge_state") == "purged"
+                        and material.get("active_version_id") is None
+                    ):
+                        raise DomainError(
+                            ErrorCode.REVISION_NOT_READY,
+                            "Curation source retirement is incomplete.",
+                        )
+                    dependencies.append(
+                        GenerationDependency(
+                            org_id=operation.org_id,
+                            kg_id=operation.kg_id,
+                            id=identifier,
+                            access_hash=material_hash(material),
+                        )
                     )
                 curation_hash = digest(directive(record).model_dump(mode="json"))
             from domain_kg.operations.generation_results import artifact_base_binding
@@ -218,9 +260,10 @@ class GenerationTargets:
                     base=base,
                     source_access_hash=fence,
                     curation_hash=curation_hash,
+                    dependencies=tuple(dependencies),
                 )
             )
-        serialized = [item.model_dump(mode="json") for item in inputs]
+        serialized = [serialized_input(item) for item in inputs]
         target = GenerationTarget(
             org_id=operation.org_id,
             kg_id=operation.kg_id,
@@ -289,12 +332,14 @@ class GenerationTargets:
             .to_list()
         )
         values = tuple(
-            GenerationInput.model_validate({key: row[key] for key in GenerationInput.model_fields})
+            GenerationInput.model_validate(
+                {key: row[key] for key in GenerationInput.model_fields if key in row}
+            )
             for row in rows
         )
         if (
             len(values) != target.binding_count
-            or digest([item.model_dump(mode="json") for item in values]) != target.inputs_hash
+            or digest([serialized_input(item) for item in values]) != target.inputs_hash
         ):
             raise invalid()
         return values

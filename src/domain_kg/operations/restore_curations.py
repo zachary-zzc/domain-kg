@@ -13,6 +13,7 @@ from domain_kg.identity.models import Principal
 from domain_kg.models import ScopedRef, SourceVersion
 from domain_kg.operations.restore_documents import RestoreDocuments
 from domain_kg.revisions.curation_publication import directive
+from domain_kg.revisions.models import RevisionReceipt
 from domain_kg.revisions.projections import digest
 
 
@@ -33,6 +34,29 @@ class RestoreCurations:
             if kind == "node"
             else self.mapping.assertion_ref(original)
         )
+
+    def receipt(self, original: dict[str, Any], transformed: dict[str, Any]) -> dict[str, Any]:
+        if "receipt" not in original:
+            return transformed
+        try:
+            receipt = RevisionReceipt.model_validate(original["receipt"])
+            if (receipt.org_id, receipt.kg_id, receipt.revision_id, receipt.state) != (
+                self.mapping.origin.org_id,
+                self.mapping.origin.kg_id,
+                UUID(original["id"]),
+                "published",
+            ) or (
+                "published_revision" in original
+                and receipt.published_revision != original["published_revision"]
+            ):
+                raise self.invalid()
+            return transformed | {
+                "receipt": receipt.model_copy(update=self.mapping.target.model_dump()).model_dump(
+                    mode="json"
+                )
+            }
+        except (ValidationError, KeyError, TypeError, ValueError):
+            raise self.invalid() from None
 
     def fields(self, kind: str, values: dict[str, Any]) -> dict[str, Any]:
         if kind == "node":

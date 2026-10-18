@@ -30,6 +30,10 @@ class RestoreHumanHistory(RestoreControl):
             for row in inventory.rows("curation_revisions")
         }
         original = {row["id"]: row for row in inventory.rows("curation_revisions")}
+        revisions = {
+            identifier: service.receipt(original[identifier], row)
+            for identifier, row in revisions.items()
+        }
         states = {row["target_state_id"]: revisions[row["id"]] for row in original.values()}
         for row in original.values():
             if row["kind"] == "identity":

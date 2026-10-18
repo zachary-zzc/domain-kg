@@ -3,11 +3,14 @@
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import ValidationError
+
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.graph.models import AssertionRecord, EntityRecord
 from domain_kg.imports.legacy_models import LegacyGraph
 from domain_kg.imports.models import ImportPlan
 from domain_kg.imports.provenance import ImportOrigin
+from domain_kg.ingestion.models import ExtractionBatch
 from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.jobs.models import Checkpoint, JobArtifact
 from domain_kg.models import Namespace, ScopedRef, SourceVersion
@@ -127,7 +130,7 @@ class RestoreInventory:
             imports=tuple(imports),
         )
 
-    def artifacts(self) -> tuple[tuple[JobArtifact, Checkpoint, PackagePart], ...]:
+    async def artifacts(self) -> tuple[tuple[JobArtifact, Checkpoint, PackagePart], ...]:
         parts = {part.artifact_blob: part for part in self.parts if part.kind == "source_artifact"}
         checkpoints = {
             str(row["artifact_id"]): Checkpoint.model_validate(
@@ -136,6 +139,7 @@ class RestoreInventory:
             for row in self.rows("job_checkpoints")
         }
         results = []
+        inspected_bytes = 0
         for row in self.rows("job_artifacts"):
             artifact = JobArtifact.model_validate(
                 {key: row[key] for key in JobArtifact.model_fields}
@@ -151,6 +155,27 @@ class RestoreInventory:
             checkpoint, part = checkpoints.get(str(artifact.id)), parts.get(artifact.blob)
             if checkpoint is None or part is None:
                 raise inconsistent()
+            if artifact.stage == "extracting":
+                inspected_bytes += part.object.size_bytes
+                if inspected_bytes > MAX_METADATA:
+                    raise DomainError(
+                        ErrorCode.QUOTA_EXCEEDED, "Restore extraction inventory exceeds its budget."
+                    )
+                body = await self.reader.body(part.object, maximum=MAX_METADATA)
+                try:
+                    cached = ExtractionBatch.model_validate_json(body)
+                except ValidationError:
+                    pass  # The ledger must validate the full canonical stage artifact.
+                else:
+                    if (cached.org_id, cached.kg_id, cached.material_id, cached.version_id) != (
+                        artifact.blob.org_id,
+                        artifact.blob.kg_id,
+                        artifact.blob.material_id,
+                        artifact.source_version_id,
+                    ):
+                        raise inconsistent()
+                    # Per-chunk caches never satisfy a complete-source stage.
+                    continue
             results.append((artifact, checkpoint, part))
         order = ("validating", "parsing", "chunking", "extracting", "resolving")
         return tuple(

@@ -34,7 +34,22 @@ class AuthorityCapture:
         self.ns = {"org_id": str(job.org_id), "kg_id": str(job.kg_id)}
 
     async def selection(self) -> AuthoritySelection:
-        materials = tuple(sorted({str(source.material_id) for source in self.view.sources}))
+        curations = (
+            await self.queue.database.curation_revisions.find(self.ns | {"state": "accepted"})
+            .limit(10001)
+            .to_list()
+        )
+        if len(curations) > 10000:
+            raise DomainError(ErrorCode.QUOTA_EXCEEDED, "Backup history exceeds its record budget.")
+        # Curation dependencies retain identities even after their source was
+        # erased and detached from the current serving manifest.
+        materials = tuple(
+            sorted(
+                {str(source.material_id) for source in self.view.sources}
+                | {identifier for row in curations for identifier in row["material_ids"]}
+                | {identifier for row in curations for identifier in row.get("source_versions", {})}
+            )
+        )
         attempts = (
             await self.queue.database.projection_attempts.find(
                 self.ns
@@ -47,14 +62,12 @@ class AuthorityCapture:
             .limit(10001)
             .to_list()
         )
-        curations = (
-            await self.queue.database.curation_revisions.find(self.ns | {"state": "accepted"})
-            .limit(10001)
-            .to_list()
-        )
         if len(attempts) > 10000 or len(curations) > 10000:
             raise DomainError(ErrorCode.QUOTA_EXCEEDED, "Backup history exceeds its record budget.")
         versions = {str(source.version_id) for source in self.view.sources}
+        versions.update(
+            version for row in curations for version in row.get("source_versions", {}).values()
+        )
         jobs = set()
         for row in attempts:
             if row.get("generation_origin"):
@@ -132,7 +145,13 @@ class AuthorityCapture:
             ("curation_scopes", {}),
             ("node_visibility", {}),
             ("jobs", {"id": {"$in": list(selected.job_ids)}}),
-            ("job_artifacts", {"job_id": {"$in": list(selected.job_ids)}}),
+            (
+                "job_artifacts",
+                {
+                    "job_id": {"$in": list(selected.job_ids)},
+                    "purged_at": {"$exists": False},
+                },
+            ),
             ("job_checkpoints", {"job_id": {"$in": list(selected.job_ids)}}),
             ("operation_artifacts", {"job_id": {"$in": list(selected.job_ids)}}),
             (

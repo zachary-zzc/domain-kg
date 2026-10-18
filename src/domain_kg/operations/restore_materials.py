@@ -67,6 +67,23 @@ class RestoredMaterialAccess(Namespace):
         )
 
 
+class RestoredRetiredMaterialAccess(Namespace):
+    """An identity/withdrawal fence, with no original metadata or usable version."""
+
+    id: UUID
+    acl_mode: Literal["restricted"] = "restricted"
+    member_ids: tuple[UUID, ...] = ()
+    group_ids: tuple[UUID, ...] = ()
+    revision: NonNegative
+    metadata_epoch: NonNegative = 0
+    active_version_id: None = None
+    purged: Literal[True] = True
+    tombstoned: Literal[True] = True
+    excluded: bool = Field(strict=True)
+    purge_state: Literal["purged"] = "purged"
+    purged_at: UTCDateTime
+
+
 class RestoredVersionBlob(Namespace):
     id: UUID
     material_id: UUID
@@ -106,6 +123,33 @@ class RestoreMaterials:
         return DomainError(
             ErrorCode.PROJECTION_INCONSISTENT, "Restored material references differ."
         )
+
+    def retired(self, row: dict[str, Any]) -> RestoredRetiredMaterialAccess:
+        if (
+            (row.get("org_id"), row.get("kg_id"))
+            != (str(self.mapping.origin.org_id), str(self.mapping.origin.kg_id))
+            or row.get("purged") is not True
+            or row.get("tombstoned") is not True
+            or row.get("purge_state") != "purged"
+            or row.get("active_version_id") is not None
+            or "metadata" in row
+        ):
+            raise self.invalid()
+        try:
+            self.mapping._materials((UUID(row["id"]),))
+            timestamp = row["purged_at"]
+            if isinstance(timestamp, datetime) and timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
+            return RestoredRetiredMaterialAccess(
+                **self.mapping.target.model_dump(),
+                id=row["id"],
+                revision=row["revision"],
+                metadata_epoch=row.get("metadata_epoch", 0),
+                excluded=row["excluded"],
+                purged_at=timestamp,
+            )
+        except (ValidationError, ValueError, KeyError):
+            raise self.invalid() from None
 
     def access(self, row: dict[str, Any], source: SourceVersion) -> RestoredMaterialAccess:
         target = self.mapping.source(source)

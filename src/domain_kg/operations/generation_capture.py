@@ -114,6 +114,14 @@ class GenerationCapture:
             )
             if material is None or material_hash(material) != item.source_access_hash:
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "A rebuild source fence changed.")
+        for dependency in item.dependencies:
+            material = await self.database.material_access.find_one(
+                ns | {"id": str(dependency.id)}, session=session
+            )
+            if material is None or material_hash(material) != dependency.access_hash:
+                raise DomainError(
+                    ErrorCode.VERSION_CONFLICT, "A curation dependency fence changed."
+                )
 
     async def check_all(
         self, target: GenerationTarget, session: AsyncClientSession | None = None
@@ -138,6 +146,7 @@ class GenerationCapture:
             inputs = await self.check_all(target, session)
             materials = sorted(
                 {str(item.parent.source.material_id) for item in inputs if item.parent.source}
+                | {str(dependency.id) for item in inputs for dependency in item.dependencies}
             )
             # Serialize pin admission with purge admission/completion on each source.
             if materials:
@@ -189,7 +198,7 @@ class GenerationCapture:
         if len(rows) != 1:
             raise inaccessible_reference()
         item = GenerationInput.model_validate(
-            {key: rows[0][key] for key in GenerationInput.model_fields}
+            {key: rows[0][key] for key in GenerationInput.model_fields if key in rows[0]}
         )
         await self.check_input(target, item)
         return GenerationReadPermit(job=job, source=source, pin_id=pin_id(job))

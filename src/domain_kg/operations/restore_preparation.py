@@ -131,7 +131,7 @@ class RestorePreparation:
                 originals.append(await self._put(job, binding, reference, store.open(part.object)))
         artifacts = []
         size = 0
-        for artifact, checkpoint, part in inventory.artifacts():
+        for artifact, checkpoint, part in await inventory.artifacts():
             result = ledger.rewrite(
                 artifact, checkpoint, await reader.body(part.object, maximum=50 * 1024 * 1024)
             )

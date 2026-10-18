@@ -78,6 +78,17 @@ class RestoreControl(RestoreAuthority):
                 rows.append(("authority", table, imports.mapping_row(kind, raw)))
         current = {str(source.material_id): source for source in inventory.root.sources}
         for raw in inventory.rows("material_access"):
+            if raw.get("purged") is True:
+                if str(raw["id"]) in current:
+                    raise self.invalid()
+                rows.append(
+                    (
+                        "control",
+                        "material_access",
+                        mongo_record(materials.retired(decoded(raw))) | {"active_version_id": None},
+                    )
+                )
+                continue
             source = current.get(str(raw["id"]))
             if source is None:
                 raise self.invalid()

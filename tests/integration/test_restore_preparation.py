@@ -89,6 +89,18 @@ async def test_prepare_copies_verified_originals_and_reseals_actual_native_artif
         )
         assert data == TEXT.encode()
         assert len(staged.artifacts) >= 5
+        assert sum(item.artifact.stage == "extracting" for item in staged.artifacts) == 1
+        assert (
+            await queue.database.job_artifacts.count_documents(
+                {
+                    "org_id": str(source.org_id),
+                    "kg_id": str(source.kg_id),
+                    "source_version_id": str(source.version_id),
+                    "stage": "extracting",
+                }
+            )
+            > 1
+        )  # Real chunk checkpoints are distinct from whole-source extraction.
         assert {item.checkpoint.stage for item in staged.artifacts} >= {
             "validating",
             "parsing",

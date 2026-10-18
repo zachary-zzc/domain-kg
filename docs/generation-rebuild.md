@@ -1,5 +1,12 @@
 # Rebuild the current index generation
 
+Local follow-up (18 October 2026): curation-only material dependencies now carry
+typed namespace-bound access hashes and participate in capture pins. A completed
+source purge no longer blocks rebuilding independently retained human knowledge.
+Incomplete retirement, source/ACL fence changes and missing dependencies still
+deny publication. The real purge/rebuild test preserves the public human claim
+without reviving removed source names or original bytes.
+
 An owner can use **Operations → Rebuild current indexes**, then follow the job
 link. Search uses the previous accepted generation while preparation runs. The
 new generation becomes accepted only after graph, vector and lexical read-back
