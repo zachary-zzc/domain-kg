@@ -1,6 +1,13 @@
 # Implementation progress
 
-Updated 17 October 2026. Execution is native in this chat, following the current NoSQL design and the task dependency order. Each completed task requires a laptop smoke test; expensive OCR, model training, load tests, and large-corpus benchmarks are outside this run. The user separately approved a bounded native small-LLM smoke; its measured memory is separate from the Docker database ceiling.
+Updated 19 October 2026 (Asia/Shanghai). The current-configuration local platform
+completion scope is verified, including the application image. Model/schema
+upgrades and external deployment/migration are explicitly deferred by the user;
+Task 9 real extraction quality remains separate. Execution is native in this
+chat, following the NoSQL design and task dependency order. Expensive OCR, model
+training, load tests and large-corpus benchmarks are outside this run. The user
+separately approved a bounded native small-LLM smoke; its measured memory is
+separate from the Docker database ceiling.
 
 | Task | Status | Verification |
 | --- | --- | --- |
@@ -21,13 +28,13 @@ Updated 17 October 2026. Execution is native in this chat, following the current
 | 15: Shared MCP and HTTP surfaces | Verified initial transport milestone; remaining gates open | 24 signed-identity/transport/owner-operation integration checks in 112.15 seconds; 139 unit/protocol checks in 3.99 seconds; Ruff and strict mypy (124 source files). Current/retained source chunks and suppression: 3 additional checks in 46.74 seconds. Later operation routes remain. |
 | 16: Legacy import and upstream compatibility | Complete locally | Final combined laptop smoke: 59 passed in 395.61 seconds. Worker, HTTP admission, recovery, trust, stable identities and purge verified with synthetic data. No real corpus migration performed. |
 | 17: Team console | Complete locally | Final console smoke: 43 passed in 354.84 seconds; representative browser flows observed. Optional file-picker walkthrough remains unverified; external OIDC remains separate. |
-| 18: Consistent backup, repair and deployment | In progress | Local backups/restores/repair, exports, budgets, audit, retained-package/failed-target cleanup and current-configuration rebuilds are verified. Tracked incomplete-backup and retired/abandoned-generation collection preserve uncertain writes and current evidence. Retired human and visibility-only history survives recovery. The Linux/arm64 image was built, isolation-tested, exported and re-imported at code revision 02a23d8. Final whole-suite acceptance is running; external deployment and model/schema upgrade flows are explicitly deferred. |
-| 19: Evaluation and release candidate | In progress | The explicit local synthetic evaluation passes 12 questions across five modes with 41 verified citations and no hidden-source results. Final local regression is running. Real-corpus quality, same-budget external baselines, human team pilot and production sizing remain open. No production readiness claim. |
+| 18: Consistent backup, repair and deployment | Current local scope verified; broader gates deferred | Local backups/restores/repair, exports, budgets, audit, retained-package/failed-target cleanup and current-configuration rebuilds are verified. Tracked incomplete-backup and retired/abandoned-generation collection preserve uncertain writes and current evidence. Retired human and visibility-only history survives recovery. The Linux/arm64 image was built, isolation-tested, exported and re-imported at code revision 02a23d8. Fresh physical restore/repair passed in 126.53 s and restored the primary configuration. External deployment and model/schema upgrades are explicitly deferred. |
+| 19: Evaluation and release candidate | Current local scope verified; real pilot gates open | Final synthetic evaluation passed in 112.83 s: 12 questions across five modes, 41 verified citations, zero hidden-source results and zero live model calls. Audited default pytest matrix: 727 passed, six skipped, zero unresolved failures; current opt-in evaluation, browser and physical repair each passed separately. Real-corpus quality, same-budget external baselines, human team pilot and production sizing remain open. |
 
 The main plan has 19 tasks: 14 have completed their local task gates; Tasks 3,
 9 and 15 retain external identity/model/client acceptance gates; Tasks 18 and 19
-remain development work. Its 57 coarse checklist items contain 44 verified and
-13 unchecked items. These counts are checklist status, not a percentage of work
+retain broader original gates beyond the verified current local scope. Its 57
+coarse checklist items contain 44 verified and 13 unchecked items. These counts are checklist status, not a percentage of work
 or an estimate of time remaining. See [the current review](status-review.md).
 
 The active laptop budget is [config/laptop-smoke.json](../config/laptop-smoke.json).

@@ -750,3 +750,19 @@ prevent that drop. Interrupted work resumes through the original job. A changed
 storage profile blocks execution, while a later same-placement rebuild remains
 compatible with the already claimed old generation. Details and bounds are in
 [generation rebuilding](generation-rebuild.md).
+
+### Final current-configuration local verification
+
+On 19 October 2026 (Asia/Shanghai), the complete 733-case default pytest inventory
+was reconciled across audited partitions: 727 passed, six explicit opt-in skips,
+zero unresolved failures. The current-source opt-in evaluation, physical
+restore/repair and browser preview each passed separately. Physical switching
+restored the original primary volumes; the preview finished and released its
+fixtures. No live model was called. The four databases retain the combined
+1,476,395,008-byte RAM limit and disabled swap.
+
+The exact per-case states, hashed logs, current report and Linux/arm64 image
+identity are retained under `.cache/verification/` and `.cache/local-release.json`.
+This verifies bounded current-configuration behavior. Model/schema upgrades,
+external deployment/migration, real extraction quality and real-team/scale
+acceptance remain outside this pass.

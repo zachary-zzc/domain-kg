@@ -1,28 +1,35 @@
 # 当前进度 / Current progress
 
-核对日期 / Reviewed: 2026-10-18。
+核对日期 / Reviewed: **2026-10-19（Asia/Shanghai）**。
 
-本地优先收尾正在进行：Linux/arm64 应用镜像已实际构建并通过只读、非 root、
-无外网运行检查，修复了默认启动工厂及运行时下载词表的问题。已清除来源仍被人工
-历史依赖时，索引重建与备份/恢复/再次备份通过 3 项真实数据库检查（89.79 秒），
-不会恢复被删除的原文。逐块抽取缓存与完整抽取检查点已区分，普通原件恢复、恢复后
-再次备份和重建历史恢复通过 3 项检查（106.42 秒）。完整非数据库回归 366 项通过
-（8.80 秒）；本地检索评估 12 样本 × 5 模式通过，真实模型调用为 0。
-详情见 [本地收尾计划](superpowers/plans/2026-10-18-local-platform-completion.md)、
-[镜像检查](deployment.md) 与 [评估报告](evaluation-report.md)。旧代际/不完整包清理、
-其他历史链与最终组合回归仍需收尾，不能据此把 Task 18/19 全部勾完。未完成备份
-清理已补齐：记录写入意图和确认状态，支持失败副本及成功重试后的旧副本清理；
-不确定或未跟踪写入继续保留。10 项边界检查与必需备份/配额/审计 14 项一起通过
-（313.44 秒），完整非数据库回归 367 项通过（10.90 秒）。外部部署与跨
-环境迁移按用户要求留待后续确认；Task 9 真实抽取质量仍单独保留。
+**当前配置下的本地平台收尾已完成，Linux/arm64 应用镜像已交付。**
+本轮补齐退役/清除来源的人工历史恢复、连续备份恢复、未完成备份清理及旧索引回收。
+清理要求写入确认结束且无活跃工作或保留读取；状态不明及旧版未跟踪写入继续保留。
+当前索引、独立证据、人工修订及已删除原文的隔离边界均有真实存储回归。
 
-本地旧索引回收现已接入同一 owner 运维流程：记录所有发布/修复/重建写入意图，
-排空取消中的真实 I/O，保留状态不明、旧版未跟踪、有保留读取或仍活跃的代际。
-6 项新增真实存储边界检查通过；包括旧代际跨图谱过滤、撤权重试和丢失写入确认。
-联合发布围栏、备份/配额/审计检查 25 项通过（427.54 秒）。最终增加存储配置哈希
-后，6 项新增检查再次通过。隐藏回执的专用类型与 BSON 日期恢复问题已修复，
-清除原文后连续恢复两次及原有隐藏恢复检查 2 项通过（62.79 秒）。368 项非数据库
-检查通过（11.72 秒），Ruff 和严格 mypy 通过（239 模块）。完整组合回归仍在运行。
+最终默认 pytest 清单按审计分组核验：**727 通过、6 项显式跳过、0 项未解决失败**，
+共 733 项。测试观察器隐藏原生函数签名的问题已修正，失败项和全部尚未执行项均
+重跑通过；应用源码不变。另行启用的当前版本检索评估、浏览器预览、物理配置恢复/
+修复各 1 项通过（112.83、89.89、126.53 秒）。Ruff、严格 mypy（239 模块）、前端
+4 项检查与分发包边界检查通过。详见 [验收清单](release-checklist.md)。
+
+检索评估使用 12 个受控问题、五种模式，验证 41 条精确原文引用，越权结果及真实
+模型调用均为 0。物理恢复演练结束后已还原主配置；浏览器预览已正常结束。四个
+数据库仍受合计 **1.476 GB** 硬上限约束，swap 禁用。镜像通过默认启动命令、
+非 root/只读/无网络、原生 PDF/文本解析与未认证 MCP 拒绝检查，已导出并重新加载。
+镜像标签 `domain-kg:local`，应用版本 `02a23d8`；最终验收版本 `0856abee` 的应用
+源码与镜像一致。
+
+证据与本地交付物（均不入 Git）：`.cache/local-release.json`、
+`.cache/verification/regression-report.json`、`.cache/domain-kg-local-image.tar`。
+运行方式及归档校验见 [镜像说明](deployment.md)，检索边界见
+[评估报告](evaluation-report.md)，本轮范围见
+[本地收尾计划](superpowers/plans/2026-10-18-local-platform-completion.md)。
+
+用户明确将模型/Schema 升级功能、外部部署及跨环境迁移留待后续确定。
+Task 9 真实抽取质量、真实 OIDC/目标 MCP 客户端、真实语料人工团队试用和规模性能
+验收继续单独保留；本地受控验收不证明这些门禁通过。原始 Task 18/19 仍含上述更广
+范围，因此主计划复合勾选不变。
 
 **本轮真实抽取仍未完成 / Real extraction is still incomplete.**
 模型和分块修复已提交 `b0dea0c`、`b4074e0`：服务端生成来源坐标、按上下文合并
@@ -45,11 +52,13 @@ full-PDF graph has been published. There is no substitute simulated result.
 远程连接未启用。下一阶段是实际 API 小样本验收、全 PDF 抽取/发布与持久页面验收。
 全量运行脚本仍属于未验收准备代码，不应报告为已完成。
 
-主计划 19 阶段中，14 阶段已完成本机验证。第 18、19 阶段仍有开发与验收工作，
-第 3、9、15 阶段仍需外部验证。不能把当前演示或局部测试等同于可上线。
+主计划 19 阶段中，14 阶段的原始本机验收已勾选。Task 18/19 的当前配置本地范围
+本轮已验证；原始任务中的升级、部署及真实团队评估等更广门禁仍保留。第 3、9、15
+阶段仍有真实身份、模型和客户端外部验收。本地验收不代表可直接上线。
 
-14 of 19 stages have passed local verification. Tasks 18–19 remain in progress;
-Tasks 3, 9 and 15 retain external gates. The demo does not establish release readiness.
+The current-configuration local scope is verified. Original composite Task 18/19
+checkboxes remain open for broader deferred gates; Tasks 3, 9 and 15 retain real
+identity/model/client acceptance.
 本次关系图补充已完成真实医学 PDF 回归：NHS 文件 412,271 字节、7 页，
 228 个原始文本块、15 个处理窗口、257 处原文定位通过。图谱为明确的受控抽取测试，
 含 2 节点、1 关系，实际模型调用 0 次，医学抽取质量门禁保持未完成。
@@ -85,10 +94,12 @@ example does not establish model or clinical quality.
 
 节点详情页已接入 neovis.js 节点关系图，可拖动、缩放、选择查看节点与关系详情。
 仅使用当前权限可见的一跳邻域，最多 25 节点 / 40 条关系，保留来源、人工及未验证
-导入的区别，并提供键盘可用的文字链接。本轮已在实际浏览器观察总览 canvas：
+导入的区别，并提供键盘可用的文字链接。此前已在实际浏览器观察总览 canvas：
 受控样本的 2 节点、1 关系正常绘制。运维页的未完成备份选项已观察并选择，未在
 浏览器提交清理。预览正常退出，1 项真实存储预览检查通过（270.61 秒）。截图在
-本地 `.cache/local-graph.png` 和 `.cache/local-operations.png`；仍未验收文件选择器。
+本地 `.cache/local-graph.png`。最终当前版本预览另行通过（89.89 秒），已观察并选择
+旧索引回收选项；最新 `.cache/local-operations.png` 为该次截图。未在浏览器提交
+清理；文件选择器仍未验收，上传链路已有真实存储 HTTP/表单自动化验证。
 
 The bounded neovis.js overview rendered two synthetic nodes and one relationship
 in the real browser. The operations selection was observed without submitting a
@@ -120,22 +131,22 @@ acceptance remains open.
   / Daily provider budgets, bounded history, work metrics and owner audit.
 
 已经完成的小型真实演练包括：代际重建后备份恢复；合并/拆分历史恢复后的继续编辑；
-不同物理图/向量配置间的串行恢复和真实缺失向量修复。后者 119.53 秒，结束后恢复
+不同物理图/向量配置间的串行恢复和真实缺失向量修复。最新复验 126.53 秒，结束后恢复
 原配置。Task 18 指定的备份/配额/审计回归 14 项通过，203.77 秒。
 
 Verified drills include generation-aware backup/restore, restored split history with
 follow-up edits, and serial recovery/repair on separate physical graph/vector volumes.
-The physical drill passed in 119.53 seconds and restored the primary configuration.
+The final physical drill passed in 126.53 seconds and restored the primary configuration.
 The required backup/quota/audit regression passed 14 cases in 203.77 seconds.
 
-## 尚未完成 / Remaining work
+## 本轮之外的门禁 / Gates outside this pass
 
 | 范围 / Area | 仍需完成 / Remaining |
 | --- | --- |
-| Task 18 历史完整性 | 已验证退役来源、独立人工知识、逐块与完整检查点、仅隐藏历史及连续两次恢复。最终组合回归仍在运行；不能证明安全的输入仍拒绝。 / Bounded history paths passed; final combined regression is running. |
-| Task 18 清理与迁移 | 已实现有写入证明的旧/未封存代际与未完成备份回收；旧版或状态不明写入保留。旧存储位置保留许可与 schema/model 升级模式仍需单独确定。 / Tracked generation/capture collection is implemented; placement and model/schema upgrades remain separate. |
+| Task 18 历史完整性 | 当前本地范围已通过历史链和最终组合回归；不能证明安全的输入继续拒绝。 / Current local history scope verified. |
+| Task 18 清理与升级 | 当前配置的旧代际与未完成备份回收已验证；旧版或状态不明写入保留。模型/Schema 升级和跨环境迁移按用户要求后续再定。 / Local collection verified; upgrades and migration deferred. |
 | 部署验收 / Deployment | 本机 Linux/arm64 镜像与离线解析隔离已通过。外部最小权限配置、其他架构与远程 CI 留待环境确定；未推送或部署。 / Local image passed; external deployment acceptance is deferred. |
-| Task 19 评估 / Evaluation | 独立 held-out 集、同预算模式/基线比较、最终适当回归与多图谱团队试用。未执行高资源性能基准。 / Held-out evaluation, comparisons and team pilot. |
+| Task 19 评估 / Evaluation | 本地 held-out 五模式及多图谱权限/生命周期自动化回归已通过。真实语料独立人工题集、外部基线、人工团队试用和规模性能仍单独保留。 / Local platform checks passed; real-corpus/human/scale acceptance remains open. |
 | 外部门禁 / External gates | 真实 OIDC 登录、真实模型完整来源跨度抽取质量、外部 MCP Inspector/目标客户端；浏览器文件选择器操作仍未验收。 / Real IdP, grounded extraction and external-client acceptance. |
 
 0.8B 小模型通过过极小事实检查，但未通过完整来源跨度抽取，不能记为抽取质量通过。

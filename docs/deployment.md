@@ -61,8 +61,12 @@ passed the same isolation probe. Its immutable image ID is
 The ignored `.cache/domain-kg-local-image.tar` archive was exported and actually
 loaded again with Docker. Archive SHA256:
 `8627514187a312d7e9faa2a6ea590da1a93d501fdb915f70c36ba1975aa49c70`.
-The runtime report is `.cache/image-report.json`; the local release manifest
-continues to say verification is in progress until the final suite finishes.
+The runtime report is `.cache/image-report.json`; `.cache/local-release.json`
+records the completed current-configuration local checks on 19 October 2026
+(Asia/Shanghai). Later commits change documentation and a test observer only;
+their application source tree matches image revision `02a23d8`. The manifest
+records the audited test partitions and separately enabled evaluation, physical
+restore/repair and browser checks. External deployment remains deferred.
 
 The GitHub workflow pins official checkout/setup-python action commits and uv
 0.10.7. It checks Ruff, mypy, unit/protocol behavior, runtime-lock drift and package

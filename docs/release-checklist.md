@@ -24,9 +24,23 @@ configuration. Model/schema upgrade workflows will be decided later.
   and schema/model upgrades retain separate scope decisions.
 - [x] Collect acknowledged, stopped incomplete backups and earlier failed attempts
   after successful retry; preserve uncertain/legacy writes and the accepted backup.
-- [ ] Run fresh final unit/protocol/frontend and appropriate real-store regressions.
+- [x] Run fresh final unit/protocol/frontend and appropriate real-store regressions.
+  The 733 collected pytest cases were audited across partitions: 727 passed,
+  six explicitly skipped, zero unresolved failures. A test observer was corrected
+  to preserve the native function signature; its failed case and all unexecuted
+  cases were rerun (651 passed, one skipped). Application source was unchanged.
+  The opt-in current-source evaluation, browser preview and physical restore/repair
+  then each passed separately. Frontend checks, Ruff and strict mypy also pass.
 - [x] Rebuild the final image from the verified application revision and retain
   its immutable local ID and verification report.
+
+Final local verification: **19 October 2026 (Asia/Shanghai)**. The release
+manifest is `.cache/local-release.json`; per-case states and hashed logs are in
+`.cache/verification/regression-report.json`. The final evaluation took 112.83 s,
+the physical restore/repair 126.53 s and the frozen-source browser preview 89.89 s.
+The original physical configuration was restored and the preview exited cleanly.
+These are bounded synthetic-provider platform checks; they made zero live model
+calls. File-picker and real external IdP/client walkthroughs remain separate.
 
 ## Separate acceptance dependencies
 

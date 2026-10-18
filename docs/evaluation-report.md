@@ -14,7 +14,7 @@ and report outside Git. A failing run cannot retain an earlier report as its
 current result. Unit tests exercise duplicate-source ranking, no-answer handling
 and invalid cutoffs.
 
-## Measured local run, 18 October 2026
+## Measured local run, 19 October 2026 (Asia/Shanghai)
 
 The first explicit opt-in run passed in 89.86 seconds: 12 questions (two
 development, ten held out) over three tiny synthetic materials, each exercised
@@ -29,6 +29,14 @@ and the same ranking metrics. Mean search wall times were 1.032 s (vector),
 0.871 s (lexical), 0.792 s (graph), 1.416 s (fast) and 1.885 s (deep). Timing is
 reported per run; the result does not establish a production latency target.
 
+The final current-configuration run passed in **112.83 seconds** against
+verification revision `0856abee7440be344b096d316b0fc75db35bc174`, with an empty
+working-tree diff. Its application source tree is identical to image revision
+`02a23d8`. The case/config hashes, ranking metrics, 41 exact citations and zero
+unauthorized results were unchanged. The current report is
+`.cache/evaluation/report.json`; its log and a preserved report copy are under
+`.cache/verification/`. The following timings are from this final run.
+
 These are source-level metrics at **top_k=1** using controlled three-dimensional
 embeddings and a deterministic extractor. They do not measure real semantic
 embedding/extraction quality, clinical accuracy, production throughput, or the
@@ -36,11 +44,11 @@ acceptance document's 100,000-chunk workload.
 
 | Mode | Answerable-source recall@1 | No-answer false positives | Mean search wall time |
 | --- | ---: | ---: | ---: |
-| Vector | 0.714 | 1 | 0.645 s |
-| Lexical | 0.857 | 0 | 0.604 s |
-| Graph | 0.429 | 0 | 0.535 s |
-| Fast | 1.000 | 1 | 0.950 s |
-| Deep | 0.857 | 1 | 1.300 s |
+| Vector | 0.714 | 1 | 0.807 s |
+| Lexical | 0.857 | 0 | 0.737 s |
+| Graph | 0.429 | 0 | 0.739 s |
+| Fast | 1.000 | 1 | 1.318 s |
+| Deep | 0.857 | 1 | 1.657 s |
 
 Graph-only retrieval cannot recover plain text without graph assertions. The
 unfiltered no-answer query also demonstrates that similarity/rank alone does

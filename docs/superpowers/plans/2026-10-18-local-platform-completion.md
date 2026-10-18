@@ -68,20 +68,47 @@ operation controls, `materials/purge.py`, corresponding integration tests.
 Files: `eval/`, `tests/evaluation/test_release_gates.py`,
 `docs/evaluation-report.md`, `docs/release-checklist.md`, `scripts/smoke.py`.
 
-- [ ] Define independent development and held-out local cases, including absent
+- [x] Define independent development and held-out local cases, including absent
   evidence, ACL overlays, multiple KGs, metadata updates and lifecycle faults.
-- [ ] Compare available retrieval branches under identical fixtures/budgets;
+- [x] Compare available retrieval branches under identical fixtures/budgets;
   record corpus/configuration hashes, per-case metrics and real-store evidence.
-- [ ] Clearly separate local synthetic-provider results from Task 9-dependent
+- [x] Clearly separate local synthetic-provider results from Task 9-dependent
   real-corpus semantic quality, remote IdP/client gates and production sizing.
-- [ ] Run the local release checks, bounded multi-KG pilot and restore/repair
+- [x] Run the local release checks, bounded multi-KG pilot and restore/repair
   regression; retain measured results and only check verified gates.
 
 ### Task 4: Integration and final verification
 
-- [ ] Verify unit/protocol/frontend checks, real-store regression, distribution
+- [x] Verify unit/protocol/frontend checks, real-store regression, distribution
   inventory and image runtime; inspect the final diff in a separate review pass.
-- [ ] Update status documents around local completion and explicit deferred
+- [x] Update status documents around local completion and explicit deferred
   deployment/model-quality gates, without reusing historical unchecked claims.
-- [ ] Commit verified stages; report concrete artifacts, commands and remaining
+- [x] Commit verified stages; report concrete artifacts, commands and remaining
   dependencies. Do not mark broad Tasks 18/19 complete on partial evidence.
+
+## Verified outcome, 19 October 2026 (Asia/Shanghai)
+
+- Application revision `02a23d8`, source tree
+  `e181b512d2b53e360917c9548eea4bd85c11a08d`; verification revision `0856abee`
+  has the same application source. Later changes are documentation only.
+- The complete default pytest inventory was reconciled across audited partitions:
+  727 passed, six opt-in skips, zero unresolved failures, 733 collected. The native
+  mix observer needed `functools.wraps`; the corrected failure and every remaining
+  case were rerun (651 passed, one skipped). This is not a claim of a single
+  uninterrupted pytest success. The per-ID proof and hashed logs are retained.
+- Explicit current-source evaluation: 1 passed in 112.83 s; 12 questions, five
+  modes, 41 valid source citations, zero unauthorized results and no live models.
+  Multi-KG permissions, metadata updates and lifecycle faults are covered by the
+  real-store regression, separately from the small retrieval ranking set.
+- Explicit physical backup/restore/repair: 1 passed in 126.53 s; primary restored.
+  Frozen-source browser preview: 1 passed in 89.89 s; the new generation option
+  was selected, screenshot retained, preview finished. No browser cleanup was
+  submitted. Optional file-picker walkthrough remains unverified.
+- Frontend (four checks), Ruff, strict mypy (239 modules), distribution inventory
+  and isolated image runtime passed. Exported Linux/arm64 image was loaded again;
+  checksums and exact identities are in `.cache/local-release.json`.
+- The bounded multi-KG pilot here is automated synthetic-fixture validation. Real
+  human team use, independently reviewed real corpus metrics, Task 9 quality,
+  external identity/client acceptance and production sizing remain separate.
+  Model/schema upgrades and external deployment/migration are deferred by the
+  user's explicit scope decision. Original composite Task 18/19 boxes stay open.
