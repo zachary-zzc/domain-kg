@@ -140,6 +140,8 @@ async def test_scope_change_after_recall_and_concurrent_filters(retrieval_corpus
 
 
 async def test_deep_calls_pinned_native_mix_and_bounds_visible_graph(retrieval_corpus, monkeypatch):
+    from functools import wraps
+
     import lightrag.operate
 
     publishing, reader, receipts = retrieval_corpus
@@ -147,6 +149,7 @@ async def test_deep_calls_pinned_native_mix_and_bounds_visible_graph(retrieval_c
     native = lightrag.operate._perform_kg_search
     calls = []
 
+    @wraps(native)
     async def observed(*args, **kwargs):
         calls.append(kwargs["query_param"].mode)
         return await native(*args, **kwargs)
