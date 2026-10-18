@@ -48,12 +48,29 @@ It preserves retained hidden sources, manual directives and original artifact
 ownership; private rebuild permits do not make those sources visible in search.
 Live source pins block purge. Existing imported-unverified trust is preserved.
 
-Schema/model changes, physically purged bindings and curations depending on
-retired source bindings need separately verified migration semantics. This mode
-refuses those cases instead of dropping records or inventing evidence. It keeps
-old and abandoned generation records; automatic retained-generation collection
-is a separate unfinished operation. Do not manually erase them while workers or
-retained reads may still refer to them.
+Schema/model changes require an explicit migration; this mode keeps the current
+sealed configuration. Completed source purges can retain independent human
+knowledge through the typed dependency fences described above. Incomplete
+retirement and missing canonical dependencies still refuse the rebuild.
+
+Owners can select **Operations → Clean expired packages → Retired or abandoned
+indexes** (`RetentionCommand.resources="generations"`). The existing
+`--retention-only` worker collects only a non-current generation on its unchanged
+registered placement, after the configured grace period. Every writer must be
+terminal or fenced, every durable write intent settled, and all retained read
+pins released. A claim prevents another write admission before any deletion.
+Cancellation drains actual I/O; a remote timeout remains uncertain and blocks
+collection even if its lease expires. Legacy generations without the write
+ledger remain protected.
+
+Collection removes namespace-filtered Neo4j projections and Qdrant points. Empty
+generation collections can be dropped; a collection with foreign points is
+preserved. Canonical MongoDB records, source artifacts, curation history and
+shared identity anchors remain available. Current owner/configuration checks
+precede each backend mutation, and interrupted cleanup resumes through its
+original job. A later same-placement rebuild does not invalidate an already
+claimed old-generation cleanup. Cross-environment placement retirement remains
+outside this local workflow.
 
 The owner audit shows admission, cancellation, retries, completion and safe
 failure codes. No source text, provider payload or database connection is placed

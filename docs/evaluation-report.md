@@ -23,6 +23,12 @@ to exact source spans, no hidden-material result was returned, and both absent
 filter scopes and hidden-only scopes remained empty. There were 30 synthetic
 query embeddings, zero generative query calls and zero live model calls.
 
+A repeat against committed application revision `f461531` passed in 139.69 seconds
+with an empty application diff, the same corpus/config hashes, 41 valid citations
+and the same ranking metrics. Mean search wall times were 1.032 s (vector),
+0.871 s (lexical), 0.792 s (graph), 1.416 s (fast) and 1.885 s (deep). Timing is
+reported per run; the result does not establish a production latency target.
+
 These are source-level metrics at **top_k=1** using controlled three-dimensional
 embeddings and a deterministic extractor. They do not measure real semantic
 embedding/extraction quality, clinical accuracy, production throughput, or the

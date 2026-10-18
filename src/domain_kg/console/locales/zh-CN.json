@@ -535,6 +535,8 @@
   "This overview includes disconnected nodes. Open a node to inspect its source-qualified neighborhood.": "总览包含未连通的节点。打开节点可查看其关系和对应来源。",
   "This view reached its display limit. Open a node or narrow the source filter to explore further.": "当前已达到显示上限。可打开节点或缩小来源范围继续查看。",
   "Incomplete stopped backups": "已停止的未完成备份",
+  "Retired or abandoned indexes": "已退役或已停止构建的索引",
+  "Old indexes are removed only after confirmed writes and retained reads have ended. Current indexes and evidence history remain available.": "旧索引仅在写入确认结束且无保留读取占用后清理。当前索引和证据历史继续保留。",
   "Incomplete backups are removed only after all writes are confirmed stopped and the additional retention period has passed. Backups with uncertain writes stay protected.": "未完成备份仅在全部写入确认结束并经过额外保留期后才会清理。写入状态不明的备份会继续保留。",
   "Prepare a fresh generation with the current schema and embedding configuration. Existing search stays available until every target is verified. Source ownership, visibility and human edits are preserved. Stored vectors are reused without model calls. Independent human knowledge survives source deletion. Incomplete source retirement blocks the rebuild.": "使用当前领域结构和向量配置准备新一代索引。全部目标核验通过前，现有检索继续可用。来源归属、可见性和人工修订会被保留，已有向量直接复用，不调用模型。来源删除后，独立的人工知识仍会保留；来源清除尚未完成时，重建会被阻止。"
 }

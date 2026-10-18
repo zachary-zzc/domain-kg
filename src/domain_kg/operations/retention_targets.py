@@ -12,6 +12,10 @@ from domain_kg.materials.service import digest
 from domain_kg.models import SHA256, FrozenModel, ScopedRef, UTCDateTime
 from domain_kg.operations.backup_models import BackupSeal
 from domain_kg.operations.export_models import ExportManifest
+from domain_kg.operations.generation_collection import (
+    GenerationCollection,
+    GenerationCollectionTarget,
+)
 from domain_kg.operations.incomplete_backups import IncompleteBackups, IncompleteBackupTarget
 from domain_kg.operations.models import OwnerOperation, RetentionCommand
 from domain_kg.operations.retention_policy import RetentionPolicy
@@ -33,11 +37,14 @@ class RetainedTarget(FrozenModel):
 class RetentionPlan(ScopedRef):
     job: ScopedRef
     storage_profile_id: UUID
-    resources: Literal["backups", "exports", "both", "incomplete_backups"]
+    resources: Literal["backups", "exports", "both", "incomplete_backups", "generations"]
     policy: RetentionPolicy
     created_at: UTCDateTime
     cutoff: UTCDateTime
-    targets: Annotated[tuple[RetainedTarget | IncompleteBackupTarget, ...], Field(max_length=100)]
+    targets: Annotated[
+        tuple[RetainedTarget | IncompleteBackupTarget | GenerationCollectionTarget, ...],
+        Field(max_length=100),
+    ]
 
     @model_validator(mode="after")
     def exact_targets(self) -> Self:
@@ -59,6 +66,14 @@ class RetentionPlan(ScopedRef):
         ):
             raise ValueError("cleanup boundary differs")
         for target in self.targets:
+            if isinstance(target, GenerationCollectionTarget):
+                if (
+                    self.resources != "generations"
+                    or target.settled_at > self.cutoff
+                    or target.storage_profile_id != self.storage_profile_id
+                ):
+                    raise ValueError("collection requires a retired same-placement generation")
+                continue
             if isinstance(target, IncompleteBackupTarget):
                 if (
                     self.resources != "incomplete_backups"
@@ -111,7 +126,16 @@ class RetentionTargets:
             raise inaccessible_reference()
         created = now()
         ns = {"org_id": str(operation.org_id), "kg_id": str(operation.kg_id)}
-        targets: list[RetainedTarget | IncompleteBackupTarget] = []
+        targets: list[RetainedTarget | IncompleteBackupTarget | GenerationCollectionTarget] = []
+        if command.resources == "generations":
+            targets.extend(
+                await GenerationCollection(self.queue).allocate(
+                    operation,
+                    self.policy,
+                    created,
+                    session,
+                )
+            )
         if command.resources == "incomplete_backups":
             targets.extend(
                 await IncompleteBackups(self.queue).allocate(
@@ -228,9 +252,12 @@ class RetentionTargets:
     async def validate(
         self,
         operation: OwnerOperation,
-        target: RetainedTarget | IncompleteBackupTarget,
+        target: RetainedTarget | IncompleteBackupTarget | GenerationCollectionTarget,
         session: AsyncClientSession | None = None,
     ) -> None:
+        if isinstance(target, GenerationCollectionTarget):
+            await GenerationCollection(self.queue).validate(operation, target, session)
+            return
         if isinstance(target, IncompleteBackupTarget):
             await IncompleteBackups(self.queue).validate(operation, target, session)
             return

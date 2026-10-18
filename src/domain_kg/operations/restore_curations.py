@@ -36,6 +36,14 @@ class RestoreCurations:
         )
 
     def receipt(self, original: dict[str, Any], transformed: dict[str, Any]) -> dict[str, Any]:
+        if original.get("kind") == "visibility":
+            from domain_kg.operations.restore_visibility import RestoreVisibility
+
+            # Visibility has its own typed receipt, target IDs and revision counters.
+            # Its mapper already validates and remaps all of those references.
+            if RestoreVisibility(self.documents).revision(original) != transformed:
+                raise self.invalid()
+            return transformed
         if "receipt" not in original:
             return transformed
         try:

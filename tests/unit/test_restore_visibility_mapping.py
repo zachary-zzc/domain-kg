@@ -46,12 +46,15 @@ def visibility_history():
 
 
 def test_visibility_history_and_current_fence_rebind_typed_references():
+    from domain_kg.operations.restore_curations import RestoreCurations
     from domain_kg.operations.restore_visibility import RestoreVisibility
 
     values, row, fence = visibility_history()
     mapping = remapper(values)
     service = RestoreVisibility(RestoreDocuments(mapping, originals=()))
-    restored = service.revision(row)
+    restored = RestoreCurations(RestoreDocuments(mapping, originals=())).receipt(
+        row, service.revision(row)
+    )
     current = service.fence(fence, restored)
     assert restored["target_id"] != row["target_id"]
     assert restored["actor"] == row["actor"] and restored["provenance"] == row["provenance"]

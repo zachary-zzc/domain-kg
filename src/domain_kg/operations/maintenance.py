@@ -18,6 +18,7 @@ from domain_kg.revisions.journal import PublicationJournal
 from domain_kg.revisions.models import RevisionBatch
 from domain_kg.revisions.projections import AcceptedProjection, digest
 from domain_kg.revisions.publication import projection_rows, verify_document
+from domain_kg.revisions.writes import ProjectionWrites
 from domain_kg.storage.neo4j import GraphProjection
 from domain_kg.storage.qdrant import VectorProjection
 from domain_kg.storage.router import projection_checksum
@@ -80,6 +81,7 @@ class MaintenanceService:
             "record_count": len(batch.records),
             "record_checksum": projection_checksum([str(ref.id) for ref in batch.records]),
             "state": "prepared",
+            "write_tracking_version": 1,
             "receipts": [],
             "maintenance_origin": origin.model_dump(mode="json"),
         }
@@ -115,11 +117,15 @@ class MaintenanceService:
         await self.queue.transactions.transaction(stage)
         stores = await self.queue.router.for_kg(access, job.kg_id)
         rows = projection_rows(document, batch)
-        await GraphProjection(stores.graph).write(rows)
-        await self.preparation.guard(job)
-        await VectorProjection(stores.vectors).write(
-            rows, [list(row.vector) for row in document.rows]
-        )
+
+        async def write() -> None:
+            await GraphProjection(stores.graph).write(rows)
+            await self.preparation.guard(job)
+            await VectorProjection(stores.vectors).write(
+                rows, [list(row.vector) for row in document.rows]
+            )
+
+        await ProjectionWrites(self.queue).run(job, batch.generation, batch.manifest_id, write)
         receipts = await verify_document(stores, document, batch)
         await self.preparation.guard(job)
         binding = AcceptedProjection(

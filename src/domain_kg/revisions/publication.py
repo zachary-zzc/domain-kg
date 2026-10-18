@@ -38,6 +38,7 @@ from domain_kg.revisions.projections import (
     ProjectionDocument,
     ProjectionRow,
 )
+from domain_kg.revisions.writes import ProjectionWrites
 from domain_kg.storage.neo4j import GraphProjection, inconsistent
 from domain_kg.storage.qdrant import VectorProjection
 from domain_kg.storage.router import RoutedStores, projection_checksum
@@ -477,6 +478,7 @@ class ProjectionCoordinator:
                 [str(reference.id) for reference in batch.records]
             ),
             "state": "prepared",
+            "write_tracking_version": 1,
             "receipts": [],
             "repair_parent_manifest_id": raw.get("repair_parent_manifest_id"),
         }
@@ -556,10 +558,15 @@ class ProjectionCoordinator:
             },
             {"$set": {"state": "projecting"}},
         )
-        await GraphProjection(stores.graph).write(rows)
-        await VectorProjection(stores.vectors).write(
-            rows, [list(row.vector) for row in document.rows]
-        )
+
+        async def write() -> None:
+            await GraphProjection(stores.graph).write(rows)
+            await self.queue.validate_publication(job, lease)
+            await VectorProjection(stores.vectors).write(
+                rows, [list(row.vector) for row in document.rows]
+            )
+
+        await ProjectionWrites(self.queue).run(job, batch.generation, batch.manifest_id, write)
         await self.queue.validate_publication(job, lease)
         return receipt_for(batch, "graph", rows)
 

@@ -727,3 +727,26 @@ cancelled attempts are not silently counted as successful publications.
 中文：指标仅供当前图谱所有者查看，最多采样最早 1,000 个相关任务。溢出时显示
 “数量下限”；最早时间与等待秒数仅对应采样中的待处理任务。图和向量的就绪状态
 继续单独核验，不以任务队列代替证据校验。此检查无需调用模型。
+
+### Local generation collection / 本地旧索引回收
+
+An owner explicitly selects `resources="generations"` on the existing retention
+command or selects **已退役或已停止构建的索引** in Operations. The retention worker
+uses the frozen plan and the configured grace period. It never uses a client
+collection name, graph query or filesystem path.
+
+All source/curation publication, curation repair and generation writers now
+record a durable pending intent before graph/vector I/O and settle it after the
+actual operation returns. Cancellation drains the operation; lost acknowledgements
+remain uncertain. A cleanup claim conflicts with write admission on the exact
+generation. The accepted generation, pinned reads, active workers, uncertain
+writes and older generations without this proof stay protected. Time elapsed
+and a stale lease are insufficient.
+
+Deletion applies organization/KG/generation filters in each backend, checks
+current owner access before every call and retains shared anchors and all MongoDB
+authority/history. An empty Qdrant collection may be dropped; foreign points
+prevent that drop. Interrupted work resumes through the original job. A changed
+storage profile blocks execution, while a later same-placement rebuild remains
+compatible with the already claimed old generation. Details and bounds are in
+[generation rebuilding](generation-rebuild.md).

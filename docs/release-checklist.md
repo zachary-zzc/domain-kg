@@ -13,10 +13,12 @@ never counts as acceptance.
   native text/PDF parser and unauthenticated MCP denial.
 - [x] Run the explicit 12-case/five-mode local evaluation, validate returned
   citations and hidden/empty scopes, and record model calls and measured metrics.
-- [ ] Complete retired-source and alternative-checkpoint authority/history checks,
+- [x] Complete retired-source and alternative-checkpoint authority/history checks,
   including repeat backup/rebuild after restoration.
-- [ ] Complete safe abandoned generation/capture collection and local maintenance
+- [x] Complete safe abandoned generation/capture collection and local maintenance
   controls; time elapsed alone does not prove a stale writer has stopped.
+  Generations with legacy/uncertain writes stay protected; registered placement
+  and schema/model upgrades retain separate scope decisions.
 - [x] Collect acknowledged, stopped incomplete backups and earlier failed attempts
   after successful retry; preserve uncertain/legacy writes and the accepted backup.
 - [ ] Run fresh final unit/protocol/frontend and appropriate real-store regressions.

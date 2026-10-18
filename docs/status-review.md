@@ -16,6 +16,14 @@
 （313.44 秒），完整非数据库回归 367 项通过（10.90 秒）。外部部署与跨
 环境迁移按用户要求留待后续确认；Task 9 真实抽取质量仍单独保留。
 
+本地旧索引回收现已接入同一 owner 运维流程：记录所有发布/修复/重建写入意图，
+排空取消中的真实 I/O，保留状态不明、旧版未跟踪、有保留读取或仍活跃的代际。
+6 项新增真实存储边界检查通过；包括旧代际跨图谱过滤、撤权重试和丢失写入确认。
+联合发布围栏、备份/配额/审计检查 25 项通过（427.54 秒）。最终增加存储配置哈希
+后，6 项新增检查再次通过。隐藏回执的专用类型与 BSON 日期恢复问题已修复，
+清除原文后连续恢复两次及原有隐藏恢复检查 2 项通过（62.79 秒）。368 项非数据库
+检查通过（11.72 秒），Ruff 和严格 mypy 通过（239 模块）。完整组合回归仍在运行。
+
 **本轮真实抽取仍未完成 / Real extraction is still incomplete.**
 模型和分块修复已提交 `b0dea0c`、`b4074e0`：服务端生成来源坐标、按上下文合并
 文本行、保存逐块断点、仅对输出截断做有上限的再分块，并记录拒绝响应的用量。
@@ -77,12 +85,15 @@ example does not establish model or clinical quality.
 
 节点详情页已接入 neovis.js 节点关系图，可拖动、缩放、选择查看节点与关系详情。
 仅使用当前权限可见的一跳邻域，最多 25 节点 / 40 条关系，保留来源、人工及未验证
-导入的区别，并提供键盘可用的文字链接。当前会话关闭了浏览器自动化；已经验证
-脚本契约与真实数据库页面权限，尚未自动观察实际 canvas 绘制与鼠标操作。
+导入的区别，并提供键盘可用的文字链接。本轮已在实际浏览器观察总览 canvas：
+受控样本的 2 节点、1 关系正常绘制。运维页的未完成备份选项已观察并选择，未在
+浏览器提交清理。预览正常退出，1 项真实存储预览检查通过（270.61 秒）。截图在
+本地 `.cache/local-graph.png` 和 `.cache/local-operations.png`；仍未验收文件选择器。
 
-Node pages now embed a bounded neovis.js relationship graph. Script contracts and
-real-store page permissions passed; the rendered canvas still needs visual confirmation
-because browser automation is disabled in this session.
+The bounded neovis.js overview rendered two synthetic nodes and one relationship
+in the real browser. The operations selection was observed without submitting a
+destructive browser action. The isolated preview exited cleanly. File-picker
+acceptance remains open.
 
 ## 本轮完成 / Completed in this run
 
@@ -121,9 +132,9 @@ The required backup/quota/audit regression passed 14 cases in 203.77 seconds.
 
 | 范围 / Area | 仍需完成 / Remaining |
 | --- | --- |
-| Task 18 历史完整性 | 已清除或退役来源的完整权威历史、仅由人工修订依赖的来源与其他 checkpoint 链。现有重建模式会拒绝不能证明安全的输入。 / Complete retired-source and alternative ancestry coverage. |
-| Task 18 清理与迁移 | 旧/未封存代际及不完整备份的收集、旧存储位置保留许可、明确的 schema/model 迁移模式。不能仅按 TTL 推断写入已结束。 / Generation/capture collection and schema/model migration extensions. |
-| 部署验收 / Deployment | 外部最小权限配置、Linux 镜像与解析隔离、远程 CI 验收。未构建本机镜像、推送或部署。 / External least-privilege and Linux/CI acceptance. |
+| Task 18 历史完整性 | 已验证退役来源、独立人工知识、逐块与完整检查点、仅隐藏历史及连续两次恢复。最终组合回归仍在运行；不能证明安全的输入仍拒绝。 / Bounded history paths passed; final combined regression is running. |
+| Task 18 清理与迁移 | 已实现有写入证明的旧/未封存代际与未完成备份回收；旧版或状态不明写入保留。旧存储位置保留许可与 schema/model 升级模式仍需单独确定。 / Tracked generation/capture collection is implemented; placement and model/schema upgrades remain separate. |
+| 部署验收 / Deployment | 本机 Linux/arm64 镜像与离线解析隔离已通过。外部最小权限配置、其他架构与远程 CI 留待环境确定；未推送或部署。 / Local image passed; external deployment acceptance is deferred. |
 | Task 19 评估 / Evaluation | 独立 held-out 集、同预算模式/基线比较、最终适当回归与多图谱团队试用。未执行高资源性能基准。 / Held-out evaluation, comparisons and team pilot. |
 | 外部门禁 / External gates | 真实 OIDC 登录、真实模型完整来源跨度抽取质量、外部 MCP Inspector/目标客户端；浏览器文件选择器操作仍未验收。 / Real IdP, grounded extraction and external-client acceptance. |
 

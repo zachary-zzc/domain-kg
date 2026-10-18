@@ -12,6 +12,10 @@ from domain_kg.jobs.queue import JobQueue, now
 from domain_kg.materials.service import digest
 from domain_kg.operations.audit import AuditTrail
 from domain_kg.operations.export_models import ExportStore
+from domain_kg.operations.generation_collection import (
+    GenerationCollection,
+    GenerationCollectionTarget,
+)
 from domain_kg.operations.incomplete_backups import IncompleteBackups, IncompleteBackupTarget
 from domain_kg.operations.models import OwnerOperation
 from domain_kg.operations.package_erasure import PackageErasure
@@ -49,7 +53,7 @@ class RetentionService:
         self,
         job: LeasedJob,
         plan: RetentionPlan,
-        target: RetainedTarget | IncompleteBackupTarget | None = None,
+        target: RetainedTarget | IncompleteBackupTarget | GenerationCollectionTarget | None = None,
         session: AsyncClientSession | None = None,
     ) -> AccessContext:
         access, operation = await self._operation(job, session)
@@ -58,9 +62,9 @@ class RetentionService:
         kg = await self.database.kgs.find_one(
             {"org_id": str(job.org_id), "id": str(job.kg_id)}, session=session
         )
-        if kg is None or (kg.get("storage_profile_id"), kg.get("configuration_epoch", 0)) != (
-            str(plan.storage_profile_id),
-            operation.snapshot.configuration_epoch,
+        if kg is None or kg.get("storage_profile_id") != str(plan.storage_profile_id) or (
+            plan.resources != "generations"
+            and kg.get("configuration_epoch", 0) != operation.snapshot.configuration_epoch
         ):
             raise invalid()
         if target is not None:
@@ -75,7 +79,11 @@ class RetentionService:
                         if isinstance(target, IncompleteBackupTarget)
                         else target.operation_id
                     ),
-                    "attempt_id": str(target.attempt_id),
+                    **(
+                        {"generation": str(target.generation)}
+                        if isinstance(target, GenerationCollectionTarget)
+                        else {"attempt_id": str(target.attempt_id)}
+                    ),
                     "cleanup_job_id": str(job.id),
                 },
                 session=session,
@@ -116,6 +124,13 @@ class RetentionService:
             plan = await RetentionTargets(self.queue).record(operation)
             for target in plan.targets:
                 access = await self._guard(job, plan, target)
+                if isinstance(target, GenerationCollectionTarget):
+                    await GenerationCollection(self.queue).erase(
+                        job,
+                        target,
+                        partial(self._guard, job, plan, target),
+                    )
+                    continue
                 binding = (await self.queue.router.for_sources(access, job.kg_id)).blobs
                 if isinstance(target, IncompleteBackupTarget):
                     await self._incomplete(job, operation, plan, target, PackageStore(binding))
@@ -180,6 +195,9 @@ class RetentionService:
             await self.queue.transactions.fence(access, access.action, session)
             for target in plan.targets:
                 await self._guard(job, plan, target, session)
+                if isinstance(target, GenerationCollectionTarget):
+                    await GenerationCollection(self.queue).complete(operation, target, session)
+                    continue
                 if isinstance(target, IncompleteBackupTarget):
                     await IncompleteBackups(self.queue).objects(operation, target, session)
                     if not await self.database.retention_inventories.find_one(

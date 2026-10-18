@@ -18,6 +18,18 @@ def test_incomplete_backup_collection_is_an_explicit_resource_selection():
     assert command.resources == "incomplete_backups"
 
 
+def test_generation_collection_is_an_explicit_resource_selection():
+    from domain_kg.operations.models import RetentionCommand
+
+    command = RetentionCommand(
+        kg_id=uuid4(),
+        expected_published_revision=0,
+        resources="generations",
+        idempotency_key="collect-old-indexes",
+    )
+    assert command.resources == "generations"
+
+
 def test_retention_command_requires_an_explicit_resource_selection():
     from domain_kg.jobs.models import JobCommand
     from domain_kg.operations.models import OwnerCommand, RetentionCommand

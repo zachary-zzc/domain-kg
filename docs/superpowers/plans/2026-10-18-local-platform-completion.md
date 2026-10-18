@@ -49,14 +49,14 @@ Files: `Dockerfile`, `.dockerignore`, `scripts/check_distribution.py`,
 Files: `operations/authority.py`, generation/capture/retention services, typed
 operation controls, `materials/purge.py`, corresponding integration tests.
 
-- [ ] Reproduce remaining history-only material, retired/purged source and
+- [x] Reproduce remaining history-only material, retired/purged source and
   alternative-checkpoint cases with tiny original/curation records.
-- [ ] Preserve complete allowed authority ancestry; implement explicit retirement
+- [x] Preserve complete allowed authority ancestry; implement explicit retirement
   and collection semantics without reviving erased sources or deleting accepted
   artifacts. Freeze target inventories and validate current owner/lease/pins.
-- [ ] Complete local typed maintenance controls and failure/retry paths; keep
+- [x] Complete local typed maintenance controls and failure/retry paths; keep
   cross-environment placement migration outside this scope.
-- [ ] Run focused real-store lifecycle/permissions/fault tests and the required
+- [x] Run focused real-store lifecycle/permissions/fault tests and the required
   backup/quota/audit regression; commit only verified behavior.
 
 ### Task 3: Reproducible local evaluation and release manifest

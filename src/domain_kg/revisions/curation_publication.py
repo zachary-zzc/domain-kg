@@ -316,6 +316,7 @@ class CurationCoordinator:
             "record_count": len(batch.records),
             "record_checksum": projection_checksum([str(ref.id) for ref in batch.records]),
             "state": "prepared",
+            "write_tracking_version": 1,
             "receipts": [],
         }
 

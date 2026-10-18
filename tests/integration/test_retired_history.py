@@ -21,12 +21,19 @@ from domain_kg.operations.generation import GenerationService
 from domain_kg.operations.generation_capture import GenerationCapture
 from domain_kg.operations.generation_preparation import GenerationPreparation
 from domain_kg.operations.jobs import OwnerOperations
-from domain_kg.operations.models import BackupCommand, GenerationCommand
+from domain_kg.operations.models import BackupCommand, GenerationCommand, RestoreCommand
 from domain_kg.operations.restore import RestoreService
+from domain_kg.operations.restore_targets import RestoreTargets
 from domain_kg.retrieval.models import SearchRequest
 from domain_kg.retrieval.service import RetrievalService
 from domain_kg.revisions.journal import PublicationJournal
-from domain_kg.revisions.models import NodeChanges, NodeUpdate, RelationChanges, RelationUpdate
+from domain_kg.revisions.models import (
+    CurationCommand,
+    NodeChanges,
+    NodeUpdate,
+    RelationChanges,
+    RelationUpdate,
+)
 from domain_kg.revisions.service import RevisionService
 
 pytestmark = pytest.mark.storage
@@ -205,3 +212,118 @@ async def test_backup_restore_keeps_retired_history_without_original_bytes(
     for index in range(len(manifest.pages)):
         page = await service.parts(owner, target.target.kg_id, backup.target_id, index)
         assert not any(part.kind in ("original", "source_artifact") for part in page.parts)
+
+
+async def test_visibility_only_retired_history_survives_two_real_restores(
+    publishing,
+    team,
+    catalog,
+    monkeypatch,
+):
+    materials, editor, queue, coordinator, _, _ = publishing
+    historical = []
+
+    async def before_backup(source):
+        alpha = await alpha_id(queue, editor, source.kg_id)
+        hidden = await RevisionService(queue, coordinator.providers).curate_node(
+            editor,
+            CurationCommand(
+                kg_id=source.kg_id,
+                entity_id=alpha,
+                action="suppress",
+                expected_revision=0,
+                source_ids=(source.material_id,),
+                reason="Keep withdrawal history after erasure",
+                idempotency_key="retired-visibility-only",
+                dry_run=False,
+            ),
+        )
+        historical.append(hidden.revision_id)
+        lifecycle = MaterialLifecycle(materials, queue)
+        removed = await lifecycle.remove(
+            editor,
+            RemoveMaterial(
+                kg_id=source.kg_id,
+                material_id=source.material_id,
+                action="delete",
+                expected_revision=1,
+                idempotency_key="visibility-only-remove",
+            ),
+        )
+        await queue.database.material_access.update_one(
+            {
+                "org_id": str(source.org_id),
+                "kg_id": str(source.kg_id),
+                "id": str(source.material_id),
+            },
+            {"$set": {"purge_after": datetime.now(UTC) - timedelta(seconds=1)}},
+        )
+        owner = await queue.policy.resolve_access(team[2]["owner"], [source.kg_id], Action.CURATE)
+        await lifecycle.purge(
+            owner,
+            PurgeMaterial(
+                kg_id=source.kg_id,
+                material_id=source.material_id,
+                expected_revision=removed.revision,
+                reason="Erase expired synthetic bytes",
+                idempotency_key="visibility-only-purge",
+            ),
+        )
+        purge = await queue.claim("visibility-purge", kinds=("purge_material",))
+        await JobRunner(queue, configured_pipeline(queue, coordinator.providers)).run_job(purge)
+        assert (await queue.get(owner, purge.id)).stage == "ready"
+        forbid_models(monkeypatch, coordinator.providers)
+
+    source, _, job, target, _ = await setup_restore(
+        publishing, team, catalog, before_backup=before_backup
+    )
+    service = RestoreService(queue, coordinator.providers)
+    await service.run(job)
+    owner = await queue.policy.resolve_access(
+        team[2]["owner"], [target.target.kg_id], Action.CONFIGURE
+    )
+    operations = OwnerOperations(queue)
+    backup = await operations.submit(
+        owner,
+        BackupCommand(
+            kg_id=target.target.kg_id,
+            expected_published_revision=1,
+            idempotency_key="visibility-only-second-backup",
+        ),
+    )
+    await BackupService(queue).run(await queue.claim("second-backup", kinds=("backup",)))
+    profile = next(iter(coordinator.providers.registry.profiles.values()))
+    restored = await operations.submit(
+        owner,
+        RestoreCommand(
+            kg_id=target.target.kg_id,
+            expected_published_revision=1,
+            backup_job_id=backup.job_id,
+            placement_id=catalog[3].id,
+            provider_profile_id=profile.id,
+            name="Twice-restored withdrawal history",
+            idempotency_key="visibility-only-second-restore",
+        ),
+    )
+    second = await queue.claim("second-restore", kinds=("restore",))
+    second_target = await RestoreTargets(queue).get(owner, target.target.kg_id, restored.job_id)
+    coordinator.providers.registry.profiles[profile.id] = profile.model_copy(
+        update={
+            "allowed_namespaces": (*profile.allowed_namespaces, second_target.target),
+        }
+    )
+    await service.run(second)
+    assert await queue.accepted(second)
+    final_ns = second_target.target.model_dump(mode="json")
+    record = await queue.database.curation_revisions.find_one(final_ns | {"id": str(historical[0])})
+    assert record["kind"] == "visibility" and record["after"]["suppressed"]
+    assert record["receipt"]["kg_id"] == str(second_target.target.kg_id)
+    assert (
+        await queue.database.node_visibility.count_documents(final_ns | {"suppressed": True}) == 1
+    )
+    material = await queue.database.material_access.find_one(
+        final_ns | {"id": str(source.material_id)}
+    )
+    assert (
+        material["purged"] and material["active_version_id"] is None and "metadata" not in material
+    )

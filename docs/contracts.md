@@ -90,9 +90,17 @@ Optional MCP resources expose authorized schema and material metadata, with opaq
 | `GET /kgs/{kg_id}/projections`, `POST /kgs/{kg_id}/repair` | Owner projection readiness and repair jobs |
 | `GET /kgs/{kg_id}/usage` | Current-owner KG daily provider counters, reservations, limits and UTC reset; no organization aggregate |
 | `POST /kgs/{kg_id}/repairs/curations` | Current-owner repair of one accepted human revision using sealed vectors; expected publication and idempotency key required |
+| `POST /kgs/{kg_id}/retention` | Current-owner cleanup of explicitly selected expired packages, settled incomplete backups, or safely retired index generations |
 | `GET /citations/{citation_id}` | Resolve source location or stream authorized original |
 
 The `...` abbreviations in this table preserve the preceding KG or job prefix; actual OpenAPI paths must be fully expanded. `POST /kgs/{kg_id}/restores` restores a backup into a newly allocated KG with a new ID. Uploads require current editor access and reserve quota; completion verifies hash and length. Unclaimed uploads expire after 24 hours. Do not expose object-store credentials or accept a client-selected object key.
+
+Retention requires `expected_published_revision`, an idempotency key and an explicit
+`resources` selection: `backups`, `exports`, `both`, `incomplete_backups` or
+`generations`. The service selects and freezes its own exact namespace-bound
+inventory under a grace policy. It accepts no client paths, store names, backend
+queries or deletion cutoffs. Pending/uncertain writes and retained reads prevent
+collection; a timed-out lease alone does not prove that remote I/O has stopped.
 
 ## Search request
 
