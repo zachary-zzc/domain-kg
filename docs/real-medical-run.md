@@ -1,5 +1,11 @@
 # Real medical PDF run / 真实医学 PDF 抽取
 
+A subsequent independent-recall/4B-filter experiment improved answers on eight
+development problems from3/8 to5/8 without a citation gain. Its24-question fresh
+comparison stopped at two consecutive timeouts after only five completed pairs;
+it does not qualify full-PDF work. Models stopped; see
+[the filter report](dual-filter-report.md). Production implementation unchanged.
+
 The subsequent frozen 40-new-question 4B comparison is complete: pure-vector
 and dual-path answer accuracy both reached 34/40 (85%) after semantic audit;
 citation completeness was 31/36 (86.1%) and 29/36 (80.6%). The user-approved

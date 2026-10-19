@@ -1,0 +1,725 @@
+{
+  "version": 1,
+  "annotation": "Fresh questions frozen after a single filter strategy was selected, before looking at new responses. Same previously read NHS PDF, new target facts with overlapping source passages. Author-agent provisional labels, not independent expert annotation. New synthetic chains share templates and within-chain questions are correlated.",
+  "top_k": 3,
+  "context_chars": 1800,
+  "chunks": [
+    {
+      "id": "h01",
+      "blocks": [
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    {
+      "id": "h02",
+      "blocks": [
+        16,
+        17,
+        18,
+        19
+      ]
+    },
+    {
+      "id": "h03",
+      "blocks": [
+        20,
+        21,
+        22,
+        23
+      ]
+    },
+    {
+      "id": "h04",
+      "blocks": [
+        24,
+        25
+      ]
+    },
+    {
+      "id": "h05",
+      "blocks": [
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52
+      ]
+    },
+    {
+      "id": "h06",
+      "blocks": [
+        53,
+        54,
+        55,
+        56,
+        57
+      ]
+    },
+    {
+      "id": "h07",
+      "blocks": [
+        58,
+        59,
+        60,
+        61,
+        62,
+        63
+      ]
+    },
+    {
+      "id": "h08",
+      "blocks": [
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82
+      ]
+    },
+    {
+      "id": "h09",
+      "blocks": [
+        84,
+        85,
+        86,
+        87
+      ]
+    },
+    {
+      "id": "h10",
+      "blocks": [
+        88,
+        89,
+        90,
+        91
+      ]
+    },
+    {
+      "id": "h11",
+      "blocks": [
+        92,
+        93,
+        94,
+        95
+      ]
+    },
+    {
+      "id": "h12",
+      "blocks": [
+        96,
+        97,
+        98,
+        99,
+        100
+      ]
+    },
+    {
+      "id": "h13",
+      "blocks": [
+        101,
+        102,
+        103
+      ]
+    },
+    {
+      "id": "h14",
+      "blocks": [
+        105,
+        106,
+        107,
+        108
+      ]
+    },
+    {
+      "id": "h15",
+      "blocks": [
+        109,
+        110,
+        111
+      ]
+    },
+    {
+      "id": "h16",
+      "blocks": [
+        112,
+        113,
+        114,
+        115
+      ]
+    },
+    {
+      "id": "h17",
+      "blocks": [
+        141,
+        142,
+        143
+      ]
+    },
+    {
+      "id": "h18",
+      "blocks": [
+        156,
+        157,
+        158
+      ]
+    },
+    {
+      "id": "h19",
+      "blocks": [
+        167,
+        168,
+        169,
+        170
+      ]
+    },
+    {
+      "id": "h20",
+      "blocks": [
+        64,
+        65,
+        66,
+        67
+      ]
+    },
+    {
+      "id": "h21",
+      "blocks": [
+        38,
+        39,
+        40
+      ]
+    },
+    {
+      "id": "k01",
+      "document": "fresh-note-k01",
+      "text": "Expedition Sable uses Kit Vireo. Expedition Sable does not use Kit Onyx."
+    },
+    {
+      "id": "k02",
+      "document": "fresh-note-k02",
+      "text": "Kit Vireo preserves Sample Nori."
+    },
+    {
+      "id": "k03",
+      "document": "fresh-note-k03",
+      "text": "Sample Nori is stored in Cabinet Wren."
+    },
+    {
+      "id": "k04",
+      "document": "fresh-note-k04",
+      "text": "Kit Onyx preserves Sample Xeno. Sample Xeno is stored in Cabinet Reed."
+    },
+    {
+      "id": "k05",
+      "document": "fresh-note-k05",
+      "text": "The register contains no approved funding amount for Expedition Sable."
+    },
+    {
+      "id": "k06",
+      "document": "fresh-note-k06",
+      "text": "Dispatch Beacon serves Hub Alder. Dispatch Beacon does not serve Hub Mallow."
+    },
+    {
+      "id": "k07",
+      "document": "fresh-note-k07",
+      "text": "Hub Alder is assigned Vehicle Marten."
+    },
+    {
+      "id": "k08",
+      "document": "fresh-note-k08",
+      "text": "Vehicle Marten runs on compressed air."
+    },
+    {
+      "id": "k09",
+      "document": "fresh-note-k09",
+      "text": "Hub Mallow is assigned Vehicle Badger. Vehicle Badger runs on diesel."
+    },
+    {
+      "id": "k10",
+      "document": "fresh-note-k10",
+      "text": "No delivery date is specified for Dispatch Beacon."
+    },
+    {
+      "id": "k11",
+      "document": "fresh-note-k11",
+      "text": "The kestrel microservice builds the cedar package."
+    },
+    {
+      "id": "k12",
+      "document": "fresh-note-k12",
+      "text": "The cedar package is published in the moss registry."
+    },
+    {
+      "id": "k13",
+      "document": "fresh-note-k13",
+      "text": "The moss registry is mirrored in the vale region."
+    },
+    {
+      "id": "k14",
+      "document": "fresh-note-k14",
+      "text": "The heron microservice builds the birch package. The birch package is published in the fern registry."
+    },
+    {
+      "id": "k15",
+      "document": "fresh-note-k15",
+      "text": "No release date is recorded for the cedar package."
+    },
+    {
+      "id": "k16",
+      "document": "fresh-note-k16",
+      "text": "Catalog Meridian includes the Atlas edition. Catalog Meridian does not include the Atlas draft."
+    },
+    {
+      "id": "k17",
+      "document": "fresh-note-k17",
+      "text": "The Atlas edition translates Manual Solace."
+    },
+    {
+      "id": "k18",
+      "document": "fresh-note-k18",
+      "text": "Manual Solace is licensed under Permit Saffron."
+    },
+    {
+      "id": "k19",
+      "document": "fresh-note-k19",
+      "text": "The Atlas draft translates Manual Hush. Manual Hush is licensed under Permit Indigo."
+    },
+    {
+      "id": "k20",
+      "document": "fresh-note-k20",
+      "text": "Catalog Meridian has no named editor in the register."
+    }
+  ],
+  "queries": [
+    {
+      "id": "u01",
+      "split": "public_new",
+      "query": "Which two aspects of the child's wellbeing are assessed at the annual review?",
+      "expected": [
+        "h01"
+      ],
+      "answers": [
+        [
+          "mental"
+        ],
+        [
+          "physical"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u02",
+      "split": "public_new",
+      "query": "What does the dietitian check the child is not missing from their diet?",
+      "expected": [
+        "h06"
+      ],
+      "answers": [
+        [
+          "nutrient",
+          "nutrients"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u03",
+      "split": "public_new",
+      "query": "Which three downloaded data sources does the consultant examine when explaining insulin-dose adjustments?",
+      "expected": [
+        "h07"
+      ],
+      "answers": [
+        [
+          "app",
+          "apps"
+        ],
+        [
+          "pen",
+          "pens"
+        ],
+        [
+          "pump",
+          "pumps"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u04",
+      "split": "public_new",
+      "query": "For what future period does the consultant set goals at the end of the discussion?",
+      "expected": [
+        "h20"
+      ],
+      "answers": [
+        [
+          "upcoming year",
+          "coming year",
+          "next year",
+          "year ahead"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u05",
+      "split": "public_new",
+      "query": "Why does the psychologist ask the child and family to complete questionnaires?",
+      "expected": [
+        "h08"
+      ],
+      "answers": [
+        [
+          "impact",
+          "affect",
+          "affects"
+        ],
+        [
+          "distress",
+          "difficult",
+          "difficulties",
+          "help"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u06",
+      "split": "public_new",
+      "query": "How can excessively high blood sugar affect growth according to the leaflet?",
+      "expected": [
+        "h09"
+      ],
+      "answers": [
+        [
+          "growth",
+          "growing",
+          "grow"
+        ],
+        [
+          "prevent",
+          "impair",
+          "hinder",
+          "slow",
+          "not grow"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u07",
+      "split": "public_new",
+      "query": "What issue with the timing of a urine sample can make albumin appear higher than expected?",
+      "expected": [
+        "h14"
+      ],
+      "answers": [
+        [
+          "first"
+        ],
+        [
+          "not",
+          "other than",
+          "later"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u08",
+      "split": "public_new",
+      "query": "How can being on a period affect the albumin result according to the leaflet?",
+      "expected": [
+        "h14"
+      ],
+      "answers": [
+        [
+          "higher",
+          "high",
+          "raise",
+          "raised",
+          "elevated",
+          "increase"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u09",
+      "split": "public_new",
+      "query": "What should a family do ahead of the appointment if a blood test will be especially difficult?",
+      "expected": [
+        "h17"
+      ],
+      "answers": [
+        [
+          "keyworker nurse"
+        ],
+        [
+          "ahead",
+          "before",
+          "advance"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u10",
+      "split": "public_new",
+      "query": "When should the urine sample usually be obtained, and what happens if that is not possible?",
+      "expected": [
+        "h12"
+      ],
+      "answers": [
+        [
+          "three months",
+          "3 months"
+        ],
+        [
+          "arrive",
+          "arrival",
+          "on the day",
+          "review day",
+          "at the review"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u11",
+      "split": "public_new",
+      "query": "What is the purpose of the wellbeing questionnaire completed at the annual review?",
+      "expected": [
+        "h21"
+      ],
+      "answers": [
+        [
+          "difficult",
+          "difficulties",
+          "difficulty"
+        ],
+        [
+          "support",
+          "help"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "u12",
+      "split": "public_new",
+      "query": "To which platform is the mylife app connected in the equipment-data example?",
+      "expected": [
+        "h03"
+      ],
+      "answers": [
+        [
+          "Glooko"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "three_hop1",
+      "split": "three_hop",
+      "query": "Which cabinet holds the sample preserved by the kit actually used by Expedition Sable?",
+      "expected": [
+        "k01",
+        "k02",
+        "k03"
+      ],
+      "answers": [
+        [
+          "Wren"
+        ]
+      ],
+      "forbidden": [
+        "Reed"
+      ]
+    },
+    {
+      "id": "three_hop2",
+      "split": "three_hop",
+      "query": "Which dispatch serves the hub assigned the vehicle that runs on compressed air?",
+      "expected": [
+        "k06",
+        "k07",
+        "k08"
+      ],
+      "answers": [
+        [
+          "Beacon"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "three_hop3",
+      "split": "three_hop",
+      "query": "In which region is the registry carrying the package built by the kestrel microservice mirrored?",
+      "expected": [
+        "k11",
+        "k12",
+        "k13"
+      ],
+      "answers": [
+        [
+          "vale"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "three_hop4",
+      "split": "three_hop",
+      "query": "Which permit licenses the manual translated by the version actually included in Catalog Meridian?",
+      "expected": [
+        "k16",
+        "k17",
+        "k18"
+      ],
+      "answers": [
+        [
+          "Saffron"
+        ]
+      ],
+      "forbidden": [
+        "Indigo"
+      ]
+    },
+    {
+      "id": "two_hop1",
+      "split": "two_hop",
+      "query": "Which sample is preserved by the kit actually used by Expedition Sable?",
+      "expected": [
+        "k01",
+        "k02"
+      ],
+      "answers": [
+        [
+          "Nori"
+        ]
+      ],
+      "forbidden": [
+        "Xeno"
+      ]
+    },
+    {
+      "id": "two_hop2",
+      "split": "two_hop",
+      "query": "Which hub is assigned the vehicle that runs on compressed air?",
+      "expected": [
+        "k07",
+        "k08"
+      ],
+      "answers": [
+        [
+          "Alder"
+        ]
+      ],
+      "forbidden": [
+        "Mallow"
+      ]
+    },
+    {
+      "id": "two_hop3",
+      "split": "two_hop",
+      "query": "In which registry is the package built by the kestrel microservice published?",
+      "expected": [
+        "k11",
+        "k12"
+      ],
+      "answers": [
+        [
+          "moss"
+        ]
+      ],
+      "forbidden": [
+        "fern"
+      ]
+    },
+    {
+      "id": "two_hop4",
+      "split": "two_hop",
+      "query": "Which manual is translated by the version actually included in Catalog Meridian?",
+      "expected": [
+        "k16",
+        "k17"
+      ],
+      "answers": [
+        [
+          "Solace"
+        ]
+      ],
+      "forbidden": [
+        "Hush"
+      ]
+    },
+    {
+      "id": "z1",
+      "split": "unanswerable",
+      "query": "What is the approved funding amount for Expedition Sable?",
+      "expected": [],
+      "answers": [
+        [
+          "insufficient_evidence"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "z2",
+      "split": "unanswerable",
+      "query": "On what date will Dispatch Beacon deliver?",
+      "expected": [],
+      "answers": [
+        [
+          "insufficient_evidence"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "z3",
+      "split": "unanswerable",
+      "query": "What is the release date of the cedar package?",
+      "expected": [],
+      "answers": [
+        [
+          "insufficient_evidence"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "z4",
+      "split": "unanswerable",
+      "query": "Who is the editor of Catalog Meridian?",
+      "expected": [],
+      "answers": [
+        [
+          "insufficient_evidence"
+        ]
+      ],
+      "forbidden": []
+    }
+  ]
+}
