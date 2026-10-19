@@ -1,5 +1,11 @@
 # Real medical PDF run / 真实医学 PDF 抽取
 
+The subsequent frozen 40-new-question 4B comparison is complete: pure-vector
+and dual-path answer accuracy both reached 34/40 (85%) after semantic audit;
+citation completeness was 31/36 (86.1%) and 29/36 (80.6%). The user-approved
+90% citation threshold was not met, so no full-PDF construction followed.
+See [the new-question report](4b-holdout-report.md). No production code changed.
+
 The full run is **not complete**. The approved 4B model passed only one of three
 final short cases; its complete-PDF run was correctly withheld. The software
 preparations and scoped graph overview do not establish extraction quality.

@@ -1,0 +1,920 @@
+{
+  "version": 1,
+  "annotation": "40 new questions frozen before inference. Public target facts were not part of prior QA optimization, but the same source PDF was previously read. Author-agent provisional labels, not independent clinical annotation. Synthetic names/domains are new; chain templates recur.",
+  "top_k": 3,
+  "context_chars": 1800,
+  "chunks": [
+    {
+      "id": "h01",
+      "blocks": [
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    {
+      "id": "h02",
+      "blocks": [
+        16,
+        17,
+        18,
+        19
+      ]
+    },
+    {
+      "id": "h03",
+      "blocks": [
+        20,
+        21,
+        22,
+        23
+      ]
+    },
+    {
+      "id": "h04",
+      "blocks": [
+        24,
+        25
+      ]
+    },
+    {
+      "id": "h05",
+      "blocks": [
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52
+      ]
+    },
+    {
+      "id": "h06",
+      "blocks": [
+        53,
+        54,
+        55,
+        56,
+        57
+      ]
+    },
+    {
+      "id": "h07",
+      "blocks": [
+        58,
+        59,
+        60,
+        61,
+        62,
+        63
+      ]
+    },
+    {
+      "id": "h08",
+      "blocks": [
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82
+      ]
+    },
+    {
+      "id": "h09",
+      "blocks": [
+        84,
+        85,
+        86,
+        87
+      ]
+    },
+    {
+      "id": "h10",
+      "blocks": [
+        88,
+        89,
+        90,
+        91
+      ]
+    },
+    {
+      "id": "h11",
+      "blocks": [
+        92,
+        93,
+        94,
+        95
+      ]
+    },
+    {
+      "id": "h12",
+      "blocks": [
+        96,
+        97,
+        98,
+        99,
+        100
+      ]
+    },
+    {
+      "id": "h13",
+      "blocks": [
+        101,
+        102,
+        103
+      ]
+    },
+    {
+      "id": "h14",
+      "blocks": [
+        105,
+        106,
+        107,
+        108
+      ]
+    },
+    {
+      "id": "h15",
+      "blocks": [
+        109,
+        110,
+        111
+      ]
+    },
+    {
+      "id": "h16",
+      "blocks": [
+        112,
+        113,
+        114,
+        115
+      ]
+    },
+    {
+      "id": "h17",
+      "blocks": [
+        141,
+        142,
+        143
+      ]
+    },
+    {
+      "id": "h18",
+      "blocks": [
+        156,
+        157,
+        158
+      ]
+    },
+    {
+      "id": "h19",
+      "blocks": [
+        167,
+        168,
+        169,
+        170
+      ]
+    },
+    {
+      "id": "j01",
+      "document": "independent-note-j01",
+      "text": "Project Orion uses the Talon-4 collector. Project Orion does not use the Talon-9 collector."
+    },
+    {
+      "id": "j02",
+      "document": "independent-note-j02",
+      "text": "The Talon-4 collector records Packet Rho."
+    },
+    {
+      "id": "j03",
+      "document": "independent-note-j03",
+      "text": "Packet Rho is archived in Vault Mica."
+    },
+    {
+      "id": "j04",
+      "document": "independent-note-j04",
+      "text": "The Talon-9 collector records Packet Zeta. Packet Zeta is archived in Vault Flint."
+    },
+    {
+      "id": "j05",
+      "document": "independent-note-j05",
+      "text": "Courier Harbor delivers to Northgate Depot. Courier Harbor does not deliver to Southgate Depot."
+    },
+    {
+      "id": "j06",
+      "document": "independent-note-j06",
+      "text": "Northgate Depot is assigned Truck Cobalt."
+    },
+    {
+      "id": "j07",
+      "document": "independent-note-j07",
+      "text": "Truck Cobalt is powered by biodiesel."
+    },
+    {
+      "id": "j08",
+      "document": "independent-note-j08",
+      "text": "Southgate Depot is assigned Truck Amber. Truck Amber is powered by petrol."
+    },
+    {
+      "id": "j09",
+      "document": "independent-note-j09",
+      "text": "Recipe Linden uses Grain Selby. Recipe Linden does not use Grain Morven."
+    },
+    {
+      "id": "j10",
+      "document": "independent-note-j10",
+      "text": "Grain Selby is supplied by Cooperative Dales."
+    },
+    {
+      "id": "j11",
+      "document": "independent-note-j11",
+      "text": "Cooperative Dales is located in Vale Fen."
+    },
+    {
+      "id": "j12",
+      "document": "independent-note-j12",
+      "text": "Grain Morven is supplied by Cooperative Tor. Cooperative Tor is located in Vale Ash."
+    },
+    {
+      "id": "j13",
+      "document": "independent-note-j13",
+      "text": "The osprey trial uses the helix-6 device. The osprey trial does not use the helix-8 device."
+    },
+    {
+      "id": "j14",
+      "document": "independent-note-j14",
+      "text": "The helix-6 device measures the rune signal."
+    },
+    {
+      "id": "j15",
+      "document": "independent-note-j15",
+      "text": "The rune signal is recorded at marsh laboratory."
+    },
+    {
+      "id": "j16",
+      "document": "independent-note-j16",
+      "text": "The helix-8 device measures the ember signal. The ember signal is recorded at ridge laboratory."
+    },
+    {
+      "id": "j17",
+      "document": "independent-note-j17",
+      "text": "Project Orion has no approved budget recorded in this register."
+    },
+    {
+      "id": "j18",
+      "document": "independent-note-j18",
+      "text": "No delivery date is recorded for Courier Harbor in this register."
+    },
+    {
+      "id": "j19",
+      "document": "independent-note-j19",
+      "text": "The register does not specify a storage temperature for Grain Selby."
+    },
+    {
+      "id": "j20",
+      "document": "independent-note-j20",
+      "text": "The osprey trial has no named principal investigator in this register."
+    }
+  ],
+  "queries": [
+    {
+      "id": "p01",
+      "split": "public_new",
+      "query": "How often does the leaflet say every child with diabetes needs this review?",
+      "expected": [
+        "h01"
+      ],
+      "answers": [
+        [
+          "once a year",
+          "annually",
+          "every year",
+          "yearly"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p02",
+      "split": "public_new",
+      "query": "Where should the completed appointment checklist be handed in?",
+      "expected": [
+        "h02"
+      ],
+      "answers": [
+        [
+          "nursing station"
+        ],
+        [
+          "room 3"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p03",
+      "split": "public_new",
+      "query": "When should families download diabetes equipment data so the team can see it?",
+      "expected": [
+        "h03"
+      ],
+      "answers": [
+        [
+          "before",
+          "ahead"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p04",
+      "split": "public_new",
+      "query": "Approximately how long should families allow for the annual review itself?",
+      "expected": [
+        "h04"
+      ],
+      "answers": [
+        [
+          "two hours",
+          "2 hours"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p05",
+      "split": "public_new",
+      "query": "Which specialist nursing team offers advice about carbohydrate counting?",
+      "expected": [
+        "h05"
+      ],
+      "answers": [
+        [
+          "paediatric diabetes specialist nurses",
+          "PDSNs",
+          "specialist nurses"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p06",
+      "split": "public_new",
+      "query": "Who checks the diet history and advises on weight-related dietary concerns?",
+      "expected": [
+        "h06"
+      ],
+      "answers": [
+        [
+          "dietitian",
+          "dietitians"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p07",
+      "split": "public_new",
+      "query": "At what age do the specialist nurses also explain the Ready Steady Go programme?",
+      "expected": [
+        "h05"
+      ],
+      "answers": [
+        [
+          "12",
+          "twelve"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p08",
+      "split": "public_new",
+      "query": "Which two body areas will the diabetes consultant check?",
+      "expected": [
+        "h07"
+      ],
+      "answers": [
+        [
+          "feet"
+        ],
+        [
+          "injection sites"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p09",
+      "split": "public_new",
+      "query": "Which professional helps families understand links between diabetes and thinking, feeling and acting?",
+      "expected": [
+        "h08"
+      ],
+      "answers": [
+        [
+          "psychologist",
+          "psychologists"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p10",
+      "split": "public_new",
+      "query": "What are the special charts used to plot height and weight called?",
+      "expected": [
+        "h09"
+      ],
+      "answers": [
+        [
+          "centile charts",
+          "centile chart"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p11",
+      "split": "public_new",
+      "query": "When is blood pressure usually measured, and when is it measured if that is not possible?",
+      "expected": [
+        "h10"
+      ],
+      "answers": [
+        [
+          "three months",
+          "3 months"
+        ],
+        [
+          "on the day",
+          "day of",
+          "review day"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p12",
+      "split": "public_new",
+      "query": "Where may a child prefer blood pressure measurement if hospital anxiety raises it?",
+      "expected": [
+        "h11"
+      ],
+      "answers": [
+        [
+          "GP surgery",
+          "GP's surgery"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p13",
+      "split": "public_new",
+      "query": "Where should the completed urine sample be placed at the appointment?",
+      "expected": [
+        "h12"
+      ],
+      "answers": [
+        [
+          "box"
+        ],
+        [
+          "outside room 3"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p14",
+      "split": "public_new",
+      "query": "Which protein is the urine sample tested for, and what kidney complication may its presence signal?",
+      "expected": [
+        "h13"
+      ],
+      "answers": [
+        [
+          "albumin"
+        ],
+        [
+          "nephropathy",
+          "kidney disease"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p15",
+      "split": "public_new",
+      "query": "Exercise within what time interval can make the urine albumin level higher than expected?",
+      "expected": [
+        "h14"
+      ],
+      "answers": [
+        [
+          "24 hours",
+          "twenty-four hours",
+          "last 24"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p16",
+      "split": "public_new",
+      "query": "After a high albumin result, how many early morning urine samples are requested first?",
+      "expected": [
+        "h15"
+      ],
+      "answers": [
+        [
+          "three",
+          "3"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p17",
+      "split": "public_new",
+      "query": "Why does the team educate children about checking their own feet?",
+      "expected": [
+        "h16"
+      ],
+      "answers": [
+        [
+          "early",
+          "soon"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p18",
+      "split": "public_new",
+      "query": "At which appointment are the blood test results discussed?",
+      "expected": [
+        "h17"
+      ],
+      "answers": [
+        [
+          "next clinic appointment",
+          "next clinic visit"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p19",
+      "split": "public_new",
+      "query": "Why does the team want to know whether a child smokes?",
+      "expected": [
+        "h18"
+      ],
+      "answers": [
+        [
+          "support",
+          "help"
+        ],
+        [
+          "healthier lifestyle",
+          "healthier life"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "p20",
+      "split": "public_new",
+      "query": "Who should families contact first with questions or concerns?",
+      "expected": [
+        "h19"
+      ],
+      "answers": [
+        [
+          "diabetes keyworker nurse",
+          "keyworker nurse"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "three_hop1",
+      "split": "three_hop",
+      "query": "Which vault stores the packet recorded by the collector actually used by Project Orion?",
+      "expected": [
+        "j01",
+        "j02",
+        "j03"
+      ],
+      "answers": [
+        [
+          "Mica"
+        ]
+      ],
+      "forbidden": [
+        "Flint"
+      ]
+    },
+    {
+      "id": "three_hop2",
+      "split": "three_hop",
+      "query": "What fuel powers the truck assigned to the depot served by Courier Harbor?",
+      "expected": [
+        "j05",
+        "j06",
+        "j07"
+      ],
+      "answers": [
+        [
+          "biodiesel"
+        ]
+      ],
+      "forbidden": [
+        "petrol"
+      ]
+    },
+    {
+      "id": "three_hop3",
+      "split": "three_hop",
+      "query": "In which vale is the supplier of the grain used by Recipe Linden located?",
+      "expected": [
+        "j09",
+        "j10",
+        "j11"
+      ],
+      "answers": [
+        [
+          "Fen"
+        ]
+      ],
+      "forbidden": [
+        "Ash"
+      ]
+    },
+    {
+      "id": "three_hop4",
+      "split": "three_hop",
+      "query": "At which laboratory is the signal measured by the device actually used in the osprey trial recorded?",
+      "expected": [
+        "j13",
+        "j14",
+        "j15"
+      ],
+      "answers": [
+        [
+          "marsh"
+        ]
+      ],
+      "forbidden": [
+        "ridge"
+      ]
+    },
+    {
+      "id": "two_hop1",
+      "split": "two_hop",
+      "query": "Which packet is recorded by the collector actually used by Project Orion?",
+      "expected": [
+        "j01",
+        "j02"
+      ],
+      "answers": [
+        [
+          "Rho"
+        ]
+      ],
+      "forbidden": [
+        "Zeta"
+      ]
+    },
+    {
+      "id": "two_hop2",
+      "split": "two_hop",
+      "query": "Which truck is assigned to the depot served by Courier Harbor?",
+      "expected": [
+        "j05",
+        "j06"
+      ],
+      "answers": [
+        [
+          "Cobalt"
+        ]
+      ],
+      "forbidden": [
+        "Amber"
+      ]
+    },
+    {
+      "id": "two_hop3",
+      "split": "two_hop",
+      "query": "Which cooperative supplies the grain actually used by Recipe Linden?",
+      "expected": [
+        "j09",
+        "j10"
+      ],
+      "answers": [
+        [
+          "Dales"
+        ]
+      ],
+      "forbidden": [
+        "Tor"
+      ]
+    },
+    {
+      "id": "two_hop4",
+      "split": "two_hop",
+      "query": "Which signal does the device actually used in the osprey trial measure?",
+      "expected": [
+        "j13",
+        "j14"
+      ],
+      "answers": [
+        [
+          "rune"
+        ]
+      ],
+      "forbidden": [
+        "ember"
+      ]
+    },
+    {
+      "id": "direct1",
+      "split": "direct",
+      "query": "Which collector does Project Orion actually use?",
+      "expected": [
+        "j01"
+      ],
+      "answers": [
+        [
+          "Talon-4",
+          "Talon 4"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "direct2",
+      "split": "direct",
+      "query": "Which depot does Courier Harbor deliver to?",
+      "expected": [
+        "j05"
+      ],
+      "answers": [
+        [
+          "Northgate"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "direct3",
+      "split": "direct",
+      "query": "Which grain does Recipe Linden actually use?",
+      "expected": [
+        "j09"
+      ],
+      "answers": [
+        [
+          "Selby"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "direct4",
+      "split": "direct",
+      "query": "Which device does the osprey trial actually use?",
+      "expected": [
+        "j13"
+      ],
+      "answers": [
+        [
+          "helix-6",
+          "helix 6"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "negative1",
+      "split": "negative",
+      "query": "Which collector is explicitly stated not to be used by Project Orion?",
+      "expected": [
+        "j01"
+      ],
+      "answers": [
+        [
+          "Talon-9",
+          "Talon 9"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "negative2",
+      "split": "negative",
+      "query": "Which depot is explicitly stated not to be served by Courier Harbor?",
+      "expected": [
+        "j05"
+      ],
+      "answers": [
+        [
+          "Southgate"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "negative3",
+      "split": "negative",
+      "query": "Which grain is explicitly stated not to be used by Recipe Linden?",
+      "expected": [
+        "j09"
+      ],
+      "answers": [
+        [
+          "Morven"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "negative4",
+      "split": "negative",
+      "query": "Which device is explicitly stated not to be used by the osprey trial?",
+      "expected": [
+        "j13"
+      ],
+      "answers": [
+        [
+          "helix-8",
+          "helix 8"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "n1",
+      "split": "unanswerable",
+      "query": "What is the approved budget of Project Orion?",
+      "expected": [],
+      "answers": [
+        [
+          "insufficient_evidence"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "n2",
+      "split": "unanswerable",
+      "query": "On which date will Courier Harbor deliver?",
+      "expected": [],
+      "answers": [
+        [
+          "insufficient_evidence"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "n3",
+      "split": "unanswerable",
+      "query": "At what temperature must Grain Selby be stored?",
+      "expected": [],
+      "answers": [
+        [
+          "insufficient_evidence"
+        ]
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "n4",
+      "split": "unanswerable",
+      "query": "Who is the principal investigator of the osprey trial?",
+      "expected": [],
+      "answers": [
+        [
+          "insufficient_evidence"
+        ]
+      ],
+      "forbidden": []
+    }
+  ]
+}
