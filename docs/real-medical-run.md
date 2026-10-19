@@ -12,6 +12,13 @@ development relations with one false claim; same-weight review was unreliable.
 The new 4B trial timed out and supplies no semantic score. No full-document run
 or publication followed. See [the complete iteration report](iterative-extraction-report.md).
 
+A separately authorized 4B offline hybrid-retrieval pilot subsequently completed
+with five bounded strategies. The exploratory name/structure graph improved
+answer matching on ten provisional questions from 8/10 to 10/10, but complete
+support citations remained 8/10. This uses only eight PDF excerpts plus synthetic
+chains, includes author-agent relation review, and does not qualify full-PDF
+extraction or publication. See [the hybrid report](hybrid-retrieval-report.md).
+
 ## Provider configuration
 
 Private file: `/Users/zachary/.cache/domain-kg/providers.medical-api.local.json`.

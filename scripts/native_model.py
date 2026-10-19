@@ -15,8 +15,18 @@ ROOT = Path(__file__).resolve().parents[1]
 CACHE = Path.home() / ".cache/domain-kg"
 
 
+def embedding_window(limits, requested):
+    if requested is None:
+        return limits
+    if type(requested) is not int or not 128 <= requested <= min(limits):
+        raise ValueError("Embedding window may only reduce approved allocation")
+    return requested, requested, requested
+
+
 @asynccontextmanager
-async def model(role, *, manifest_path=ROOT / "config/medical-model.approved.json"):
+async def model(
+    role, *, manifest_path=ROOT / "config/medical-model.approved.json", log_directory=None
+):
     settings = json.loads(manifest_path.read_bytes())
     laptop = json.loads((ROOT / settings["docker_cap_profile"]).read_bytes())["native"]
     if role == "chat":
@@ -42,6 +52,9 @@ async def model(role, *, manifest_path=ROOT / "config/medical-model.approved.jso
                 "embedding_batch_tokens",
                 "embedding_microbatch_tokens",
             )
+        )
+        context, batch, micro = embedding_window(
+            (context, batch, micro), settings.get("embedding_window_tokens")
         )
         extra = ["--embedding", "--pooling", "last"]
     else:
@@ -107,7 +120,7 @@ async def model(role, *, manifest_path=ROOT / "config/medical-model.approved.jso
     ]
     guard = OwnedProcess(
         command,
-        CACHE / "real-medical-kg" / f"{role}-server.log",
+        (log_directory or CACHE / "real-medical-kg") / f"{role}-server.log",
         rss_cap_bytes=cap,
         sample_seconds=0.25,
     )

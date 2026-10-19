@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "annotation": "Frozen agent-authored provisional labels; public PDF subset and invented synthetic chains; not independent clinical annotation",
+  "top_k": 3,
+  "context_chars": 1800,
+  "chunks": [
+    {"id":"c01","blocks":[128,129,130,131]},
+    {"id":"c02","blocks":[132,133,134,135,136]},
+    {"id":"c03","blocks":[137,138,139,140]},
+    {"id":"c04","blocks":[145,146,147,148,149]},
+    {"id":"c05","blocks":[150,151,152,153,154,155]},
+    {"id":"c06","blocks":[117,118,119,120,121,122]},
+    {"id":"c07","blocks":[159,160,161,162,163,164,165,166]},
+    {"id":"c08","blocks":[123,124,125,126,127]},
+    {"id":"c09","document":"s1","text":"Project Aster uses the Flux-7 assay."},
+    {"id":"c10","document":"s2","text":"The Flux-7 assay measures marker Kappa."},
+    {"id":"c11","document":"s3","text":"Marker Kappa is produced by gland Nera."},
+    {"id":"c12","document":"s4","text":"Project Boreal does not use the Flux-7 assay. Project Boreal uses the Vega-2 assay."},
+    {"id":"c13","document":"s5","text":"The Vega-2 assay measures marker Sigma."},
+    {"id":"c14","document":"s6","text":"Marker Sigma is produced by gland Luma."},
+    {"id":"c15","document":"s7","text":"Gland Nera and gland Luma are listed in the site directory. The directory states no production relationship."},
+    {"id":"c16","document":"s8","text":"Project Cedar is a proposed project. No assay has been assigned to Project Cedar."}
+  ],
+  "queries": [
+    {"id":"d01","split":"development_public","query":"Which organ mainly makes cholesterol?","expected":["c03"],"answers":[["liver"]],"forbidden":[]},
+    {"id":"d02","split":"development_public","query":"What kind of condition is coeliac disease, and which food protein is the body unable to process?","expected":["c01"],"answers":[["autoimmune"],["gluten"]],"forbidden":[]},
+    {"id":"p01","split":"held_out_public","query":"What is the national target HbA1c level in this leaflet?","expected":["c04"],"answers":[["48"],["less than","below","under","<"]],"forbidden":[]},
+    {"id":"p02","split":"held_out_public","query":"From what age is annual retinal screening offered to people with diabetes?","expected":["c05"],"answers":[["12","twelve"]],"forbidden":[]},
+    {"id":"p03","split":"held_out_public","query":"When should the child's blood test happen before the annual review, and what is the alternative if that is not possible?","expected":["c08"],"answers":[["three months","3 months"],["on the day","same day","day of"]],"forbidden":[]},
+    {"id":"s01","split":"held_out_synthetic","query":"Which gland produces the marker measured by the assay used by Project Aster?","expected":["c09","c10","c11"],"answers":[["nera"]],"forbidden":["luma"]},
+    {"id":"s02","split":"held_out_synthetic","query":"Which gland produces the marker measured by the assay actually used by Project Boreal?","expected":["c12","c13","c14"],"answers":[["luma"]],"forbidden":["nera"]},
+    {"id":"s03","split":"held_out_synthetic","query":"Which marker is measured by the assay that Project Boreal actually uses?","expected":["c12","c13"],"answers":[["sigma"]],"forbidden":["kappa"]},
+    {"id":"s04","split":"held_out_synthetic","query":"Which assay does Project Aster use?","expected":["c09"],"answers":[["flux-7","flux 7"]],"forbidden":["vega"]},
+    {"id":"n01","split":"held_out_no_answer","query":"Which gland produces the marker measured by Project Cedar's assigned assay?","expected":[],"answers":[["insufficient_evidence"]],"forbidden":["nera","luma"]}
+  ]
+}
