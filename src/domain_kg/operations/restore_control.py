@@ -13,7 +13,7 @@ from domain_kg.engine.source_mapping import engine_name
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.graph.models import DomainSchema
 from domain_kg.identity.models import Principal
-from domain_kg.ingestion.models import ParsedChunk, ParsedDocument
+from domain_kg.ingestion.models import ParsedBlock, ParsedChunk, ParsedDocument
 from domain_kg.ingestion.resolved import ResolvedDocument
 from domain_kg.jobs.models import JobCommand, LeasedJob
 from domain_kg.jobs.queue import JobQueue
@@ -159,11 +159,20 @@ class RestoreControl(RestoreAuthority):
         chunks: dict[UUID, ParsedChunk] = {}
         expected: dict[str, dict[str, dict[str, Any]]] = {"source_blocks": {}, "source_chunks": {}}
         for rewritten in staged.artifacts:
-            if rewritten.checkpoint.stage not in ("parsing", "chunking"):
+            if rewritten.checkpoint.stage not in (
+                "parsing",
+                "chunking",
+            ) or rewritten.artifact.blob.media_type.startswith("image/"):
                 continue
             document = ParsedDocument.model_validate_json(rewritten.body)
-            table = "source_blocks" if rewritten.checkpoint.stage == "parsing" else "source_chunks"
-            for item in document.blocks if table == "source_blocks" else document.chunks:
+            owned_items: list[
+                tuple[Literal["source_blocks", "source_chunks"], ParsedBlock | ParsedChunk]
+            ] = [("source_blocks", item) for item in document.blocks]
+            if rewritten.checkpoint.stage == "chunking":
+                owned_items.extend(("source_chunks", item) for item in document.chunks)
+            for table, item in owned_items:
+                if str(item.id) in expected[table]:
+                    continue  # Native blocks retain their original parsing artifact owner.
                 value = item.model_dump(mode="json")
                 if table == "source_blocks":
                     value.pop("text")

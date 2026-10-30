@@ -4,14 +4,19 @@ from typing import Literal
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.imports.provenance import ImportOrigin
+from domain_kg.ingestion.models import Span
 from domain_kg.models import SourceVersion
 from domain_kg.revisions.models import ReadScope
 
 
-def visible_status(value: str) -> Literal["verified", "manual", "imported_unverified"]:
+def visible_status(
+    value: str,
+) -> Literal["verified", "model_interpreted", "manual", "imported_unverified"]:
     match value:
         case "verified":
             return "verified"
+        case "model_interpreted":
+            return "model_interpreted"
         case "manual":
             return "manual"
         case "imported_unverified":
@@ -32,3 +37,11 @@ def source_origin(scope: ReadScope, source: SourceVersion | None) -> ImportOrigi
     if origin is not None and not origin.matches(source):
         raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Visible import ownership differs.")
     return origin
+
+
+def source_status(
+    scope: ReadScope, source: SourceVersion | None, spans: tuple["Span", ...]
+) -> Literal["verified", "model_interpreted", "imported_unverified"]:
+    from domain_kg.ingestion.models import span_status
+
+    return "imported_unverified" if source_origin(scope, source) else span_status(spans)

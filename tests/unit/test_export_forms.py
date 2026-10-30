@@ -19,9 +19,10 @@ def test_export_form_keeps_material_scope_and_default_trust():
     }
     command = export_command(kg, fields)
     assert command.kg_id == kg and command.filters.material_ids == (material,)
-    assert command.filters.support_statuses == ("verified", "manual")
+    assert command.filters.support_statuses == ("verified", "model_interpreted", "manual")
     assert export_command(kg, fields | {"include_unverified": "on"}).filters.support_statuses == (
         "verified",
+        "model_interpreted",
         "manual",
         "imported_unverified",
     )

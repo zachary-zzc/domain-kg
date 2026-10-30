@@ -12,9 +12,11 @@ from pydantic import ValidationError
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.graph.models import DomainSchema
-from domain_kg.ingestion.models import ExtractionContent, ParsedChunk
+from domain_kg.ingestion.models import ExtractionBatch, ExtractionContent, ParsedChunk
 from domain_kg.models import FrozenModel
 from domain_kg.providers.call_budget import CallBudget
+from domain_kg.providers.completions import completion_reply, completion_request
+from domain_kg.providers.http import provider_headers, provider_json
 from domain_kg.providers.profiles import ProviderConnection, ProviderProfile
 
 
@@ -64,8 +66,22 @@ def unavailable() -> DomainError:
     )
 
 
+def evidence_correction(message: str) -> str:
+    return (
+        "Correct this source-evidence error: "
+        + message
+        + " Return complete JSON from the original source. Cite ALL passages needed for "
+        "BOTH exact endpoint names and the claim, including headings. Omit unsupported "
+        "claims; invent no names or evidence."
+    )
+
+
 def extraction_payload(
-    chunk: ParsedChunk, schema: DomainSchema, profile: ProviderProfile
+    chunk: ParsedChunk,
+    schema: DomainSchema,
+    profile: ProviderProfile,
+    *,
+    correction: str | None = None,
 ) -> dict[str, Any]:
     # Namespace first also separates provider-side prefix caches. No tools or function
     # calls are exposed; even source text requesting a tool action remains JSON data.
@@ -115,6 +131,23 @@ def extraction_payload(
             response_schema(schema, named=named), profile.schema_string_limit
         )
         payload["temperature"] = 0
+    if profile.extraction_semantics == "source_roles_v1":
+        from domain_kg.providers.semantics import role_instructions
+
+        payload["messages"][0]["content"] += role_instructions(p.name for p in schema.predicates)
+    if profile.extraction_response_format == "json_object":
+        # Transport guarantees only JSON syntax here. The same Pydantic and canonical
+        # source validators below remain mandatory; no failure-triggered fallback.
+        shape = payload["response_format"]["json_schema"]["schema"]
+        payload["messages"][0]["content"] += (
+            " Return ONLY a JSON object matching this server-defined schema: "
+            + json.dumps(shape, ensure_ascii=False, separators=(",", ":"))
+        )
+        payload["response_format"] = {"type": "json_object"}
+    if profile.extraction_enable_thinking is not None:
+        payload["enable_thinking"] = profile.extraction_enable_thinking
+    if correction:
+        payload["messages"].append({"role": "user", "content": correction})
     return payload
 
 
@@ -145,6 +178,29 @@ class ExtractionClient:
         await self.client.aclose()
 
     async def complete(self, chunk: ParsedChunk, schema: DomainSchema) -> dict[str, Any]:
+        try:
+            return await self._complete_once(chunk, schema)
+        except DomainError as error:
+            if error.code != ErrorCode.EVIDENCE_VALIDATION_FAILED:
+                raise
+            correction = evidence_correction(error.message)
+            from domain_kg.providers.budget import extraction_request_fits
+
+            if not extraction_request_fits(
+                extraction_payload(chunk, schema, self.profile, correction=correction), self.profile
+            ):
+                raise
+            # One new, separately charged request; its output must pass the same checks.
+            return await self._complete_once(chunk, schema, correction, partial=True)
+
+    async def _complete_once(
+        self,
+        chunk: ParsedChunk,
+        schema: DomainSchema,
+        correction: str | None = None,
+        *,
+        partial: bool = False,
+    ) -> dict[str, Any]:
         from domain_kg.models import Namespace
 
         namespace = Namespace(org_id=chunk.org_id, kg_id=chunk.kg_id)
@@ -155,14 +211,15 @@ class ExtractionClient:
         ):
             raise unavailable()
         await self.authorize(chunk)
-        request = extraction_payload(chunk, schema, self.profile)
-        from domain_kg.providers.budget import extraction_fits
+        request = extraction_payload(chunk, schema, self.profile, correction=correction)
+        from domain_kg.providers.budget import extraction_request_fits
 
-        if not extraction_fits(chunk, schema, self.profile):
+        if not extraction_request_fits(request, self.profile):
             raise DomainError(
                 ErrorCode.QUOTA_EXCEEDED,
                 "Source exceeds the selected extraction context; split it first.",
             )
+        endpoint, request = completion_request(request, self.connection)
         context = self.budget.call() if self.budget is not None else nullcontext(None)
         async with context as charge:
             try:
@@ -171,53 +228,34 @@ class ExtractionClient:
                         charge.attempted = True
                     async with self.client.stream(
                         "POST",
-                        self.connection.endpoint + "/chat/completions",
+                        endpoint,
                         json=request,
-                        headers={
-                            "Authorization": "Bearer " + self.connection.api_key.get_secret_value()
-                        },
+                        headers=provider_headers(self.connection),
                     ) as response:
-                        if response.status_code != 200:
-                            raise unavailable()
-                        body = bytearray()
-                        async for part in response.aiter_bytes():
-                            body.extend(part)
-                            if len(body) > 2 * 1024**2:
-                                raise unavailable()
-                result = json.loads(body)
-                choice = result["choices"][0]
-                message = choice["message"]
-                raw_usage = result["usage"]
-                counts = (raw_usage["prompt_tokens"], raw_usage["completion_tokens"])
-                if any(type(value) is not int or not 0 <= value <= 1_000_000 for value in counts):
-                    raise unavailable()
+                        raw = await provider_json(response, limit=2 * 1024**2)
+                result = completion_reply(raw, self.connection)
                 used = Usage(
                     org_id=chunk.org_id,
                     kg_id=chunk.kg_id,
                     profile_id=self.id,
-                    input_tokens=counts[0],
-                    output_tokens=counts[1],
+                    input_tokens=result.input_tokens,
+                    output_tokens=result.output_tokens,
                 )
                 if charge is not None:
                     await charge.report(used)
                 await self.record_usage(used)
-                if choice["finish_reason"] == "length":
+                if result.finish == "length":
                     raise ExtractionOutputLimit()
-                if (
-                    choice["finish_reason"] != "stop"
-                    or message.get("refusal")
-                    or message.get("tool_calls")
-                    or message.get("function_call")
-                ):
+                if result.finish != "stop":
                     raise unavailable()
                 from domain_kg.providers.compact import NamedContent, RefContent
 
                 content = (
-                    NamedContent.model_validate_json(message["content"])
+                    NamedContent.model_validate_json(result.text)
                     if self.profile.extraction_format == "source_names_v1"
-                    else RefContent.model_validate_json(message["content"])
+                    else RefContent.model_validate_json(result.text)
                     if self.profile.extraction_format == "source_refs_v1"
-                    else ExtractionContent.model_validate_json(message["content"])
+                    else ExtractionContent.model_validate_json(result.text)
                 )
             except (
                 httpx.HTTPError,
@@ -233,5 +271,30 @@ class ExtractionClient:
             from domain_kg.providers.compact import expand
 
             assert isinstance(content, (RefContent, NamedContent))
-            content = expand(content, chunk, schema, self.id)
+            content = expand(content, chunk, schema, self.id, partial=partial)
+        else:
+            from domain_kg.ingestion.extraction import (
+                invalid,
+                validate_extraction,
+                validated_subset,
+            )
+
+            assert isinstance(content, ExtractionContent)
+            if partial:
+                return validated_subset(chunk, schema, content, self.id).model_dump(mode="json")
+            try:
+                batch = ExtractionBatch(
+                    org_id=chunk.org_id,
+                    kg_id=chunk.kg_id,
+                    material_id=chunk.material_id,
+                    version_id=chunk.version_id,
+                    chunk_id=chunk.id,
+                    schema_id=schema.id,
+                    schema_revision=schema.revision,
+                    provider_profile_id=self.id,
+                    **content.model_dump(),
+                )
+            except ValidationError as error:
+                raise invalid() from error
+            validate_extraction(chunk, schema, batch)
         return content.model_dump(mode="json")

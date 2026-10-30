@@ -14,6 +14,7 @@ from domain_kg.identity.models import AccessContext, Principal
 from domain_kg.imports.provenance import check_import_origin
 from domain_kg.ingestion.models import ParsedDocument
 from domain_kg.ingestion.resolved import ResolvedDocument
+from domain_kg.ingestion.warnings import merge_warnings
 from domain_kg.jobs.models import Checkpoint, LeasedJob, PublicationLease
 from domain_kg.jobs.queue import JobQueue, now
 from domain_kg.materials.models import BlobRef, MaterialMetadata, RestoreReadPermit
@@ -383,13 +384,9 @@ class ProjectionCoordinator:
                 ProjectionRow(**body.model_dump(), vector=tuple(vector))
                 for body, vector in zip(bodies, vectors, strict=True)
             ),
-            warnings=tuple(
-                sorted(
-                    set(
-                        parsed.warnings
-                        + tuple(warning for batch in resolved.batches for warning in batch.warnings)
-                    )
-                )
+            warnings=merge_warnings(
+                parsed.warnings
+                + tuple(warning for batch in resolved.batches for warning in batch.warnings)
             ),
         )
         return await self.queue.store_artifact(

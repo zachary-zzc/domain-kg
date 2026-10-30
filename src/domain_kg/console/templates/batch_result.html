@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block page_actions %}<a class="button quiet" href="/admin/kgs/{{ kg.id }}/materials">{{ _('Sources') }}</a><a class="button" href="/admin/kgs/{{ kg.id }}/jobs">{{ _('Processing jobs') }}</a>{% endblock %}
+{% block content %}
+<p>{{ _('Each item has its own result. Submitted means queued for background work; publication is shown on its job page.') }}</p>
+<div class="batch-metrics">{% for name in ['submitted','completed','skipped','failed','pending'] %}<div class="card batch-metric"><span>{{ _(name|capitalize) }}</span><strong>{{ counts[name] }}</strong></div>{% endfor %}</div>
+{% if counts.pending and not batch.running %}<form method="post" action="/admin/kgs/{{ kg.id }}/batch" data-busy-form><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="operation" value="{{ batch.operation }}"><input type="hidden" name="idempotency_key" value="{{ batch.command.idempotency_key }}"><input type="hidden" name="items" value='{{ batch.command.model_dump(mode="json")["items"]|tojson }}'><button type="submit">{{ _('Continue submitting unfinished items') }}</button></form>{% endif %}
+<p><a href="/admin/kgs/{{ kg.id }}/batch/{{ batch.batch_id }}">{{ _('Refresh results') }}</a> · {{ _('Batch reference') }} <code>{{ batch.batch_id }}</code></p>
+<div class="table-wrap"><table><thead><tr><th>{{ _('Selected item') }}</th><th>{{ _('Result / next step') }}</th></tr></thead><tbody>{% for item in batch.items %}<tr data-outcome="{{ item.outcome }}"><td><strong>{{ item.title }}</strong><small class="job-meta"><code>{{ item.id }}</code></small></td><td><strong>{{ _(item.outcome|capitalize) }}</strong>{% if item.message %}<p>{{ _(item.message) }}</p>{% endif %}{% if item.code %}<small>{{ item.code }}</small>{% endif %}{% if item.job_id %}<p><a href="/admin/kgs/{{ kg.id }}/jobs/{{ item.job_id }}">{{ _('View job') }} →</a></p>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

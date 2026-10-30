@@ -20,9 +20,9 @@ def export_command(kg: UUID, fields: dict[str, str]) -> ExportCommand:
         raise invalid_form()
     try:
         statuses = (
-            ("verified", "manual", "imported_unverified")
+            ("verified", "model_interpreted", "manual", "imported_unverified")
             if fields.get("include_unverified")
-            else ("verified", "manual")
+            else ("verified", "model_interpreted", "manual")
         )
         filters = SearchFilters.model_validate(
             {

@@ -83,6 +83,11 @@ async def test_admin_admission_group_and_owner_grants_apply_through_shared_polic
                     },
                 )
                 assert joined.status_code == 303
+                groups = await browser.get("/admin/team?kind=groups")
+                assert groups.status_code == 200
+                assert 'class="member-chips"' in groups.text
+                assert "console-new-human" in groups.text and "Console reviewers" in groups.text
+                assert f'<option value="{member["id"]}">' in groups.text
                 grants = await browser.get(f"/admin/kgs/{kg}/grants")
                 assert grants.status_code == 200
                 revision = (await browser.get(f"/api/v1/kgs/{kg}/members")).json()[

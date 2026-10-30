@@ -61,7 +61,9 @@ class SourceRepository:
     ) -> None:
         document = ParsedDocument.model_validate(document)
         original, _ = await self.original(job)
-        if document.blob != original or checkpoint.stage != ("chunking" if chunked else "parsing"):
+        if document.blob != original or checkpoint.stage not in (
+            ("chunking",) if chunked else ("parsing", "chunking")
+        ):
             raise inaccessible_reference()
         access = await self.queue.authorize(job)
         stores = await self.queue.router.for_kg(access, job.kg_id)

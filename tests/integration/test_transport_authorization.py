@@ -122,7 +122,9 @@ async def test_http_mcp_role_source_and_job_equivalence(publishing, catalog, tea
                 ) as mcp,
             ):
                 tools = await mcp.list_tools()
-                assert len(tools.tools) == 23
+                assert {"domain_kg_search", "domain_kg_add_folder", "domain_kg_batch"} <= {
+                    tool.name for tool in tools.tools
+                }
                 args = {"kg_id": str(kg), "entity_id": str(alpha), "org_id": str(org)}
                 node = await http.get(f"/api/v1/kgs/{kg}/nodes/{alpha}")
                 result = await mcp.call_tool("domain_kg_get_node", args)

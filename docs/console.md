@@ -1,5 +1,67 @@
 # Administration console
 
+Supported ingestion covers native/scanned PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX, RTF,
+ODT/ODS/ODP, HTML, TXT/Markdown, CSV/TSV/JSON, and PNG/JPEG/WebP/GIF/TIFF/BMP.
+Text readers accept UTF-8/BOM and BOM-marked UTF-16/32; GB18030 fallback is strict
+and visibly flagged. Originals retain their original bytes. Scan pages and image-dominant mixed pages use local English/simplified
+Chinese OCR automatically. The console identifies recognized text with a warning
+to check the original page; missing OCR dependencies and recognition failures have
+actionable diagnostics. Encrypted or damaged originals remain explicit
+failures. A readable original can still fail later during model extraction or
+publication, so parser success does not imply a ready graph.
+
+Model output truncation now retains its specific safe diagnostic and identifies
+the Advanced settings output allowance. Model windows reserve the evidence
+correction prompt, and output recovery balances source tokens, including unusually
+long PDF lines or DOCX paragraphs. After one evidence correction, each entity and
+relation is validated independently. Valid facts can publish with
+`ready_with_warnings`; rejected entities and whole relations (including invalid
+qualifiers or endpoints) are omitted, without adding or repairing evidence. The
+console shows the discarded counts summed across chunks and retains the complete
+original. Malformed, refused or truncated responses remain explicit failures.
+Historical jobs that stored only a generic code retain that history
+until an explicit retry produces a new result.
+
+The format gate in `tests/integration/test_document_formats_pipeline.py` uploads
+the text/PDF/Office families through the compact extraction protocol with synthetic provider
+responses, then verifies graph/vector/lexical receipts and the shared accepted KG
+view in real stores. It proves the file-to-publication path, not a live provider's
+quality on arbitrary private documents.
+
+Source and job lists support bounded batch management. Editors select sources to
+delete or process, restore retained removed sources, and retry or cancel selected
+jobs. Selection survives job-list refreshes; select-all applies to the current
+page, and retryable-only selection excludes active and completed jobs. Each batch
+accepts 1–100 distinct targets. Processing and deletion review the selected names
+and explain model costs or recoverable withdrawal before submission.
+
+`POST /admin/kgs/{kg_id}/batch` uses the existing same-origin session/CSRF checks
+and redirects to `GET /admin/kgs/{kg_id}/batch/{batch_id}`. The result page separates
+submitted background jobs, completed actions, skipped items and failures. MongoDB
+retains the immutable command and per-item receipts; resubmitting the same command
+does not repeat completed work. Changed input with the same key conflicts. A
+submission lease fences concurrent requests; interrupted batches can continue
+their unfinished items. Results are visible only to their initiating actor and
+are checked again against current source permissions, including their labels.
+
+Pending-source processing resumes the source's existing recoverable job. Accepted
+source reprocessing copies the authorized preserved original through the normal
+owned upload/replacement flow, retaining metadata and the previous accepted
+version until verification/publication. Revision guards reject metadata changes
+during copying. An existing active replacement is skipped rather than knowingly
+queued again. Deletion uses the existing immediate visibility fence and retention
+workflow; it does not permanently purge files or remove another source's supports.
+
+All accepted materials in one KG contribute to the same published graph view.
+Grounded shared identifiers produce shared canonical entity IDs; each material
+keeps its own observations and assertion supports. Equal names alone do not prove
+identity, so the graph can contain disconnected components until explicit curation
+merges the corresponding mentions. Batch management does not change this policy.
+The current compact `source_refs_v1` and `source_names_v1` extraction contracts
+return names, types and evidence references without explicit entity identifiers.
+Those profiles therefore require explicit curation to consolidate cross-document
+mentions; sharing one KG does not guarantee a single connected component.
+
 The session-bound shell at `/admin` uses the configured external OIDC login.
 It lists authorized KGs, accepted/retained materials, scoped search results and
 source/manual citations, team/role management, curation/history and owner/operator operations. No local
@@ -155,3 +217,30 @@ The synthetic laptop preview now uses one `--operations-only` worker for both
 backup and export. Both controls progress to their result pages without a model
 call; ingestion work is left for a separate worker. The preview remains a bounded
 synthetic fixture and expires after ten minutes.
+
+
+Advanced settings include **Image understanding** and an image token reserve.
+Enable capability only when the chosen chat model accepts images. Known OpenAI
+and Claude presets declare image input; arbitrary/local model names do not imply
+capability, and existing profiles keep it disabled. Enabling it approves sending
+isolated previews to the selected chat endpoint. Each image has a source/version/
+profile-bound checkpoint; retries reuse completed descriptions. Billing, revoked
+access, profile changes and invalid/truncated outputs cannot publish partial work.
+
+Materials show an **Image sources** gallery with parent part/page/slide locations
+and original downloads. Citations show the referenced preview and original link.
+Image descriptions are labeled **Model interpretation** in context, search,
+citations and the graph legend. These are model observations, not source-verified
+truth. Native text and local OCR remain distinguishable from visual interpretation.
+
+Office macros and external links are never executed or fetched. Formula text and
+stored cached values are source data. Encrypted/damaged/over-budget files fail with
+a safe diagnostic. Vector-only embedded graphics, multimedia and complex layout
+are not promised as complete visual transcriptions; unsupported embedded images
+are explicitly flagged and the complete original is retained. Current previews
+are bounded to 1024 pixels; multi-frame raster sources retain all original bytes
+but image understanding uses the first frame.
+
+Legacy XLS reads stored cell values. To recognize its embedded pictures as separate
+image sources, export it to XLSX before importing; the complete XLS original is
+still retained.

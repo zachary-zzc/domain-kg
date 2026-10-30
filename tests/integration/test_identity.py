@@ -374,7 +374,10 @@ async def test_http_code_login_pkce_nonce_replay_csrf_and_live_suspension(
                 )
                 assert opaque.status_code == 403
                 # Administrative data and mutations use the same current identity.
-                headers = {"Authorization": f"Bearer {sign()}"}
+                headers = {
+                    "Authorization": "Bearer "
+                    + sign({"scope": "domain_kg:read domain_kg:write domain_kg:admin"})
+                }
                 created = await browser.post(
                     "/api/v1/members",
                     headers=headers,
@@ -570,3 +573,16 @@ async def test_material_http_stream_is_private_and_uses_shared_service(
                 assert original.headers["content-type"] == "application/octet-stream"
                 assert original.headers["x-content-type-options"] == "nosniff"
                 assert original.headers["cache-control"] == "no-store"
+
+
+async def test_oidc_allows_small_clock_skew_but_rejects_stale_and_future_tokens(issuer_fixture):
+    from domain_kg.identity.oidc import OIDCVerifier
+
+    _, _, transport, sign = issuer_fixture
+    now = int(time.time())
+    async with httpx.AsyncClient(transport=transport) as client:
+        verifier = OIDCVerifier("https://issuer.example", "http://localhost:8000/mcp", client)
+        assert (await verifier.authenticate_bearer(sign({"iat": now + 3}))).subject == "reader"
+        for claims in ({"iat": now + 30}, {"nbf": now + 30}, {"exp": now - 30}):
+            with pytest.raises(DomainError):
+                await verifier.authenticate_bearer(sign(claims))

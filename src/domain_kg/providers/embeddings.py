@@ -1,7 +1,6 @@
 """Explicit approved embedding profiles, bounded HTTP, and strict positional vectors."""
 
 import asyncio
-import json
 import math
 from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
@@ -14,6 +13,7 @@ from pydantic import Field
 from domain_kg.models import SHA256, Namespace, NonNegative
 from domain_kg.providers.call_budget import CallBudget
 from domain_kg.providers.extraction import Usage, unavailable
+from domain_kg.providers.http import WireModel, provider_headers, provider_json
 from domain_kg.providers.profiles import ProviderConnection, ProviderProfile, embedding_space_id
 from domain_kg.providers.usage_budget import BudgetBounds
 
@@ -26,6 +26,21 @@ class EmbeddingProfile(Namespace):
     space_id: SHA256 | None = (
         None  # Legacy artifacts remain readable, but cannot serve vector queries.
     )
+
+
+class EmbeddingItem(WireModel):
+    index: Annotated[int, Field(ge=0, strict=True)]
+    embedding: list[float]
+
+
+class EmbeddingUsage(WireModel):
+    prompt_tokens: Annotated[int, Field(ge=0, le=128000, strict=True)]
+
+
+class EmbeddingResponse(WireModel):
+    model: str
+    data: Annotated[list[EmbeddingItem], Field(max_length=16)]
+    usage: EmbeddingUsage
 
 
 def normalized_vector(values: list[float], dimensions: int) -> tuple[float, ...]:
@@ -134,7 +149,13 @@ class EmbeddingClient:
         )
         context = self.budget.call(bounds) if self.budget is not None else nullcontext(None)
         async with context as charge:
-            request = {"input": batch, "model": profile.model, "encoding_format": "float"}
+            request: dict[str, object] = {
+                "input": batch,
+                "model": profile.model,
+                "encoding_format": "float",
+            }
+            if self.approved.embedding_send_dimensions:
+                request["dimensions"] = profile.dimensions
             try:
                 async with asyncio.timeout(self.approved.timeout_seconds):
                     if charge is not None:
@@ -143,29 +164,19 @@ class EmbeddingClient:
                         "POST",
                         self.connection.endpoint + "/embeddings",
                         json=request,
-                        headers={
-                            "Authorization": "Bearer " + self.connection.api_key.get_secret_value()
-                        },
+                        headers=provider_headers(self.connection),
                     ) as response:
-                        if response.status_code != 200:
-                            raise unavailable()
-                        body = bytearray()
-                        async for part in response.aiter_bytes():
-                            body.extend(part)
-                            if len(body) > 8 * 1024**2:
-                                raise unavailable()
-                raw = json.loads(body)
-                if raw["model"] != profile.model or len(raw["data"]) != len(batch):
+                        body = await provider_json(response, limit=8 * 1024**2)
+                raw = EmbeddingResponse.model_validate(body)
+                if raw.model != profile.model or len(raw.data) != len(batch):
                     raise unavailable()
                 positions: dict[int, tuple[float, ...]] = {}
-                for item in raw["data"]:
-                    index = item["index"]
+                for item in raw.data:
+                    index = item.index
                     if type(index) is not int or not 0 <= index < len(batch) or index in positions:
                         raise unavailable()
-                    positions[index] = normalized_vector(item["embedding"], profile.dimensions)
-                tokens = raw["usage"]["prompt_tokens"]
-                if type(tokens) is not int or not 0 <= tokens <= 128000:
-                    raise unavailable()
+                    positions[index] = normalized_vector(item.embedding, profile.dimensions)
+                tokens = raw.usage.prompt_tokens
                 used = Usage(
                     org_id=profile.org_id,
                     kg_id=profile.kg_id,

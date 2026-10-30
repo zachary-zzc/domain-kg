@@ -1,9 +1,10 @@
 """Typed catalog HTTP wrappers; policy and lifecycle stay in shared services."""
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request
+from pydantic import Field, model_validator
 
 from domain_kg.catalog.models import (
     BackendCapabilities,
@@ -26,14 +27,26 @@ class ProfileRegistration(StorageProfile):
     idempotency_key: IdempotencyKey
 
 
-class KGStateChange(FrozenModel):
-    state: Literal["ready", "read_only", "archived"]
+class KGRevisionCommand(FrozenModel):
     expected_revision: NonNegative
     idempotency_key: IdempotencyKey
 
 
+class KGStateChange(KGRevisionCommand):
+    state: Literal["ready", "read_only", "archived"] | None = None
+    name: Annotated[str, Field(min_length=1, max_length=200, pattern=r"\S")] | None = None
+
+    @model_validator(mode="after")
+    def change_required(self) -> Self:
+        if self.state is None and self.name is None:
+            raise ValueError("provide a name or lifecycle state")
+        return self
+
+
 class CatalogQuery(HTTPPageRequest):
-    lifecycle: Literal["provisioning", "ready", "read_only", "archived", "error"] | None = None
+    lifecycle: (
+        Literal["provisioning", "ready", "read_only", "archived", "error", "deleted"] | None
+    ) = None
 
 
 def catalog_router(identity: IdentityRuntime, service: CatalogService) -> APIRouter:
@@ -71,6 +84,25 @@ def catalog_router(identity: IdentityRuntime, service: CatalogService) -> APIRou
             context,
             kg_id,
             command.state,
+            expected_revision=command.expected_revision,
+            idempotency_key=command.idempotency_key,
+            name=command.name,
+        )
+
+    @router.delete("/kgs/{kg_id}")
+    async def delete_kg(request: Request, kg_id: UUID, command: KGRevisionCommand) -> KGReceipt:
+        return await service.delete_kg(
+            await access(request, Action.CONFIGURE, kg_id, mutate=True),
+            kg_id,
+            expected_revision=command.expected_revision,
+            idempotency_key=command.idempotency_key,
+        )
+
+    @router.post("/kgs/{kg_id}/restore")
+    async def restore_kg(request: Request, kg_id: UUID, command: KGRevisionCommand) -> KGReceipt:
+        return await service.restore_kg(
+            await access(request, Action.CONFIGURE, kg_id, mutate=True),
+            kg_id,
             expected_revision=command.expected_revision,
             idempotency_key=command.idempotency_key,
         )

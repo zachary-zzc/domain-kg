@@ -123,10 +123,12 @@ class CatalogRepository:
         self,
         access: AccessContext,
         kg_id: UUID,
-        state: str,
+        state: str | None,
         *,
         expected_revision: int,
         idempotency_key: str,
+        name: str | None = None,
+        restore_deleted: bool = False,
     ) -> dict[str, Any]:
         async def transact(session: AsyncClientSession) -> dict[str, Any]:
             current = await self.policy.resolve_access(
@@ -134,6 +136,10 @@ class CatalogRepository:
             )
             key = self.command_key(current, idempotency_key)
             values = {"kg_id": str(kg_id), "state": state, "expected_revision": expected_revision}
+            if name is not None:
+                values["name"] = name
+            if restore_deleted:
+                values["restore_deleted"] = True
             previous = await self.database.catalog_commands.find_one(key, session=session)
             if previous:
                 if previous["input"] != values:
@@ -146,21 +152,60 @@ class CatalogRepository:
             kg = await self.database.kgs.find_one(query, session=session)
             if kg is None:
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "The KG revision changed.")
+            if kg["state"] in ("purging", "purged") or (
+                kg["state"] == "deleted" and state != "deleted" and not restore_deleted
+            ):
+                raise DomainError(ErrorCode.FORBIDDEN, "Use explicit restoration for a deleted KG.")
+            if restore_deleted and kg["state"] != "deleted":
+                raise DomainError(ErrorCode.VERSION_CONFLICT, "The KG is not deleted.")
+            changes = {"state": state or kg["state"]}
+            if restore_deleted:
+                previous_state = kg.get("deleted_from_state")
+                if previous_state not in (
+                    "ready",
+                    "read_only",
+                    "archived",
+                    "error",
+                    "provisioning",
+                ):
+                    raise DomainError(
+                        ErrorCode.PROJECTION_INCONSISTENT,
+                        "The retained KG lifecycle is inconsistent.",
+                    )
+                changes["state"] = previous_state
+            elif state == "deleted" and kg["state"] != "deleted":
+                changes["deleted_from_state"] = kg["state"]
+            if name is not None:
+                changes["name"] = name
             await self.database.kgs.update_one(
                 query,
-                {"$set": {"state": state}, "$inc": {"revision": 1, "visibility_revision": 1}},
+                {"$set": changes, "$inc": {"revision": 1, "visibility_revision": 1}},
                 session=session,
             )
             await self.database.organizations.update_one(
                 {"_id": str(current.org_id)}, {"$inc": {"policy_revision": 1}}, session=session
             )
             result = kg | {
-                "state": state,
+                **changes,
                 "revision": expected_revision + 1,
                 "visibility_revision": kg["visibility_revision"] + 1,
             }
             await self.database.catalog_commands.insert_one(
                 key | {"input": values, "result": result}, session=session
+            )
+            await assert_active_owners(self.database, str(current.org_id), session)
+            await self.database.policy_audit.insert_one(
+                {
+                    "org_id": str(current.org_id),
+                    "kg_id": str(kg_id),
+                    "operation": "restore_kg" if restore_deleted else "update_kg",
+                    "issuer": current.principal.issuer,
+                    "subject": current.principal.subject,
+                    "before_state": kg["state"],
+                    "after_state": changes["state"],
+                    "revision": result["revision"],
+                },
+                session=session,
             )
             return result
 

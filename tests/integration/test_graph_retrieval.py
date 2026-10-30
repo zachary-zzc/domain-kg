@@ -68,6 +68,9 @@ async def topology(material_service, team):
         material_service,
         team,
         extraction_factory=topology_batch,
+        # Keep this graph fixture in one source window; model-window splitting
+        # has dedicated tests and creates independent overlap supports.
+        profile_overrides={"extraction_context_tokens": 32768},
         restricted=True,
     )
     _, access, queue, coordinator, _, _ = publishing
@@ -213,3 +216,45 @@ async def test_graph_branch_uses_visible_seed_and_source_paths(topology):
     hidden = request.model_copy(update={"query": "HIDDEN_ALIAS", "filters": SearchFilters()})
     scope = await branch.resolver.resolve(reader, hidden, reader.kg_ids[0])
     assert await branch.retrieve(scope, hidden) == []
+
+
+async def test_question_phrase_seeds_and_relevant_source_rank_precede_ids(topology):
+    from domain_kg.retrieval.graph import GraphRetrievalBranch
+
+    publishing, reader, _, sources = topology
+    branch = GraphRetrievalBranch(publishing[2])
+    request = SearchRequest(kg_ids=reader.kg_ids, query="What does Gamma use?", mode="graph")
+    scope = await branch.resolver.resolve(reader, request, reader.kg_ids[0])
+    candidates = await branch.retrieve(scope, request)
+    assert candidates[0].material_id == sources["cycle"].material_id
+    assert [item.method_ranks["graph"] for item in candidates] == list(
+        range(1, len(candidates) + 1)
+    )
+    assert all(
+        step.predicate == "uses" and step.polarity == "positive"
+        for item in candidates
+        for path in item.graph_paths
+        for step in path
+    )
+    assert sources["hidden"].material_id not in {item.material_id for item in candidates}
+
+
+async def test_recall_reserves_nodes_for_expansion_under_many_vector_seeds(topology):
+    from domain_kg.retrieval.graph import GraphRetrievalBranch
+
+    publishing, reader, ids, _ = topology
+    branch = GraphRetrievalBranch(publishing[2])
+    request = SearchRequest(
+        kg_ids=reader.kg_ids, query="Alpha", mode="graph", max_nodes=3, max_hops=2
+    )
+    scope = await branch.resolver.resolve(reader, request, reader.kg_ids[0])
+    seeds = (ids["Alpha"], ids["Far"], ids["Beyond"])
+    recalled = await branch.recall(scope, request, seed_ids=seeds)
+    assert recalled.graph and len(recalled.graph.nodes) <= 3
+    assert any(
+        ids["Alpha"] in (edge.subject_id, edge.target_id)
+        and bool({edge.subject_id, edge.target_id} - set(seeds))
+        for edge in recalled.graph.edges
+    )
+    assert ids["Secret"] not in {node.id for node in recalled.graph.nodes}
+    assert recalled.truncated

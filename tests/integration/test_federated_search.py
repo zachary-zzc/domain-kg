@@ -14,6 +14,34 @@ from domain_kg.retrieval.service import RetrievalService
 pytestmark = pytest.mark.storage
 
 
+async def test_forged_path_predicate_is_rejected_before_return(retrieval_corpus, monkeypatch):
+    from domain_kg.retrieval.graph import GraphRecall
+
+    publishing, reader, _ = retrieval_corpus
+    service = RetrievalService(publishing[2], publishing[3].providers)
+    original = service.deep.retrieve
+
+    async def forged(*args, **kwargs):
+        recall = await original(*args, **kwargs)
+        items = list(recall.candidates)
+        for i, item in enumerate(items):
+            if item.graph_paths:
+                path = item.graph_paths[0]
+                changed = path[0].model_copy(update={"predicate": "fabricated_relation"})
+                items[i] = item.model_copy(
+                    update={"graph_paths": ((changed, *path[1:]), *item.graph_paths[1:])}
+                )
+                return GraphRecall(items, recall.graph, recall.truncated)
+        pytest.fail("fixture must provide a supported graph path")
+
+    monkeypatch.setattr(service.deep, "retrieve", forged)
+    with pytest.raises(DomainError) as error:
+        await service.search(
+            reader, SearchRequest(kg_ids=reader.kg_ids, query="Alpha", mode="deep")
+        )
+    assert error.value.code == ErrorCode.PROJECTION_INCONSISTENT
+
+
 async def test_fast_fusion_empty_scope_and_partial_branch_rules(retrieval_corpus, monkeypatch):
     publishing, reader, receipts = retrieval_corpus
     service = RetrievalService(publishing[2], publishing[3].providers)

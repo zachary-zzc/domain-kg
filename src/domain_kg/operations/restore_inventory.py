@@ -128,6 +128,13 @@ class RestoreInventory:
                 part.original for part in originals.values() if part.original is not None
             ),
             imports=tuple(imports),
+            image_assets=tuple(
+                part.artifact_blob
+                for part in self.parts
+                if part.kind == "source_artifact"
+                and part.artifact_blob is not None
+                and part.artifact_blob.media_type.startswith("image/")
+            ),
         )
 
     async def artifacts(self) -> tuple[tuple[JobArtifact, Checkpoint, PackagePart], ...]:
@@ -155,6 +162,16 @@ class RestoreInventory:
             checkpoint, part = checkpoints.get(str(artifact.id)), parts.get(artifact.blob)
             if checkpoint is None or part is None:
                 raise inconsistent()
+            if artifact.stage == "chunking":
+                from domain_kg.providers.vision import ImageDescription
+
+                body = await self.reader.body(part.object, maximum=50 * 1024 * 1024)
+                try:
+                    ImageDescription.model_validate_json(body)
+                except ValidationError:
+                    pass
+                else:
+                    continue  # Per-image model caches do not establish a complete document.
             if artifact.stage == "extracting":
                 inspected_bytes += part.object.size_bytes
                 if inspected_bytes > MAX_METADATA:

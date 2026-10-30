@@ -16,7 +16,35 @@ def check(image: str) -> dict:
     if metadata["Config"]["User"] != "10001:10001":
         raise ValueError("application image must run as the dedicated non-root user")
     fixture = base64.b64encode((ROOT / "tests/fixtures/materials/native.pdf").read_bytes()).decode()
-    probe = (ROOT / "scripts/image_probe.py").read_bytes()
+    scan = base64.b64encode(
+        (ROOT / "tests/fixtures/materials/scanned-bilingual.pdf").read_bytes()
+    ).decode()
+    from domain_kg.ingestion.file_types import DOCX, ODP, ODS, ODT, PPTX, XLSX
+
+    cases = [
+        (
+            name,
+            mime,
+            base64.b64encode((ROOT / "tests/fixtures/materials" / name).read_bytes()).decode(),
+        )
+        for name, mime in [
+            ("headings-table.docx", DOCX),
+            ("headings-table.doc", "application/msword"),
+            ("headings-table.rtf", "application/rtf"),
+            ("headings-table.odt", ODT),
+            ("workbook.xlsx", XLSX),
+            ("workbook.xls", "application/vnd.ms-excel"),
+            ("workbook.ods", ODS),
+            ("slides.pptx", PPTX),
+            ("slides.ppt", "application/vnd.ms-powerpoint"),
+            ("slides.odp", ODP),
+            ("scanned-bilingual.png", "image/png"),
+        ]
+    ]
+    template = (ROOT / "scripts/image_probe.py").read_text()
+    if template.count("FIXTURE_PAYLOADS = []") != 1:
+        raise ValueError("image probe fixture placeholder differs")
+    probe = template.replace("FIXTURE_PAYLOADS = []", "FIXTURE_PAYLOADS = " + repr(cases)).encode()
     result = subprocess.run(
         [
             "docker",
@@ -41,17 +69,18 @@ def check(image: str) -> dict:
             "--cpus",
             "1",
             "--tmpfs",
-            "/tmp:rw,noexec,nosuid,size=128m",
+            "/run/domain-kg:rw,noexec,nosuid,size=128m,uid=10001,gid=10001,mode=0700",
             "--entrypoint",
             "python",
             image,
             "-",
             fixture,
             json.dumps(metadata["Config"]["Cmd"]),
+            scan,
         ],
         input=probe,
         capture_output=True,
-        timeout=120,
+        timeout=240,
         check=True,
     )
     report = json.loads(result.stdout.splitlines()[-1])

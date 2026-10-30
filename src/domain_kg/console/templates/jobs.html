@@ -1,4 +1,7 @@
 {% extends "base.html" %}
-{% block content %}<nav class="tabs"><a href="/admin/kgs/{{ kg.id }}/materials">{{ _("Materials") }}</a><a href="/admin/kgs/{{ kg.id }}/search">{{ _("Search") }}</a></nav><p class="muted">{{ _("Jobs preserve accepted work across retries. Only jobs permitted by your current source access appear.") }}</p>
-<table><thead><tr><th>{{ _("Job") }}</th><th>{{ _("Stage") }}</th><th>{{ _("Progress") }}</th></tr></thead><tbody>{% for item in jobs.items %}<tr><td><a href="/admin/kgs/{{ kg.id }}/jobs/{{ item.job_id }}">{{ item.job_id }}</a></td><td>{{ label(item.stage)|title }}</td><td><progress value="{{ item.progress }}" max="1" aria-label="{{ _("Job progress") }}"></progress></td></tr>{% else %}<tr><td colspan="3">{{ _("No visible jobs.") }}</td></tr>{% endfor %}</tbody></table>
-{% if jobs.next_cursor %}<a href="?cursor={{ jobs.next_cursor|urlencode }}&amp;limit={{ limit }}">{{ _("Next page") }}</a>{% endif %}{% endblock %}
+{% block page_actions %}{% if can_edit %}<a class="button" href="/admin/kgs/{{ kg.id }}/folder">{{ _('Import folder') }}</a>{% endif %}{% endblock %}
+{% block content %}<p class="muted">{{ _("Jobs preserve accepted work across retries. Only jobs permitted by your current source access appear.") }} {{ _('Newest jobs appear first. Open a source to inspect errors or retry.') }}</p>
+{% include 'bulk_controls.html' %}
+<section id="job-list" {% if not cursor %}hx-get="/admin/kgs/{{ kg.id }}/jobs?limit={{ limit }}" hx-trigger="every 5s" hx-select="#job-list" hx-target="this" hx-swap="outerHTML"{% endif %}>
+{% include 'job_table.html' %}
+{% if jobs.next_cursor %}<a href="?cursor={{ jobs.next_cursor|urlencode }}&amp;limit={{ limit }}">{{ _("Next page") }}</a>{% endif %}</section>{% endblock %}

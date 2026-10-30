@@ -10,6 +10,112 @@ from domain_kg.identity.models import Action
 pytestmark = pytest.mark.storage
 
 
+async def test_deleted_kg_restores_its_previous_read_only_state(material_service, catalog, team):
+    _, kg = material_service
+    service, policy, principal = catalog[0], team[1], team[2]["owner"]
+
+    async def owner():
+        return await policy.resolve_access(principal, [kg], Action.CONFIGURE)
+
+    revision = (await service.get_kg(await owner(), kg))["revision"]
+    frozen = await service.change_state(
+        await owner(), kg, "read_only", expected_revision=revision, idempotency_key="freeze-delete"
+    )
+    deleted = await service.delete_kg(
+        await owner(), kg, expected_revision=frozen.revision, idempotency_key="delete-frozen"
+    )
+    restored = await service.restore_kg(
+        await owner(), kg, expected_revision=deleted.revision, idempotency_key="restore-frozen"
+    )
+    assert restored.state == "read_only"
+    with pytest.raises(DomainError):
+        await policy.resolve_access(principal, [kg], Action.INGEST)
+
+
+async def test_deleted_kg_fences_reads_preserves_sources_and_requires_explicit_owner_restore(
+    material_service, catalog, team
+):
+    from domain_kg.catalog.routes import KGStateChange
+    from domain_kg.materials.models import AddMaterial
+    from domain_kg.models import PageRequest
+
+    materials, kg = material_service
+    service = catalog[0]
+    _, policy, principals, _, org, _ = team
+
+    async def owner():
+        return await policy.resolve_access(principals["owner"], [kg], Action.CONFIGURE)
+
+    added = await materials.add(
+        await policy.resolve_access(principals["editor"], [kg], Action.INGEST),
+        AddMaterial(kg_id=kg, title="Retained source", inline_text="Alpha", idempotency_key="keep"),
+    )
+    before = await service.get_kg(await owner(), kg)
+    deleted = await service.delete_kg(
+        await owner(), kg, expected_revision=before["revision"], idempotency_key="delete-kg"
+    )
+    assert deleted.state == "deleted"
+    replay = await service.delete_kg(
+        await owner(), kg, expected_revision=before["revision"], idempotency_key="delete-kg"
+    )
+    assert replay == deleted
+    for name in ("owner", "editor", "reader"):
+        with pytest.raises(DomainError):
+            await policy.resolve_access(principals[name], [kg], Action.READ)
+    listing = await service.list_kgs(
+        await policy.resolve_access(principals["owner"], [], Action.LIST_KGS), PageRequest()
+    )
+    assert str(kg) not in str(listing)
+    trash = await service.list_kgs(
+        await policy.resolve_access(principals["owner"], [], Action.LIST_KGS),
+        PageRequest(),
+        lifecycle="deleted",
+    )
+    assert str(kg) in str(trash)
+    with pytest.raises(DomainError):
+        await service.change_state(
+            await owner(),
+            kg,
+            "ready",
+            expected_revision=deleted.revision,
+            idempotency_key="bypass-restore",
+        )
+    with pytest.raises(DomainError):
+        await service.restore_kg(
+            await policy.resolve_access(principals["editor"], [kg], Action.REPLACE),
+            kg,
+            expected_revision=deleted.revision,
+            idempotency_key="editor-restore",
+        )
+    restored = await service.restore_kg(
+        await owner(), kg, expected_revision=deleted.revision, idempotency_key="restore-kg"
+    )
+    assert restored.state == "ready"
+    assert (
+        await materials.database.materials.count_documents(
+            {"org_id": str(org), "kg_id": str(kg), "id": str(added.material_id)}
+        )
+        == 1
+    )
+    renamed = KGStateChange(
+        name="Renamed KG", expected_revision=restored.revision, idempotency_key="rename"
+    )
+    await service.change_state(
+        await owner(),
+        kg,
+        renamed.state,
+        name=renamed.name,
+        expected_revision=renamed.expected_revision,
+        idempotency_key=renamed.idempotency_key,
+    )
+    assert (await service.get_kg(await owner(), kg))["name"] == "Renamed KG"
+    with pytest.raises(DomainError) as stale:
+        await service.delete_kg(
+            await owner(), kg, expected_revision=restored.revision, idempotency_key="stale-delete"
+        )
+    assert stale.value.code == "VERSION_CONFLICT"
+
+
 async def test_operator_invitation_does_not_grant_kg_access(team, mongo_db) -> None:
     from domain_kg.catalog.backends import invite_operator
 

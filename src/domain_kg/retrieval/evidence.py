@@ -10,7 +10,7 @@ from domain_kg.graph.identity_models import ManualIdentity
 from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.repository import GraphData, scoped_graph_data
 from domain_kg.graph.service import AcceptedMetadata
-from domain_kg.imports.evidence import source_origin
+from domain_kg.imports.evidence import source_origin, source_status
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.graph import source_citation
 from domain_kg.retrieval.identity import evidence_identity
@@ -109,6 +109,7 @@ class EvidenceData:
         return EvidenceCandidate(
             kind="source",
             import_origin=source_origin(self.graph.scope, row.source),
+            support_status=source_status(self.graph.scope, row.source, row.chunk.spans),
             kg_id=row.kg_id,
             text=row.chunk.text,
             material_id=row.source.material_id,

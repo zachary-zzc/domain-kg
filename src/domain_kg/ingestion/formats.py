@@ -4,19 +4,33 @@ import csv
 import hashlib
 import io
 import json
-import stat
 from html.parser import HTMLParser
-from importlib.metadata import version
-from pathlib import PurePosixPath
 from typing import Any
 from uuid import uuid5
-from zipfile import BadZipFile, ZipFile
 
 from defusedxml.ElementTree import fromstring
-from pypdf import PdfReader
 
 from domain_kg.errors import DomainError, ErrorCode
-from domain_kg.ingestion.models import ParsedBlock, ParsedDocument, ParseOptions, SourceLocation
+from domain_kg.ingestion.file_types import (
+    IMAGE_TYPES,
+    LEGACY,
+    ODP,
+    ODS,
+    OFFICE_VERSION,
+    PPTX,
+    XLS,
+    XLSX,
+)
+from domain_kg.ingestion.models import (
+    ImageOrigin,
+    ParsedBlock,
+    ParsedDocument,
+    ParseOptions,
+    SourceImage,
+    SourceLocation,
+)
+from domain_kg.ingestion.pdf import VERSION as PDF_VERSION
+from domain_kg.ingestion.pdf import parse_pdf
 from domain_kg.materials.models import BlobRef
 
 WORD = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -29,6 +43,7 @@ class Blocks:
         self.items: list[ParsedBlock] = []
         self.bytes = 0
         self.warnings: list[str] = []
+        self.images: list[SourceImage] = []
 
     def add(self, text: str, kind: str, **location: Any) -> None:
         if not text:
@@ -39,7 +54,7 @@ class Blocks:
                 ErrorCode.QUOTA_EXCEEDED, "Expanded document exceeds the parser limit."
             )
         identity = hashlib.sha256(
-            (text + json.dumps(location, sort_keys=True)).encode()
+            (text + json.dumps(location, sort_keys=True, default=str)).encode()
         ).hexdigest()
         identifier = uuid5(self.blob.version_id, f"{self.version}/{len(self.items)}/{identity}")
         self.items.append(
@@ -62,87 +77,24 @@ class Blocks:
             blocks=tuple(self.items),
             parser_version=self.version,
             warnings=tuple(dict.fromkeys(self.warnings)),
+            images=tuple(self.images),
         )
-
-
-def pdf(data: bytes, blocks: Blocks) -> None:
-    reader = PdfReader(io.BytesIO(data), strict=True)
-    if reader.is_encrypted:
-        raise DomainError(
-            ErrorCode.UNSUPPORTED_FORMAT, "Export an unencrypted PDF before uploading."
-        )
-    if len(reader.pages) > blocks.options.max_pages:
-        raise DomainError(ErrorCode.QUOTA_EXCEEDED, "PDF exceeds the 500-page parser limit.")
-    if blocks.options.ocr:
-        raise DomainError(
-            ErrorCode.PROVIDER_UNAVAILABLE, "OCR needs a configured approved parser profile."
-        )
-    from docling_parse.pdf_parser import ContentConfig, ContentLevel, DecodeConfig, DoclingPdfParser
-
-    parser = DoclingPdfParser(loglevel="fatal")
-    document = parser.load(
-        io.BytesIO(data),
-        decode_config=DecodeConfig(keep_glyphs=False),
-        content_config=ContentConfig(
-            char_cells_content_level=ContentLevel.SKIP,
-            word_cells_content_level=ContentLevel.COMPUTE,
-            line_cells_content_level=ContentLevel.COMPUTE_AND_MATERIALIZE,
-            shapes_content_level=ContentLevel.SKIP,
-            bitmaps_content_level=ContentLevel.SKIP,
-        ),
-    )
-    try:
-        for page_number, page in document.iterate_pages():
-            found = False
-            for cell in page.textline_cells:
-                if cell.text:
-                    blocks.add(cell.text, "pdf", page=page_number)
-                    found = True
-            if not found:
-                resources = reader.pages[page_number - 1].get("/Resources", {})
-                objects = resources.get("/XObject", {}) if resources else {}
-                image = any(
-                    value.get_object().get("/Subtype") == "/Image" for value in objects.values()
-                )
-                blocks.warnings.append("OCR_REQUIRED" if image else "NO_EXTRACTABLE_TEXT")
-            document.unload_pages((page_number, page_number + 1))
-    finally:
-        document.unload()
 
 
 def docx(data: bytes, blocks: Blocks) -> None:
-    try:
-        with ZipFile(io.BytesIO(data)) as archive:
-            members = archive.infolist()
-            if (
-                len(members) > 2048
-                or sum(item.file_size for item in members) > blocks.options.max_expanded_bytes
-            ):
-                raise DomainError(
-                    ErrorCode.QUOTA_EXCEEDED, "Expanded archive exceeds the parser limit."
-                )
-            names = [item.filename for item in members]
-            if len(names) != len(set(names)):
-                raise DomainError(ErrorCode.UNSUPPORTED_FORMAT, "Archive entries must be unique.")
-            for item in members:
-                path = PurePosixPath(item.filename)
-                if (
-                    path.is_absolute()
-                    or ".." in path.parts
-                    or "\\" in item.filename
-                    or ":" in item.filename
-                    or stat.S_ISLNK(item.external_attr >> 16)
-                ):
-                    raise DomainError(ErrorCode.UNSUPPORTED_FORMAT, "Unsafe archive entry.")
-            if "word/document.xml" not in names or "[Content_Types].xml" not in names:
-                raise DomainError(ErrorCode.UNSUPPORTED_FORMAT, "This is not a DOCX document.")
-            limit = min(16 * 1024 * 1024, blocks.options.max_expanded_bytes)
-            with archive.open("word/document.xml") as stream:
-                document = stream.read(limit + 1)
-            if len(document) > limit:
-                raise DomainError(ErrorCode.QUOTA_EXCEEDED, "DOCX text exceeds the parser limit.")
-    except BadZipFile as exc:
-        raise DomainError(ErrorCode.UNSUPPORTED_FORMAT, "Malformed DOCX archive.") from exc
+    from domain_kg.ingestion.archives import office_archive
+
+    with office_archive(data, blocks.options) as archive:
+        if (
+            "word/document.xml" not in archive.namelist()
+            or "[Content_Types].xml" not in archive.namelist()
+        ):
+            raise DomainError(ErrorCode.UNSUPPORTED_FORMAT, "This is not a DOCX document.")
+        limit = min(16 * 1024 * 1024, blocks.options.max_expanded_bytes)
+        with archive.open("word/document.xml") as stream:
+            document = stream.read(limit + 1)
+        if len(document) > limit:
+            raise DomainError(ErrorCode.QUOTA_EXCEEDED, "DOCX text exceeds the parser limit.")
     root = fromstring(document, forbid_dtd=True, forbid_entities=True, forbid_external=True)
     body = root.find(f"{WORD}body")
     if body is None:
@@ -216,17 +168,62 @@ class InertHTML(HTMLParser):
 
 def decode(data: bytes, blob: BlobRef, options: ParseOptions) -> ParsedDocument:
     parser_version = (
-        f"docling-parse/{version('docling-parse')}-native-v1"
+        PDF_VERSION
         if blob.media_type == "application/pdf"
+        else OFFICE_VERSION
+        if blob.media_type in (XLSX, PPTX, ODP, *LEGACY)
         else "deterministic-text-xml-v1"
     )
     blocks = Blocks(blob, options, parser_version)
-    if blob.media_type == "application/pdf":
-        pdf(data, blocks)
-    elif blob.media_type == DOCX:
+    decoded = ""
+    if blob.media_type in (
+        "text/plain",
+        "text/markdown",
+        "text/html",
+        "text/csv",
+        "text/tab-separated-values",
+        "application/json",
+    ):
+        from domain_kg.ingestion.text import decode_text
+
+        decoded, warning = decode_text(data)
+        if warning:
+            blocks.warnings.append(warning)
+    media_type = blob.media_type
+    if media_type in LEGACY and media_type not in (XLS, ODS):
+        from domain_kg.ingestion.conversion import normalize
+
+        source_ext, target_ext, media_type = LEGACY[media_type]
+        data = normalize(data, source_ext, target_ext, options)
+        blocks.warnings.append("OFFICE_CONVERTED")
+    if media_type == "application/pdf":
+        parse_pdf(data, blocks)
+    elif media_type == DOCX:
         docx(data, blocks)
+        from domain_kg.ingestion.images import office_images
+
+        office_images(data, blocks, "word/media/")
+    elif media_type in (XLSX, PPTX, XLS, ODS, ODP):
+        from domain_kg.ingestion import office
+
+        {XLSX: office.xlsx, PPTX: office.pptx, XLS: office.xls, ODS: office.ods, ODP: office.odp}[
+            media_type
+        ](data, blocks)
+        if media_type in (XLSX, ODS):
+            from domain_kg.ingestion.images import office_images
+
+            office_images(data, blocks, "xl/media/" if media_type == XLSX else "Pictures/")
+    elif media_type in IMAGE_TYPES:
+        from domain_kg.ingestion.images import capture, image_ocr
+
+        image = capture(blocks, data, ImageOrigin(part="original"))
+        if image.media_type != media_type:
+            raise DomainError(
+                ErrorCode.UNSUPPORTED_FORMAT, "Image bytes do not match the declared type."
+            )
+        image_ocr(blocks, image)
     elif blob.media_type in ("text/plain", "text/markdown"):
-        text = data.decode("utf-8")
+        text = decoded
         heading = None
         for index, line in enumerate(text.splitlines(keepends=True)):
             if blob.media_type == "text/markdown" and line.lstrip().startswith("#"):
@@ -234,12 +231,18 @@ def decode(data: bytes, blob: BlobRef, options: ParseOptions) -> ParsedDocument:
             blocks.add(line, "text", paragraph=index, heading=heading)
     elif blob.media_type == "text/html":
         html = InertHTML(blocks)
-        html.feed(data.decode("utf-8"))
+        html.feed(decoded)
         html.close()
         html.flush()
-    elif blob.media_type == "text/csv":
+    elif blob.media_type in ("text/csv", "text/tab-separated-values"):
         csv.field_size_limit(min(options.max_expanded_bytes, 1024 * 1024))
-        for number, row in enumerate(csv.reader(io.StringIO(data.decode("utf-8"), newline="")), 1):
+        for number, row in enumerate(
+            csv.reader(
+                io.StringIO(decoded, newline=""),
+                delimiter="\t" if blob.media_type == "text/tab-separated-values" else ",",
+            ),
+            1,
+        ):
             blocks.add(" | ".join(row), "csv", row=number)
     elif blob.media_type == "application/json":
 
@@ -275,7 +278,7 @@ def decode(data: bytes, blob: BlobRef, options: ParseOptions) -> ParsedDocument:
             raise ValueError("JSON constants must be finite")
 
         visit(
-            json.loads(data, parse_constant=invalid_constant, object_pairs_hook=unique_object),
+            json.loads(decoded, parse_constant=invalid_constant, object_pairs_hook=unique_object),
             "",
             0,
         )

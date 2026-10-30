@@ -128,26 +128,32 @@ class RestoreArtifactLedger:
             raise DomainError(ErrorCode.QUOTA_EXCEEDED, "Restore artifact inventory is too large.")
         if artifact.job_id in self._sources and self._sources[artifact.job_id] != owner:
             raise self.inconsistent()
+        from domain_kg.ingestion.file_types import IMAGE_TYPES
+
+        image_asset = artifact.blob.media_type in IMAGE_TYPES
         key = (artifact.job_id, artifact.stage)
-        if key in self._stages and self._stages[key] != artifact.id:
+        if not image_asset and key in self._stages and self._stages[key] != artifact.id:
             raise self.inconsistent()
         position = self.STAGES.index(checkpoint.stage)
         hashes: tuple[str, ...] = ()
-        if position:
+        if position and not image_asset:
             dependency = self._stages.get((artifact.job_id, self.STAGES[position - 1]))
             if dependency is None:
                 raise self.inconsistent()
             hashes = (self._checkpoints[dependency][1].output_hash,)
         canonical = ""
         rewritten: (
-            BlobRef
+            bytes
+            | BlobRef
             | ParsedDocument
             | ExtractionArtifact
             | ResolvedDocument
             | LegacyGraph
             | PreparedImport
         )
-        if checkpoint.stage == "validating":
+        if image_asset:
+            rewritten = body
+        elif checkpoint.stage == "validating":
             original = BlobRef.model_validate_json(body)
             if self.documents.owner(original) != owner:
                 raise self.inconsistent()
@@ -188,7 +194,7 @@ class RestoreArtifactLedger:
                 if isinstance(resolved, PreparedImport)
                 else self.documents.resolved(resolved)
             )
-        data = rewritten.model_dump_json().encode()
+        data = rewritten if isinstance(rewritten, bytes) else rewritten.model_dump_json().encode()
         if len(data) > 50 * 1024 * 1024:
             raise DomainError(
                 ErrorCode.QUOTA_EXCEEDED, "Restored artifact exceeds its byte budget."
@@ -220,7 +226,8 @@ class RestoreArtifactLedger:
         if existing is not None and existing != (checkpoint, new_checkpoint):
             raise self.inconsistent()
         self._checkpoints[artifact.id] = (checkpoint, new_checkpoint)
-        self._stages[key] = artifact.id
+        if not image_asset:
+            self._stages[key] = artifact.id
         self._sources[artifact.job_id] = owner
         self._canonical[artifact.id] = canonical
         return RewrittenArtifact(

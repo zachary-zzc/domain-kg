@@ -10,6 +10,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from domain_kg.ingestion.warnings import REJECTION
+
 Locale = Literal["en", "zh-CN"]
 COOKIE = "domain_kg_language"
 LANGUAGE: ContextVar[Locale] = ContextVar("console_language", default="en")
@@ -24,6 +26,15 @@ def translate(message: str) -> str:
 def label(value: object) -> str:
     """Only explicit interface enums, never evidence names or descriptions."""
     text = str(value)
+    rejected = REJECTION.fullmatch(text)
+    if rejected:
+        message = (
+            "Skipped {count} model entities that failed evidence validation; original retained."
+            if rejected[1] == "entities"
+            else "Skipped {count} model relations that failed evidence validation; "
+            "original retained."
+        )
+        return translate(message).format(count=int(rejected[2]))
     key = "state." + text
     return (
         ZH.get(key, text.replace("_", " ")) if LANGUAGE.get() == "zh-CN" else text.replace("_", " ")

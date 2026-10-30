@@ -15,12 +15,16 @@ COPY dist/${APPLICATION_WHEEL} /wheels/
 RUN /opt/venv/bin/python -m pip install --no-index --no-deps --no-compile /wheels/*.whl
 
 FROM ${PYTHON_IMAGE} AS runtime
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2 \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=dependencies /opt/venv /opt/venv
 COPY --from=dependencies /opt/tiktoken-cache /opt/tiktoken-cache
+RUN mkdir -p /run/domain-kg && chmod 0555 /tmp /var/tmp && chown 10001:10001 /run/domain-kg
 RUN groupadd --gid 10001 domain-kg \
     && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /tmp --shell /usr/sbin/nologin domain-kg
 ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
-    TIKTOKEN_CACHE_DIR=/opt/tiktoken-cache
+    TIKTOKEN_CACHE_DIR=/opt/tiktoken-cache TMPDIR=/run/domain-kg
 WORKDIR /app
 USER 10001:10001
 EXPOSE 8000

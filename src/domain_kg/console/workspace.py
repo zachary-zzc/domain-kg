@@ -24,9 +24,9 @@ def filters_for(
     return SearchFilters(
         material_ids=(material,) if material else (),
         version_id=version,
-        support_statuses=("verified", "manual", "imported_unverified")
+        support_statuses=("verified", "model_interpreted", "manual", "imported_unverified")
         if include_unverified
-        else ("verified", "manual"),
+        else ("verified", "model_interpreted", "manual"),
     )
 
 
@@ -62,10 +62,13 @@ def workspace_router(runtime: ServiceRuntime) -> APIRouter:
             access,
             "materials.html",
             {
-                "title": "Materials",
+                "title": "Sources",
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "materials": result,
                 "include_unverified": include_unverified,
+                "command_key": str(uuid4()),
+                "bulk_kind": "materials",
+                "bulk_scope": "#material-list",
             },
             scope=scope,
         )
@@ -128,7 +131,7 @@ def workspace_router(runtime: ServiceRuntime) -> APIRouter:
             access,
             "search.html",
             {
-                "title": "Search evidence",
+                "title": "RAG search",
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "q": q,
                 "mode": mode,

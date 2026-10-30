@@ -1,0 +1,23 @@
+# Optional local OIDC provider. The four database services keep their smoke limits.
+# Keycloak adds a separate 512 MiB cap: combined containers 1,920 MiB (2.013 GB).
+name: domain-kg-browser-idp
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b
+    command: ["start-dev", "--import-realm"]
+    ports: ["127.0.0.1:18080:8080"]
+    environment:
+      KC_HOSTNAME: http://127.0.0.1:18080
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      JAVA_OPTS_KC_HEAP: -Xms64m -Xmx256m
+      JAVA_OPTS_APPEND: -XX:ActiveProcessorCount=1 -XX:MaxDirectMemorySize=32m -XX:ReservedCodeCacheSize=48m -XX:TieredStopAtLevel=1
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.5
+    volumes:
+      - ./secrets/local-browser/realm.json:/opt/keycloak/data/import/domain-kg-realm.json:ro
+      - keycloak-data:/opt/keycloak/data
+volumes:
+  keycloak-data:

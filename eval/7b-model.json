@@ -1,0 +1,28 @@
+{
+  "purpose": "Explicit user-requested offline 7B experiment; no production profile change",
+  "repository": "Qwen/Qwen2.5-7B-Instruct-GGUF",
+  "revision": "bb5d59e06d9551d752d08b292a50eb208b07ab1f",
+  "cache_subdirectory": "qwen2.5-7b-instruct-q4_k_m-bb5d59e",
+  "served_model_name": "domain-kg-extraction-7b",
+  "endpoint": "http://127.0.0.1:29500/v1",
+  "runtime": "/opt/homebrew/bin/llama-server",
+  "context_tokens": 4096,
+  "threads": 2,
+  "parallel_slots": 1,
+  "gpu_layers": 0,
+  "batch_tokens": 128,
+  "microbatch_tokens": 128,
+  "rss_watchdog_bytes": 6000000000,
+  "shards": [
+    {
+      "filename": "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf",
+      "size_bytes": 3993201344,
+      "sha256": "dfce12e3862a5283ccfb88221b48480e58745165de856439950d0f22590580db"
+    },
+    {
+      "filename": "qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf",
+      "size_bytes": 689872288,
+      "sha256": "539cf93f78e887edea1c04e2d7d8cdaca9d01dae9c9025bcb8accbe29df3d72a"
+    }
+  ]
+}

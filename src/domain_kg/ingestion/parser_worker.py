@@ -34,6 +34,9 @@ def main() -> None:
     from domain_kg.materials.models import BlobRef
 
     try:
+        from domain_kg.ingestion.native_sandbox import confine
+
+        confine(Path(input_path).parent)
         blob, options = (
             BlobRef.model_validate_json(blob_json),
             ParseOptions.model_validate_json(options_json),

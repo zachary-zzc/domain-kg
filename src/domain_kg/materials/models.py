@@ -96,6 +96,7 @@ class AddMaterial(MaterialSubmission):
 class ReplaceMaterial(MaterialSubmission):
     material_id: UUID
     expected_active_version: UUID
+    expected_revision: NonNegative | None = None
 
 
 class RemoveMaterial(FrozenModel):

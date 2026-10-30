@@ -33,7 +33,9 @@ class CreateKG(FrozenModel):
 
 
 class KGReceipt(Namespace):
-    state: Literal["provisioning", "ready", "read_only", "error", "archived", "purging", "purged"]
+    state: Literal[
+        "provisioning", "ready", "read_only", "error", "archived", "deleted", "purging", "purged"
+    ]
     revision: NonNegative
     job_id: UUID | None = None
 

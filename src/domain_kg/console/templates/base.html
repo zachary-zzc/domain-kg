@@ -1,22 +1,68 @@
+{% macro navlink(href, text, symbol, active=false) -%}
+<a href="{{ href }}" {% if active %}aria-current="page"{% endif %}><span class="nav-symbol" aria-hidden="true">{{ symbol }}</span>{{ _(text) }}</a>
+{%- endmacro %}
 <!doctype html>
 <html lang="{{ locale }}" hx-history="false">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="htmx-config" content='{"historyCacheSize":0,"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"selfRequestsOnly":true}'>
-  <title>{{ title }} {{ _("\u00b7 Domain KG") }}</title>
-  <link rel="stylesheet" href="/admin/static/console.css">
-  <script src="/admin/static/vendor/htmx-2.0.11.min.js" defer></script>
-  <script src="/admin/static/console.js" defer></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="htmx-config" content='{"historyCacheSize":0,"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"selfRequestsOnly":true}'>
+<title>{{ title }} {{ _("· Domain KG") }}</title>
+<link rel="stylesheet" href="/admin/static/console.css">
+<script src="/admin/static/vendor/htmx-2.0.11.min.js" defer></script>
+<script src="/admin/static/console.js" type="module"></script>
+<script src="/admin/static/batch.js" defer></script>
 {% block extra_head %}{% endblock %}
 </head>
 <body>
 <a class="skip" href="#content">{{ _("Skip to content") }}</a>
-<header><a class="brand" href="/admin">{{ _("Domain KG") }}</a><span>{{ _("Team knowledge, with evidence") }}</span>
-<nav class="languages" aria-label="{{ _('Interface language') }}"><a href="{{ language_url('zh-CN') }}" lang="zh-CN" hreflang="zh-CN" {% if locale == 'zh-CN' %}aria-current="true"{% endif %}>中文</a><a href="{{ language_url('en') }}" lang="en" hreflang="en" {% if locale == 'en' %}aria-current="true"{% endif %}>English</a></nav>
-{% if member %}<form method="post" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="quiet" type="submit">{{ _("Sign out") }}</button></form>{% endif %}</header>
 <div class="shell">
-{% if member %}<aside aria-label="{{ _("Primary") }}"><nav><a href="/admin">{{ _("Knowledge graphs") }}</a>{% if can_team %}<a href="/admin/team">{{ _("Team") }}</a>{% endif %}{% if can_operator %}<a href="/admin/infrastructure">{{ _("Infrastructure") }}</a>{% endif %}</nav><p class="muted">{{ _("Signed in as") }}<br>{{ member.subject }}</p></aside>{% endif %}
-<main id="content" tabindex="-1"><h1>{{ title }}</h1>{% block content %}{% endblock %}</main>
-</div>
+{% if member %}
+<aside class="sidebar" aria-label="{{ _('Primary') }}">
+<a class="brand" href="/admin"><span class="brand-mark" aria-hidden="true">K<span>•</span></span>Domain KG</a>
+<p class="brand-caption">{{ _('Knowledge, connected.') }}</p>
+<button class="mobile-menu" type="button" aria-expanded="false" aria-controls="workspace-navigation">{{ _('Navigation') }} ☰</button>
+<div class="sidebar-navs" id="workspace-navigation"><nav aria-label="{{ _('Workspace') }}">
+<p class="nav-heading">{{ _('Workspace') }}</p>
+{{ navlink('/admin', 'Knowledge graphs', '◇', current_path == '/admin' or current_path == '/admin/kgs/new') }}
+{% if kg %}
+<div class="kg-switch"><span class="eyebrow">{{ _('Current knowledge graph') }}</span><strong>{{ kg.name|default(title) }}</strong><a href="/admin">{{ _('Switch KG') }} ↗</a></div>
+{% set root = '/admin/kgs/' ~ kg.id %}
+{{ navlink(root, 'Overview', '◈', current_path == root) }}
+{{ navlink(root ~ '/materials', 'Sources', '▤', '/materials' in current_path) }}
+{% if can_edit %}{{ navlink(root ~ '/folder', 'Import folder', '↑', '/folder' in current_path) }}{% endif %}
+{{ navlink(root ~ '/graph', 'Graph explorer', '⌘', '/graph' in current_path or '/nodes' in current_path) }}
+{{ navlink(root ~ '/search', 'RAG search', '⌕', '/search' in current_path) }}
+<p class="nav-heading">{{ _('Manage this KG') }}</p>
+{{ navlink(root ~ '/jobs', 'Activity & jobs', '◷', '/jobs' in current_path) }}
+{{ navlink(root ~ '/mcp-test', 'MCP playground', '⇄', '/mcp-test' in current_path) }}
+{% if can_owner %}
+{{ navlink(root ~ '/grants', 'Access & roles', '♙', '/grants' in current_path) }}
+{{ navlink(root ~ '/settings', 'KG settings', '⚙', '/settings' in current_path) }}
+{{ navlink(root ~ '/operations', 'Maintenance', '↻', '/operations' in current_path) }}
+{% endif %}
+{% endif %}
+</nav>
+{% if can_team %}<nav class="org-nav" aria-label="{{ _('Organization') }}"><p class="nav-heading">{{ _('Organization') }}</p>
+{{ navlink('/admin/team?kind=members', 'People', '♙', current_path == '/admin/team' and kind|default('members') == 'members') }}
+{{ navlink('/admin/team?kind=groups', 'Groups', '♧', current_path == '/admin/team' and kind|default('') == 'groups') }}
+{{ navlink('/admin/team?kind=services', 'Service identities', '⇄', current_path == '/admin/team' and kind|default('') == 'services') }}
+{{ navlink('/admin/identity-integrations', 'Identity integrations', '⇆', current_path.startswith('/admin/identity-integrations')) }}
+</nav>{% endif %}
+<nav aria-label="{{ _('Account') }}"><p class="nav-heading">{{ _('Account') }}</p>{{ navlink('/admin/connections', 'Agent connections', '⇄', current_path == '/admin/connections') }}</nav>
+<nav class="infrastructure-nav" aria-label="{{ _('Infrastructure') }}"><p class="nav-heading">{{ _('Infrastructure') }}</p>
+{{ navlink('/admin/storage', 'Storage profiles', '▱', current_path == '/admin/storage') }}
+{% if can_operator %}{{ navlink('/admin/infrastructure', 'Database connections', '▥', current_path.startswith('/admin/infrastructure')) }}{% endif %}
+</nav>
+</div><div class="sidebar-note"><span class="status-dot"></span>{{ _('Evidence stays connected to its source.') }}</div>
+</aside>
+{% endif %}
+<div class="workspace">
+<header class="topbar">
+<div class="breadcrumb"><a href="/admin">{{ _('Workspace') }}</a><span>/</span>{% if kg %}<a href="/admin/kgs/{{ kg.id }}">{{ kg.name|default(title) }}</a>{% else %}<span>{{ title }}</span>{% endif %}</div>
+<nav class="languages" aria-label="{{ _('Interface language') }}"><a href="{{ language_url('zh-CN') }}" lang="zh-CN" {% if locale == 'zh-CN' %}aria-current="true"{% endif %}>中文</a><a href="{{ language_url('en') }}" lang="en" {% if locale == 'en' %}aria-current="true"{% endif %}>EN</a></nav>
+{% if member %}<details class="account"><summary>{{ _('Account') }}</summary><div class="account-menu"><p>{{ _('Signed in as') }}<br><strong>{{ member.subject }}</strong></p><form method="post" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="quiet" type="submit">{{ _('Sign out') }}</button></form></div></details>{% endif %}
+</header>
+<main id="content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">{% if kg %}{{ _('Knowledge workspace') }}{% else %}{{ _('Domain KG console') }}{% endif %}</p><h1>{{ title }}</h1></div><div class="page-actions">{% block page_actions %}{% endblock %}</div></div>{% block content %}{% endblock %}</main>
 <footer>{{ _("Results follow your current access. Source and human evidence remain distinguishable.") }}</footer>
+</div></div>
 </body></html>

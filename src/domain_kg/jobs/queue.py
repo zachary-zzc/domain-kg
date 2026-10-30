@@ -13,12 +13,15 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
 from domain_kg.identity.models import AccessContext, Action, Principal
 from domain_kg.identity.policy import Policy
+from domain_kg.jobs.diagnostics import DETAIL_CODES, SAFE_DETAILS, failure_copy, safe_failure_code
 from domain_kg.jobs.models import (
     ATTEMPT_STAGES,
     Checkpoint,
     JobArtifact,
     JobCommand,
+    JobFailure,
     JobReceipt,
+    JobSource,
     LeasedJob,
     PreparationStage,
     PublicationLease,
@@ -28,6 +31,7 @@ from domain_kg.materials.repository import MaterialRepository
 from domain_kg.models import SHA256, ScopedRef
 from domain_kg.storage.blobs import BlobStore
 from domain_kg.storage.integrity import NamespaceRepository
+from domain_kg.storage.models import MaterialRecord
 from domain_kg.storage.router import KGStoreRouter
 
 TERMINAL = ("ready", "ready_with_warnings", "cancelled", "failed")
@@ -84,6 +88,9 @@ class JobQueue:
             [("stage", 1), ("available_at", 1), ("created_at", 1)]
         )
         await self.database.jobs.create_index([("stage", 1), ("lease_until", 1)])
+        await self.database.jobs.create_index(
+            [("org_id", 1), ("kg_id", 1), ("created_at", -1), ("id", -1)]
+        )
         await self.database.jobs.create_index(
             [("org_id", 1), ("kg_id", 1), ("kind", 1), ("stage", 1), ("created_at", 1), ("id", 1)]
         )
@@ -143,14 +150,35 @@ class JobQueue:
 
     @staticmethod
     def _receipt(raw: dict[str, Any]) -> JobReceipt:
+        failure = None
+        if raw.get("error_code") and raw["stage"] not in (
+            "ready",
+            "ready_with_warnings",
+            "cancelled",
+        ):
+            code = safe_failure_code(raw["error_code"])
+            message, action = failure_copy(code, raw.get("error_detail"))
+            failure = JobFailure(
+                code=code,
+                stage=raw.get("failure_stage"),
+                request_id=raw.get("error_request_id"),
+                message=message,
+                action=action,
+            )
+        created = raw.get("created_at")
         return JobReceipt(
             org_id=raw["org_id"],
             kg_id=raw["kg_id"],
             job_id=raw["id"],
             stage=raw["stage"],
             progress=raw.get("progress", 0),
-            warnings=tuple(raw.get("warnings", ()))
-            + ((raw["error_code"],) if raw.get("error_code") else ()),
+            warnings=tuple(raw.get("warnings", ())) + ((failure.code,) if failure else ()),
+            kind=raw.get("kind"),
+            # BSON stores milliseconds; admission and replay must return the same timestamp.
+            created_at=created.replace(tzinfo=UTC, microsecond=created.microsecond // 1000 * 1000)
+            if created
+            else None,
+            error=failure,
         )
 
     @staticmethod
@@ -562,7 +590,13 @@ class JobQueue:
         return self._lease(raw)
 
     async def store_artifact(
-        self, job: LeasedJob, stage: PreparationStage, input_hash: str, data: bytes
+        self,
+        job: LeasedJob,
+        stage: PreparationStage,
+        input_hash: str,
+        data: bytes,
+        *,
+        media_type: str = "application/json",
     ) -> Checkpoint:
         stage = TypeAdapter(PreparationStage).validate_python(stage)
         input_hash = TypeAdapter(SHA256).validate_python(input_hash)
@@ -585,7 +619,7 @@ class JobQueue:
                 yield data[offset : offset + 65536]
 
         blob = await BlobStore(stores.blobs).put(
-            stream(), hashlib.sha256(data).hexdigest(), scope, media_type="application/json"
+            stream(), hashlib.sha256(data).hexdigest(), scope, media_type=media_type
         )
         artifact = JobArtifact(
             org_id=job.org_id,
@@ -659,6 +693,15 @@ class JobQueue:
         ):
             raise inaccessible_reference()
         return artifact.blob
+
+    async def start_step(self, job: LeasedJob, stage: PreparationStage) -> None:
+        stage = TypeAdapter(PreparationStage).validate_python(stage)
+        result = await self.database.jobs.update_one(
+            self._active(job),
+            {"$set": {"stage": stage, "progress": STAGES.index(stage) / (len(STAGES) + 1)}},
+        )
+        if not result.matched_count:
+            raise lease_conflict()
 
     async def checkpoint(self, job: LeasedJob, checkpoint: Checkpoint) -> None:
         checkpoint = Checkpoint.model_validate(checkpoint)
@@ -765,6 +808,11 @@ class JobQueue:
                     "$set": {
                         "stage": stage,
                         "error_code": code,
+                        "failure_stage": raw["stage"],
+                        "error_request_id": str(error.request_id),
+                        "error_detail": error.message
+                        if code in DETAIL_CODES and error.message in SAFE_DETAILS
+                        else None,
                         "lease_until": now(),
                         "available_at": now()
                         + timedelta(seconds=min(5, 2 ** (raw["attempts"] - 1))),
@@ -1053,6 +1101,52 @@ class JobQueue:
     async def get(self, access: AccessContext, identifier: UUID) -> JobReceipt:
         raw = await self._visible_job(access, identifier, Action.READ)
         receipt = self._receipt(raw)
+        if raw["kind"] in ("ingest", "replace", "import", "restore_material", "reprocess_material"):
+            stores = await self.router.for_sources(access, receipt.kg_id)
+            ns = {"org_id": str(receipt.org_id), "kg_id": str(receipt.kg_id)}
+            try:
+                material = await stores.authority._require(
+                    "materials",
+                    ScopedRef(
+                        org_id=receipt.org_id, kg_id=receipt.kg_id, id=UUID(raw["material_id"])
+                    ),
+                )
+                canonical = MaterialRecord.model_validate(
+                    {k: v for k, v in material.items() if k != "_id"}
+                )
+                version = await stores.authority._database.version_blobs.find_one(
+                    ns | {"id": raw["target_id"], "material_id": raw["material_id"]}
+                )
+                if version is None:
+                    raise DomainError(
+                        ErrorCode.PROJECTION_INCONSISTENT, "The job original is missing."
+                    )
+                blob = BlobRef.model_validate(version["blob"])
+                if (blob.org_id, blob.kg_id, str(blob.material_id), str(blob.version_id)) != (
+                    receipt.org_id,
+                    receipt.kg_id,
+                    raw["material_id"],
+                    raw["target_id"],
+                ):
+                    raise DomainError(
+                        ErrorCode.PROJECTION_INCONSISTENT, "The job original ownership differs."
+                    )
+                proposed = version.get("proposed", {})
+                if not isinstance(proposed, dict):
+                    raise ValueError("invalid job source metadata")
+                source = JobSource(
+                    material_id=blob.material_id,
+                    version_id=blob.version_id,
+                    title=canonical.title,
+                    source=proposed.get("source"),
+                    sha256=blob.sha256,
+                    expected_active_version=raw.get("expected_active_version"),
+                )
+            except (ValueError, TypeError, KeyError):
+                raise DomainError(
+                    ErrorCode.PROJECTION_INCONSISTENT, "The job source metadata is invalid."
+                ) from None
+            receipt = receipt.model_copy(update={"source": source})
         await self._visible_job(access, identifier, Action.READ)
         return receipt
 

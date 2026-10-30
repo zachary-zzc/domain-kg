@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     mongo_database: str = "domain_kg"
     backend_config: Path | None = None
     provider_config: Path | None = None
+    identity_bridge_config: Path | None = None
     retention_config: Path | None = None
     restore_cleanup_config: Path | None = None
     embedding_dimensions: int = Field(default=1536, ge=1, le=4096)

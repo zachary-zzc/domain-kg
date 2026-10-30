@@ -65,7 +65,8 @@ def curation_router(runtime: ServiceRuntime) -> APIRouter:
             access,
             "graph_overview.html",
             {
-                "title": "Graph overview",
+                "title": "Graph explorer",
+                "kg": await runtime.catalog.get_kg(access, kg_id),
                 "total_nodes": total,
                 "next_href": page_link(page_index + 1) if (page_index + 1) * 200 < total else None,
                 "previous_href": page_link(page_index - 1) if page_index > 0 else None,

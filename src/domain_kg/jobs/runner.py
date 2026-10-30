@@ -84,6 +84,7 @@ class JobRunner:
             input_hash = await step.hash_for(job)
             if await self.queue.load_checkpoint(job, step.stage, input_hash) is not None:
                 continue
+            await self.queue.start_step(job, step.stage)
             async with asyncio.timeout(step.timeout_seconds):
                 checkpoint = await step.execute(job)
             if checkpoint.stage != step.stage or checkpoint.input_hash != input_hash:

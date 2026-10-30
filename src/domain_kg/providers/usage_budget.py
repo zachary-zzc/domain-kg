@@ -18,10 +18,10 @@ class BudgetLimits(FrozenModel):
 
 
 class BudgetPolicy(FrozenModel):
-    organization: BudgetLimits = BudgetLimits(
+    organization: BudgetLimits | None = BudgetLimits(
         input_tokens=8_000_000, output_tokens=2_048_000, calls=4000
     )
-    knowledge_base: BudgetLimits = BudgetLimits()
+    knowledge_base: BudgetLimits | None = BudgetLimits()
 
 
 class BudgetBounds(FrozenModel):
@@ -38,16 +38,18 @@ class BudgetCounts(FrozenModel):
     spent_calls: BudgetAmount = 0
 
 
-def reserve(counts: BudgetCounts, bounds: BudgetBounds, limits: BudgetLimits) -> BudgetCounts:
+def reserve(
+    counts: BudgetCounts, bounds: BudgetBounds, limits: BudgetLimits | None
+) -> BudgetCounts:
     changes = counts.model_dump()
     for field, amount in (
         ("input_tokens", bounds.input_tokens),
         ("output_tokens", bounds.output_tokens),
         ("calls", 1),
     ):
-        if changes[f"reserved_{field}"] + changes[f"spent_{field}"] + amount > getattr(
-            limits, field
-        ):
+        if limits is not None and changes[f"reserved_{field}"] + changes[
+            f"spent_{field}"
+        ] + amount > getattr(limits, field):
             raise DomainError(ErrorCode.QUOTA_EXCEEDED, "The provider usage budget is exhausted.")
         changes[f"reserved_{field}"] += amount
     return BudgetCounts.model_validate(changes)

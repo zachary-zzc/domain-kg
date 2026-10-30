@@ -1,0 +1,7 @@
+<section class="card"><h2>{{ _('Knowledge graph settings') }}</h2>
+<form method="post" action="/admin/kgs/{{ kg.id }}/lifecycle/update">
+<input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="expected_revision" value="{{ kg.revision }}"><input type="hidden" name="idempotency_key" value="update-{{ command_key }}">
+<label for="kg-name">{{ _('Name') }}</label><input id="kg-name" name="name" value="{{ kg.name }}" required maxlength="200">
+<label for="kg-state">{{ _('State') }}</label><select id="kg-state" name="state">{% for state in ['ready', 'read_only', 'archived'] %}<option value="{{ state }}" {% if kg.state == state %}selected{% endif %}>{{ label(state) }}</option>{% endfor %}</select><button type="submit">{{ _('Save settings') }}</button></form>
+<details><summary>{{ _('Delete knowledge graph') }}</summary><p>{{ _('Deletion immediately blocks search and processing. Original files and history are retained until you explicitly restore this KG. Shared storage is preserved.') }}</p>
+<form method="post" action="/admin/kgs/{{ kg.id }}/lifecycle/delete"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="expected_revision" value="{{ kg.revision }}"><input type="hidden" name="idempotency_key" value="delete-{{ command_key }}"><button class="danger" type="submit">{{ _('Delete knowledge graph') }}</button></form></details></section>

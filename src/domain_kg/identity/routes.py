@@ -15,7 +15,8 @@ from mcp.server.auth.provider import AccessToken, TokenVerifier
 from pydantic import Field
 
 from domain_kg.errors import DomainError, ErrorCode
-from domain_kg.identity.models import Group, Member, Principal
+from domain_kg.identity.bridge.service import IdentityBridge
+from domain_kg.identity.models import Action, Group, Member, Principal
 from domain_kg.identity.oidc import OIDCVerifier
 from domain_kg.identity.repository import IdentityRepository
 from domain_kg.identity.sessions import SessionStore, token_hash
@@ -67,14 +68,21 @@ class IdentityRuntime(TokenVerifier):
         self.sessions = SessionStore(repository.database, repository)
         self.origin = str(settings.public_url).rstrip("/")
         self.secure = self.origin.startswith("https:")
+        self.bridge = IdentityBridge(settings, repository, self.verifier, client)
 
     async def initialize(self) -> None:
         await self.repository.initialize()
         await self.sessions.initialize()
+        await self.bridge.initialize()
+
+    async def authenticate_bearer(self, token: str) -> Principal:
+        principal = await self.verifier.authenticate_bearer(token)
+        claims = await self.verifier.verify_claims(token)
+        return await self.bridge.bind_principal(principal, claims, token)
 
     async def verify_token(self, token: str) -> AccessToken | None:
         try:
-            principal = await self.verifier.authenticate_bearer(token)
+            principal = await self.authenticate_bearer(token)
             if not await self.repository.has_active_read_credential(principal):
                 return None
             claims = await self.verifier.verify_claims(token)
@@ -85,7 +93,12 @@ class IdentityRuntime(TokenVerifier):
                 expires_at=int(claims["exp"]),
                 resource=self.verifier.audience,
                 subject=principal.subject,
-                claims={"iss": principal.issuer, "sub": principal.subject},
+                claims={"iss": principal.issuer, "sub": principal.subject}
+                | (
+                    {"delegation": principal.delegation.model_dump(mode="json")}
+                    if principal.delegation
+                    else {}
+                ),
             )
         except DomainError:
             return None
@@ -96,7 +109,7 @@ class IdentityRuntime(TokenVerifier):
             scheme, _, token = header.partition(" ")
             if scheme.lower() != "bearer" or not token:
                 raise DomainError(ErrorCode.UNAUTHENTICATED, "A Bearer credential is required.")
-            principal = await self.verifier.authenticate_bearer(token)
+            principal = await self.authenticate_bearer(token)
             selected = request.headers.get("x-domain-kg-organization")
             try:
                 org = UUID(selected) if selected is not None else None
@@ -124,12 +137,20 @@ class IdentityRuntime(TokenVerifier):
                 subject=principal.subject,
                 scopes=principal.scopes & member.scopes,
                 kind="service",
+                delegation=principal.delegation,
             )
         return principal, member
 
 
 def identity_router(runtime: IdentityRuntime) -> APIRouter:
     router = APIRouter()
+
+    async def administrator(request: Request, *, mutating: bool = False) -> Member:
+        principal, member = await runtime.actor(request, mutating=mutating)
+        await runtime.bridge.policy.resolve_access(
+            principal, [], Action.MANAGE_ORGANIZATION, org_id=member.org_id
+        )
+        return member
 
     @router.get("/auth/login")
     async def login(org_id: UUID | None = None) -> Response:
@@ -284,12 +305,12 @@ def identity_router(runtime: IdentityRuntime) -> APIRouter:
     async def members(
         request: Request, page: Annotated[HTTPPageRequest, Query()]
     ) -> dict[str, Any]:
-        _, actor = await runtime.actor(request)
+        actor = await administrator(request)
         return await runtime.repository.list_page(actor, "members", page)
 
     @router.post("/api/v1/members")
     async def admit(request: Request, command: AdmitMember) -> Member:
-        _, actor = await runtime.actor(request, mutating=True)
+        actor = await administrator(request, mutating=True)
         return await runtime.repository.admit(
             actor,
             Principal(issuer=command.issuer, subject=command.subject),
@@ -299,7 +320,7 @@ def identity_router(runtime: IdentityRuntime) -> APIRouter:
 
     @router.patch("/api/v1/members/{member_id}")
     async def change(request: Request, member_id: UUID, command: ChangeMember) -> Member:
-        _, actor = await runtime.actor(request, mutating=True)
+        actor = await administrator(request, mutating=True)
         return await runtime.repository.change_member(
             actor,
             member_id,
@@ -311,12 +332,12 @@ def identity_router(runtime: IdentityRuntime) -> APIRouter:
 
     @router.get("/api/v1/groups")
     async def groups(request: Request, page: Annotated[HTTPPageRequest, Query()]) -> dict[str, Any]:
-        _, actor = await runtime.actor(request)
+        actor = await administrator(request)
         return await runtime.repository.list_page(actor, "groups", page)
 
     @router.post("/api/v1/groups")
     async def group(request: Request, command: CreateGroup) -> Group:
-        _, actor = await runtime.actor(request, mutating=True)
+        actor = await administrator(request, mutating=True)
         return await runtime.repository.create_group(
             actor, command.name, idempotency_key=command.idempotency_key
         )
@@ -326,7 +347,7 @@ def identity_router(runtime: IdentityRuntime) -> APIRouter:
     async def group_member(
         request: Request, group_id: UUID, member_id: UUID, command: GroupMemberChange
     ) -> Group:
-        _, actor = await runtime.actor(request, mutating=True)
+        actor = await administrator(request, mutating=True)
         return await runtime.repository.set_group_member(
             actor,
             group_id,
@@ -339,12 +360,12 @@ def identity_router(runtime: IdentityRuntime) -> APIRouter:
     async def services(
         request: Request, page: Annotated[HTTPPageRequest, Query()]
     ) -> dict[str, Any]:
-        _, actor = await runtime.actor(request)
+        actor = await administrator(request)
         return await runtime.repository.list_page(actor, "services", page)
 
     @router.post("/api/v1/service-identities")
     async def service(request: Request, command: AdmitService) -> Member:
-        _, actor = await runtime.actor(request, mutating=True)
+        actor = await administrator(request, mutating=True)
         return await runtime.repository.admit(
             actor,
             Principal(issuer=command.issuer, subject=command.subject),
@@ -357,7 +378,7 @@ def identity_router(runtime: IdentityRuntime) -> APIRouter:
 
     @router.post("/api/v1/service-identities/{member_id}/revoke")
     async def revoke(request: Request, member_id: UUID, command: ChangeMember) -> Member:
-        _, actor = await runtime.actor(request, mutating=True)
+        actor = await administrator(request, mutating=True)
         target = await runtime.repository.database.members.find_one(
             {"_id": str(member_id), "org_id": str(actor.org_id), "kind": "service"}
         )

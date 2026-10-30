@@ -249,6 +249,8 @@ class MaterialService:
             [("org_id", 1), ("kg_id", 1), ("id", 1)], unique=True
         )
         data = command.model_dump(mode="json", exclude={"inline_text"})
+        if isinstance(command, ReplaceMaterial) and command.expected_revision is None:
+            data.pop("expected_revision")  # Preserve existing command fingerprints.
         if import_plan is not None:
             if (
                 not isinstance(command, AddMaterial)
@@ -273,6 +275,11 @@ class MaterialService:
                 target = await self._target(current, command.kg_id, command.material_id, session)
                 if target.get("active_version_id") != str(command.expected_active_version):
                     raise DomainError(ErrorCode.VERSION_CONFLICT, "The active version changed.")
+                if (
+                    command.expected_revision is not None
+                    and target["revision"] != command.expected_revision
+                ):
+                    raise DomainError(ErrorCode.VERSION_CONFLICT, "The material revision changed.")
 
         async def intent(session: AsyncClientSession) -> dict[str, Any]:
             await self.repository.fence(current, action, session)

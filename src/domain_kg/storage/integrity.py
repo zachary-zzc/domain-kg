@@ -82,7 +82,9 @@ async def install_mongo_schema(database: AsyncDatabase[dict[str, Any]]) -> None:
         "confidence": {"bsonType": ["double", "int", "long", "null"], "minimum": 0, "maximum": 1},
         "version": {"anyOf": [_reference_schema(), {"bsonType": "null"}]},
         "curation": {"anyOf": [_reference_schema(), {"bsonType": "null"}]},
-        "status": {"enum": ["verified", "manual", "imported_unverified", "rejected"]},
+        "status": {
+            "enum": ["verified", "model_interpreted", "manual", "imported_unverified", "rejected"]
+        },
         "spans": {"bsonType": "array", "items": {"bsonType": "object"}},
         "provenance": {"bsonType": ["object", "null"]},
         "actor": {"bsonType": "string", "minLength": 1},

@@ -20,6 +20,8 @@ from domain_kg.ingestion.models import ParseOptions
 from domain_kg.ingestion.parsers import Parser
 from domain_kg.materials.models import BlobRef
 
+FIXTURE_PAYLOADS = []
+
 
 async def parse(data: bytes, media_type: str):
     blob = BlobRef(
@@ -67,6 +69,56 @@ def main():
     ]
     assert [block.location.page for block in pdf.blocks] == [1, 2]
     assert "docling-parse" in pdf.parser_version
+    scan = asyncio.run(parse(base64.b64decode(sys.argv[3], validate=True), "application/pdf"))
+    scan_text = "".join(block.text for block in scan.blocks)
+    assert "Scanned evidence" in scan_text and "扫描证据" in "".join(scan_text.split())
+    assert scan.warnings == ("OCR_APPLIED",)
+    assert all(
+        block.location.page == 1 and block.location.text_origin == "ocr" for block in scan.blocks
+    )
+    office_formats = []
+    assert FIXTURE_PAYLOADS
+    for name, mime, encoded in FIXTURE_PAYLOADS:
+        print("Checking synthetic format: " + name, file=sys.stderr, flush=True)
+        document = asyncio.run(parse(base64.b64decode(encoded, validate=True), mime))
+        assert document.blocks, name
+        assert any("evidence" in b.text.lower() or "Alpha" in b.text for b in document.blocks), name
+        if mime.startswith("image/") or name.startswith("slides."):
+            assert document.images, name
+        office_formats.append(name)
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory() as directory:
+        private = Path(directory) / "private-canary"
+        private.write_text("unreadable private probe")
+        parser_root = Path(directory) / "parser"
+        parser_root.mkdir()
+        code = """import socket, subprocess, sys
+from pathlib import Path
+from domain_kg.ingestion.native_sandbox import confine
+confine(Path(sys.argv[1]))
+try:
+    Path(sys.argv[2]).read_text()
+except PermissionError:
+    pass
+else:
+    raise AssertionError('private read escaped parser isolation')
+try:
+    socket.socket()
+except PermissionError:
+    pass
+else:
+    raise AssertionError('native socket escaped parser isolation')
+read = 'from pathlib import Path; import sys; Path(sys.argv[1]).read_text()'
+child = subprocess.run([sys.executable, '-c', read, sys.argv[2]], capture_output=True)
+assert child.returncode != 0
+"""
+        subprocess.run(
+            [sys.executable, "-c", code, str(parser_root), str(private)],
+            check=True,
+            capture_output=True,
+            timeout=20,
+        )
     worker = subprocess.run(
         [sys.executable, "-m", "domain_kg.worker", "--help"],
         check=True,
@@ -114,6 +166,9 @@ def main():
                 "offline_tokenizer": True,
                 "text_parser": True,
                 "pdf_pages": len(pdf.blocks),
+                "offline_bilingual_pdf_ocr": True,
+                "office_and_image_formats": office_formats,
+                "native_decoder_isolation": True,
                 "worker_cli": True,
                 "api_liveness": True,
                 "unauthenticated_mcp": 401,

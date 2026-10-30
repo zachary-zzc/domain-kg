@@ -27,6 +27,7 @@ from domain_kg.console.rendering import ROOT as CONSOLE_ROOT
 from domain_kg.console.rendering import error_page
 from domain_kg.console.routes import console_router
 from domain_kg.errors import DomainError, ErrorCode
+from domain_kg.identity.bridge.routes import bridge_router
 from domain_kg.identity.policy import Policy
 from domain_kg.identity.repository import IdentityRepository
 from domain_kg.identity.routes import IdentityRuntime, identity_router
@@ -186,8 +187,15 @@ def create_app(
             ErrorCode.REVISION_NOT_READY: 409,
             ErrorCode.UNSUPPORTED_FORMAT: 415,
             ErrorCode.EVIDENCE_VALIDATION_FAILED: 422,
+            ErrorCode.PROVIDER_AUTHENTICATION_FAILED: 422,
+            ErrorCode.PROVIDER_BILLING_REQUIRED: 402,
+            ErrorCode.PROVIDER_QUOTA_EXCEEDED: 429,
+            ErrorCode.PROVIDER_RATE_LIMITED: 429,
+            ErrorCode.PROVIDER_MODEL_NOT_FOUND: 422,
         }.get(error.code, 503)
-        if request.url.path == "/admin" or request.url.path.startswith("/admin/"):
+        if (request.url.path == "/admin" or request.url.path.startswith("/admin/")) and (
+            "application/json" not in request.headers.get("accept", "")
+        ):
             return error_page(error, status)
         headers = {"Cache-Control": "no-store"}
         if status == 401:
@@ -233,6 +241,7 @@ def create_app(
 
     if identity is not None:
         app.include_router(identity_router(identity))
+        app.include_router(bridge_router(identity))
         if catalog is not None:
             app.include_router(catalog_router(identity, catalog))
         if materials is not None:

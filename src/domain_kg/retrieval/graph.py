@@ -3,17 +3,24 @@
 from dataclasses import dataclass
 from uuid import UUID, uuid5
 
+from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.graph.service import GraphService
 from domain_kg.graph.views import SubgraphView
-from domain_kg.imports.evidence import source_origin, visible_status
+from domain_kg.imports.evidence import source_origin, source_status
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.identity import evidence_identity
 from domain_kg.retrieval.models import EvidenceCandidate, GraphStep, SearchRequest, SubgraphRequest
+from domain_kg.retrieval.ranking import rank_graph_candidates, rank_seeds, terms, trace_paths
 from domain_kg.revisions.models import ReadScope
 
 
 def source_citation(org: UUID, kg: UUID, material: UUID, version: UUID, chunk: UUID) -> UUID:
     return uuid5(org, f"{kg}/citation/{material}/{version}/{chunk}")
+
+
+def expansion_seed_limit(max_nodes: int, max_hops: int) -> int:
+    """Reserve node capacity for every expansion layer; zero-hop retains all seeds."""
+    return max(1, max_nodes // (max_hops + 1))
 
 
 @dataclass(frozen=True)
@@ -44,27 +51,21 @@ class GraphRetrievalBranch:
             raise ValueError("graph request and immutable scope differ")
         if request.mode not in ("deep", "graph"):
             raise ValueError("graph expansion requires graph or deep mode")
+        if len(set(terms(" ".join((request.query, *keywords))))) > 512:
+            raise DomainError(ErrorCode.QUOTA_EXCEEDED, "The graph query exceeds the term budget.")
         data = await self.repository.open(scope)
         query = request.query.casefold()
-        all_seeds = tuple(
-            sorted(
-                set(seed_ids)
-                | {
-                    data.entity_id(observation.entity.id, observation.material_id)
-                    for observation in data.observations
-                    if any(
-                        any(term.casefold() in text.casefold() for term in (keywords or (query,)))
-                        for text in (
-                            observation.name,
-                            observation.description,
-                            *observation.aliases,
-                            observation.identifier or "",
-                        )
-                    )
-                },
-                key=str,
+        labels: dict[UUID, list[str]] = {}
+        for observation in data.observations:
+            identifier = data.entity_id(observation.entity.id, observation.material_id)
+            labels.setdefault(identifier, []).extend(
+                (
+                    data.field(observation, "name"),
+                    *data.field(observation, "aliases"),
+                    observation.identifier or "",
+                    observation.name if data.identities else "",
+                )
             )
-        )
         manual_seeds = {
             data.entity_id(manual.entity.id, manual.material_ids if not manual.public else None)
             for manual in data.manual_nodes
@@ -78,16 +79,24 @@ class GraphRetrievalBranch:
             and any(term.casefold() in row.text.casefold() for term in (keywords or (query,)))
             for endpoint in (row.claim.assertion.subject, row.claim.assertion.target)
         )
-        all_seeds = tuple(sorted(set(all_seeds) | manual_seeds, key=str))
+        for manual in data.manual_nodes:
+            for context in data.node_contexts(manual):
+                identifier = data.entity_id(manual.entity.id, context)
+                labels.setdefault(identifier, []).extend(
+                    (manual.changes.name or "", *(manual.changes.aliases or ()))
+                )
+        for identifier in set(seed_ids) | manual_seeds:
+            labels.setdefault(identifier, [])
+        ranked_seeds = rank_seeds(
+            " ".join((request.query, *keywords)),
+            labels,
+            tuple(dict.fromkeys((*seed_ids, *sorted(manual_seeds, key=str)))),
+        )
+        # Materialize node fields only for matching candidates, not the entire KG.
         all_seeds = tuple(
-            sorted(
-                {
-                    node.id
-                    for identifier in all_seeds
-                    if (node := self.repository.node(data, identifier)) is not None
-                },
-                key=str,
-            )
+            identifier
+            for identifier in ranked_seeds
+            if self.repository.node(data, identifier) is not None
         )
         annotation_rows = tuple(
             row
@@ -96,7 +105,7 @@ class GraphRetrievalBranch:
             and not row.claim
             and any(term.casefold() in row.text.casefold() for term in (keywords or (query,)))
         )
-        seeds = all_seeds[: request.max_nodes]
+        seeds = all_seeds[: expansion_seed_limit(request.max_nodes, request.effective_hops)]
         if not seeds:
             await self.resolver.revalidate(scope)
             from domain_kg.retrieval.evidence import manual_candidate
@@ -118,37 +127,7 @@ class GraphRetrievalBranch:
             ),
             data=data,
         )
-        # Breadth-first paths are bounded by the same hop count as expansion.
-        paths: dict[UUID, tuple[GraphStep, ...]] = {seed: () for seed in seeds}
-        support_paths: dict[UUID, tuple[GraphStep, ...]] = {}
-        for _ in range(request.effective_hops):
-            additions = {}
-            for edge in graph.edges:
-                step = GraphStep(
-                    subject_id=edge.subject_id,
-                    assertion_id=edge.assertion_id,
-                    target_id=edge.target_id,
-                    support_id=edge.support_id,
-                    original_subject_id=edge.original_subject_id,
-                    original_target_id=edge.original_target_id,
-                    identity_mappings=edge.identity_mappings,
-                    support_status=visible_status(edge.status),
-                    import_origin=edge.import_origin,
-                )
-                for start, end in (
-                    (edge.subject_id, edge.target_id),
-                    (edge.target_id, edge.subject_id),
-                ):
-                    if start not in paths or len(paths[start]) >= request.effective_hops:
-                        continue
-                    path = (*paths[start], step)
-                    if edge.support_id not in support_paths or len(path) < len(
-                        support_paths[edge.support_id]
-                    ):
-                        support_paths[edge.support_id] = path
-                    if end not in paths and end not in additions:
-                        additions[end] = path
-            paths.update(additions)
+        support_paths = trace_paths(graph, seeds, request.effective_hops)
         chunks = {row.chunk.id: row for row in data.rows if row.chunk}
         grouped: dict[UUID, list[tuple[GraphStep, ...]]] = {}
         for row in data.supports:
@@ -173,6 +152,7 @@ class GraphRetrievalBranch:
                 EvidenceCandidate(
                     kind="source",
                     import_origin=source_origin(scope, chunk_row.source),
+                    support_status=source_status(scope, chunk_row.source, chunk_row.chunk.spans),
                     kg_id=scope.view.kg_id,
                     text=chunk_row.chunk.text,
                     citation_ids=(
@@ -229,7 +209,7 @@ class GraphRetrievalBranch:
             for index, row in enumerate(annotation_rows, 1)
         )
         return GraphRecall(
-            candidates[:50],
+            rank_graph_candidates(request.query, candidates, graph)[:50],
             graph,
             graph.truncation or len(all_seeds) > len(seeds) or len(candidates) > 50,
         )

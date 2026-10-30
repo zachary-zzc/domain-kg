@@ -45,9 +45,14 @@ async def test_console_pending_jobs_and_controls_use_current_source_access(
             ) as browser:
                 listing = await browser.get(f"/admin/kgs/{kg}/jobs")
                 assert listing.status_code == 200 and str(receipt.job_id) in listing.text
+                assert "Pending source" in listing.text
+                api_listing = await browser.get(f"/api/v1/kgs/{kg}/jobs")
+                assert api_listing.status_code == 200
+                assert api_listing.json()["items"][0]["source"]["title"] == "Pending source"
                 path = f"/admin/kgs/{kg}/jobs/{receipt.job_id}"
                 job = await browser.get(path)
                 assert job.status_code == 200 and 'data-stage="queued"' in job.text
+                assert "Pending source" in job.text and 'hx-trigger="every 3s"' in job.text
                 assert 'data-action="cancel-job"' not in job.text
                 denied = await browser.post(
                     path + "/cancel",
@@ -86,3 +91,4 @@ async def test_console_pending_jobs_and_controls_use_current_source_access(
                     idempotency_key="hide-console-job",
                 )
                 assert (await browser.get(path)).status_code == 404
+                assert not (await browser.get(f"/api/v1/kgs/{kg}/jobs")).json()["items"]

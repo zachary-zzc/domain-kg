@@ -15,6 +15,7 @@ from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.routes import HTTPPageRequest
 from domain_kg.imports.models import ImportPlan
 from domain_kg.imports.requests import ImportRequest
+from domain_kg.jobs.inspection import JobPage
 from domain_kg.jobs.models import JobReceipt
 from domain_kg.materials.inspection_models import MaterialDetail, MaterialPage
 from domain_kg.materials.management import ManagedMaterialPage, ManagementState
@@ -39,7 +40,7 @@ from domain_kg.revisions.models import (
     RevisionReceipt,
     RollbackRevision,
 )
-from domain_kg.transport.models import CurationResult
+from domain_kg.transport.models import CurationResult, ProviderSelection, ProviderSelectionReceipt
 from domain_kg.transport.operations import operation_router
 from domain_kg.transport.runtime import ServiceRuntime
 
@@ -82,6 +83,22 @@ def service_router(runtime: ServiceRuntime) -> APIRouter:
     ) -> AccessContext:
         principal, member = await runtime.identity.actor(request, mutating=mutate)
         return await runtime.access(principal, kg_ids, action, member.org_id)
+
+    @router.put("/kgs/{kg_id}/provider")
+    async def set_provider(
+        request: Request, kg_id: UUID, command: ProviderSelection
+    ) -> ProviderSelectionReceipt:
+        current = await access(request, (kg_id,), Action.CONFIGURE, mutate=True)
+        revision = await runtime.providers.bind(
+            current,
+            kg_id,
+            command.profile_id,
+            expected_revision=command.expected_revision,
+            idempotency_key=command.idempotency_key,
+        )
+        return ProviderSelectionReceipt(
+            kg_id=kg_id, profile_id=command.profile_id, revision=revision
+        )
 
     @router.post("/search")
     async def search(request: Request, command: SearchRequest) -> SearchResponse:
@@ -258,6 +275,16 @@ def service_router(runtime: ServiceRuntime) -> APIRouter:
         matching((kg_id, command.kg_id), (material_id, command.material_id))
         return await runtime.lifecycle.purge(
             await access(request, (kg_id,), Action.PURGE, mutate=True), command
+        )
+
+    @router.get("/kgs/{kg_id}/jobs")
+    async def jobs(
+        request: Request, kg_id: UUID, page: Annotated[HTTPPageRequest, Query()]
+    ) -> JobPage:
+        return await runtime.job_inspection.list(
+            await access(request, (kg_id,), Action.READ),
+            kg_id,
+            PageRequest.model_validate(page.model_dump()),
         )
 
     @router.get("/kgs/{kg_id}/jobs/{job_id}")

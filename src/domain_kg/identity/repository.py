@@ -16,7 +16,8 @@ from pymongo.asynchronous.client_session import AsyncClientSession
 from pymongo.asynchronous.database import AsyncDatabase
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
-from domain_kg.identity.invariants import assert_active_owners
+from domain_kg.identity.delegation import connection_for, member_enabled
+from domain_kg.identity.invariants import assert_active_admin, assert_active_owners
 from domain_kg.identity.models import Group, Member, Principal
 from domain_kg.identity.schema import install_identity_schema
 from domain_kg.models import FrozenModel, IdempotencyKey, PageRequest
@@ -67,10 +68,21 @@ class IdentityRepository:
         return org, member
 
     async def require_member(self, principal: Principal, org_id: UUID | None = None) -> Member:
+        if principal.delegation is not None:
+            connection = await connection_for(self.database, principal)
+            if org_id is not None and org_id != connection.org_id:
+                raise DomainError(
+                    ErrorCode.FORBIDDEN, "The connection belongs to another organization."
+                )
+            org_id = connection.org_id
         query = {"issuer": principal.issuer, "subject": principal.subject, "suspended": False}
         if org_id is not None:
             query["org_id"] = str(org_id)
-        rows = await self.database.members.find(query).limit(2).to_list()
+        rows = [
+            row
+            async for row in self.database.members.find(query)
+            if await member_enabled(self.database, UUID(row["org_id"]), UUID(row["id"]))
+        ]
         if len(rows) != 1:
             raise DomainError(
                 ErrorCode.FORBIDDEN, "An active organization membership must be selected."
@@ -85,7 +97,13 @@ class IdentityRepository:
         """
         if "domain_kg:read" not in principal.scopes:
             return False
-        return await self.database.members.find_one(
+        if principal.delegation is not None:
+            try:
+                await self.require_member(principal)
+                return True
+            except DomainError:
+                return False
+        rows = self.database.members.find(
             {
                 "issuer": principal.issuer,
                 "subject": principal.subject,
@@ -95,8 +113,11 @@ class IdentityRepository:
                     {"kind": "service", "scopes": "domain_kg:read"},
                 ],
             },
-            {"_id": 1},
-        ) is not None
+        )
+        async for row in rows:
+            if await member_enabled(self.database, UUID(row["org_id"]), UUID(row["id"])):
+                return True
+        return False
 
     async def _admin(self, actor: Member, session: AsyncClientSession) -> Member:
         raw = await self.database.members.find_one(
@@ -111,7 +132,7 @@ class IdentityRepository:
             },
             session=session,
         )
-        if raw is None:
+        if raw is None or not await member_enabled(self.database, actor.org_id, actor.id, session):
             raise DomainError(
                 ErrorCode.FORBIDDEN, "Current organization administrator access is required."
             )
@@ -293,6 +314,7 @@ class IdentityRepository:
                 data | {"_id": str(member_id)},
                 session=session,
             )
+            await assert_active_admin(self.database, str(actor.org_id), session)
             return data
 
         return Member.model_validate(

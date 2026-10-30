@@ -1,4 +1,4 @@
-"""Equal-weight reciprocal ranks; similarity scales never cross embedding spaces."""
+"""Reciprocal text ranks and graph supplements; preserve complete source passages."""
 
 from uuid import UUID
 
@@ -76,23 +76,90 @@ def rank_pool(items: list[EvidenceCandidate], top_k: int) -> list[EvidenceCandid
     return ordered[:top_k]
 
 
+def fuse_evidence(
+    candidates: dict[str, list[EvidenceCandidate]], constant: int = 60
+) -> list[EvidenceCandidate]:
+    """Graph supplies novel sources and paths, not a correlated extra text vote.
+
+    Vector/text establish the baseline. A graph hit already in that pool keeps
+    its baseline score and gains authenticated path annotations. Graph-only hits
+    compete by their graph rank; they do not receive a reserved context quota.
+    Explicit reranking remains an independent, opt-in ranking signal.
+    """
+    merged = fuse(candidates, constant)  # Authenticate duplicate consistency first.
+    if not candidates.get("graph"):
+        return merged
+    baseline = {
+        evidence_key(item): item.score
+        for item in fuse(
+            {key: value for key, value in candidates.items() if key != "graph"}, constant
+        )
+    }
+    result = [
+        item.model_copy(update={"score": baseline[evidence_key(item)]})
+        if evidence_key(item) in baseline
+        and any(method in item.method_ranks for method in ("vector", "lexical"))
+        else item
+        for item in merged
+    ]
+    return sorted(result, key=lambda item: (-item.score, str(evidence_key(item))))
+
+
 def select_evidence(
     items: list[EvidenceCandidate], *, top_k: int, max_chars: int
 ) -> tuple[tuple[EvidenceCandidate, ...], bool]:
-    chosen = rank_pool(items, top_k)
-    selected = []
+    if top_k < 1 or max_chars < 1:
+        raise ValueError("Evidence budgets must be positive")
+    unique: dict[tuple[object, ...], EvidenceCandidate] = {}
+    for item in items:
+        key = evidence_key(item)
+        previous = unique.setdefault(key, item)
+        if previous.text != item.text or previous.citation_ids != item.citation_ids:
+            raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Evidence is inconsistent.")
+    pool = list(unique.values())
+    groups: dict[UUID, list[EvidenceCandidate]] = {}
+    for item in pool:
+        groups.setdefault(item.kg_id, []).append(item)
+    selected: dict[tuple[object, ...], EvidenceCandidate] = {}
     remaining = max_chars
-    truncated = len(items) > len(chosen)
-    for index, item in enumerate(chosen):
-        # Share the remaining text budget so the reserved KG slots remain useful.
-        allowance = remaining // (len(chosen) - index)
-        text = item.text[:allowance]
-        if not text:
-            truncated = True
-            continue
-        truncated |= len(text) < len(item.text)
-        selected.append(item.model_copy(update={"text": text}))
-        remaining -= len(text)
-    return tuple(
-        sorted(selected, key=lambda item: (-item.score, str(evidence_key(item))))
-    ), truncated
+    # Reserve a complete passage per KG when both count and text budgets permit.
+    if len(groups) <= top_k:
+        alternatives = list(groups.values())
+        minimums = [min(len(item.text) for item in group) for group in alternatives]
+        if sum(minimums) <= remaining:
+            for index, group in enumerate(alternatives):
+                allowance = remaining - sum(minimums[index + 1 :])
+                item = next(item for item in group if len(item.text) <= allowance)
+                selected[evidence_key(item)] = item
+                remaining -= len(item.text)
+        elif alternatives:
+            # Impossible to represent every KG in full: retain explicit excerpts.
+            # No path is presented as supported by a potentially cut-off passage.
+            for index, group in enumerate(alternatives):
+                allowance = remaining // (len(alternatives) - index)
+                item = group[0]
+                if allowance:
+                    text = item.text[:allowance]
+                    selected[evidence_key(item)] = item.model_copy(
+                        update={"text": text, "graph_paths": ()}
+                    )
+                    remaining -= len(text)
+    for item in pool:
+        if len(selected) >= top_k:
+            break
+        key = evidence_key(item)
+        if key not in selected and len(item.text) <= remaining:
+            selected[key] = item
+            remaining -= len(item.text)
+    if not selected and pool:
+        # More KGs than slots and no complete passage fits: return one explicit
+        # excerpt instead of silently reporting no visible evidence.
+        item = pool[0]
+        selected[evidence_key(item)] = item.model_copy(
+            update={"text": item.text[:max_chars], "graph_paths": ()}
+        )
+    result = tuple(selected[evidence_key(item)] for item in pool if evidence_key(item) in selected)
+    truncated = len(result) < len(pool) or any(
+        item.text != unique[evidence_key(item)].text for item in result
+    )
+    return result, truncated

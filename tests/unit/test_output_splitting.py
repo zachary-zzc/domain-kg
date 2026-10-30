@@ -10,6 +10,54 @@ from domain_kg.ingestion.extraction import validate_extraction
 from domain_kg.providers.extraction import ExtractionOutputLimit
 
 
+@pytest.mark.parametrize("multiple_blocks", [False, True])
+async def test_output_split_preserves_boundary_context_with_exact_offsets(multiple_blocks):
+    from test_chunking import document_blocks
+
+    from domain_kg.ingestion.chunking import chunk_document, tokens
+    from domain_kg.ingestion.models import ChunkConfig
+    from domain_kg.ingestion.output_splitting import extract_with_splitting
+
+    text = "Alpha uses Beta. " * 30
+    parent = (
+        chunk_document(document_blocks([text, text]), ChunkConfig())[0]
+        if multiple_blocks
+        else source(text * 2)
+    )
+    template, schema = proposal(parent)
+    seen = []
+
+    async def produce(chunk):
+        if chunk.id == parent.id:
+            raise ExtractionOutputLimit()
+        seen.append(chunk)
+        return template.model_copy(update={"chunk_id": chunk.id, "entities": (), "assertions": ()})
+
+    await extract_with_splitting(parent, schema, template.provider_profile_id, produce)
+    assert len(seen) == 2
+    left, right = seen
+    assert left.spans[-1].location == right.spans[0].location
+    assert left.spans[-1].start < right.spans[0].start < left.spans[-1].end
+    overlap = left.spans[-1].quote[right.spans[0].start - left.spans[-1].start :]
+    assert 0 < tokens(overlap) <= 100
+    for child in seen:
+        assert len(child.text.encode()) < len(parent.text.encode())
+        for span in child.spans:
+            original = next(s for s in parent.spans if s.location == span.location)
+            assert (
+                span.quote
+                == original.quote[span.start - original.start : span.end - original.start]
+            )
+    for original in parent.spans:
+        covered = {
+            i
+            for c in seen
+            for s in c.spans
+            if s.location == original.location
+            for i in range(s.start, s.end)
+        }
+        assert covered == set(range(original.start, original.end))
+
 async def test_split_output_keeps_full_source_coverage_and_distinct_local_endpoints():
     from domain_kg.ingestion.output_splitting import extract_with_splitting
 
@@ -67,3 +115,34 @@ async def test_rejection_is_never_retried_and_truncation_has_a_hard_depth_limit(
     with pytest.raises(ExtractionOutputLimit):
         await extract_with_splitting(parent, schema, uuid4(), truncated, max_depth=0)
     assert calls == 1
+
+
+async def test_output_recovery_balances_text_in_uneven_pdf_lines():
+    from test_chunking import document_blocks
+
+    from domain_kg.ingestion.chunking import chunk_document, tokens
+    from domain_kg.ingestion.models import ChunkConfig
+    from domain_kg.ingestion.output_splitting import extract_with_splitting
+
+    document = document_blocks(["Label."] * 19 + ["Dense source evidence. " * 240])
+    parent = chunk_document(document, ChunkConfig(target_tokens=4096))[0]
+    template, schema = proposal(parent)
+    ceiling = tokens(parent.text) // 2
+    accepted = []
+
+    async def produce(chunk):
+        if tokens(chunk.text) > ceiling:
+            raise ExtractionOutputLimit()
+        accepted.append(chunk)
+        return template.model_copy(update={"chunk_id": chunk.id, "entities": (), "assertions": ()})
+
+    await extract_with_splitting(parent, schema, template.provider_profile_id, produce)
+    assert accepted
+    for original in parent.spans:
+        covered = set()
+        for chunk in accepted:
+            for span in chunk.spans:
+                if span.location == original.location:
+                    assert span.quote == original.quote[span.start : span.end]
+                    covered.update(range(span.start, span.end))
+        assert covered == set(range(original.start, original.end))

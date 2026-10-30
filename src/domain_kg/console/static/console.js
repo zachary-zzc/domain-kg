@@ -1,3 +1,4 @@
+import {fileMediaType} from "./file-types.js";
 "use strict";
 window.addEventListener("pageshow", function(event) {
   if (event.persisted) window.location.reload();
@@ -33,7 +34,7 @@ document.addEventListener("submit", async function(event) {
     message(form.dataset.uploadMessage || "Checking and uploading the original…");
     const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
     const sha = Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2, "0")).join("");
-    const type = file.type || "application/octet-stream";
+    const type = fileMediaType(file) || file.type || "application/octet-stream";
     const url = new URL(form.dataset.uploadUrl, window.location.origin);
     if (url.origin !== window.location.origin) throw new Error("invalid upload origin");
     url.search = new URLSearchParams({media_type: type, sha256: sha, size_bytes: String(file.size),
@@ -52,3 +53,22 @@ document.addEventListener("submit", async function(event) {
     if (button) button.disabled = false;
   }
 });
+
+// Disable repeat submission only after native constraint validation has succeeded.
+document.addEventListener("submit", function(event) {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-busy-form")) return;
+  const button = form.querySelector("button[type=submit]");
+  if (button) button.disabled = true;
+});
+
+const sidebar = document.querySelector(".sidebar");
+const navigationToggle = document.querySelector(".mobile-menu");
+if (sidebar && navigationToggle) {
+  sidebar.dataset.navReady = "true";
+  navigationToggle.addEventListener("click", function() {
+    const expanded = navigationToggle.getAttribute("aria-expanded") !== "true";
+    navigationToggle.setAttribute("aria-expanded", String(expanded));
+    sidebar.classList.toggle("nav-open", expanded);
+  });
+}

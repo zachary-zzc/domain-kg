@@ -31,10 +31,12 @@ def configured(chunk):
     return profile, connection
 
 
-async def test_strict_request_usage_and_post_response_authorization():
+@pytest.mark.parametrize("output_format", ["json_schema", "json_object"])
+async def test_strict_request_usage_and_post_response_authorization(output_format):
     chunk = source()
     batch, schema = proposal(chunk)
     profile, connection = configured(chunk)
+    profile = profile.model_copy(update={"extraction_response_format": output_format})
     authorizations, usage = [], []
 
     async def authorize(item):
@@ -49,10 +51,13 @@ async def test_strict_request_usage_and_post_response_authorization():
         assert body["store"] is False and "tools" not in body
         assert body["model"] == "approved-test-model"
         assert str(chunk.org_id) in body["messages"][0]["content"]
-        shape = body["response_format"]["json_schema"]
-        assert shape["strict"] is True
-        assert shape["schema"]["additionalProperties"] is False
-        assert shape["schema"]["required"] == ["entities", "assertions"]
+        if output_format == "json_schema":
+            shape = body["response_format"]["json_schema"]
+            assert shape["strict"] is True
+            assert shape["schema"]["additionalProperties"] is False
+            assert shape["schema"]["required"] == ["entities", "assertions"]
+        else:
+            assert body["response_format"] == {"type": "json_object"}
         return httpx.Response(
             200,
             json={
@@ -97,10 +102,12 @@ async def test_strict_request_usage_and_post_response_authorization():
 @pytest.mark.parametrize(
     "failure", ["refusal", "length", "tools", "invalid", "oversize", "redirect"]
 )
-async def test_invalid_provider_response_is_a_safe_failure(failure):
+@pytest.mark.parametrize("output_format", ["json_schema", "json_object"])
+async def test_invalid_provider_response_is_a_safe_failure(failure, output_format):
     chunk = source()
     _, schema = proposal(chunk)
     profile, connection = configured(chunk)
+    profile = profile.model_copy(update={"extraction_response_format": output_format})
 
     async def noop(_):
         pass

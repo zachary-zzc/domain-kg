@@ -1,27 +1,14 @@
 """Exhaust bounded eligible fulltext keys; score only authorized corpus statistics."""
 
-import math
-import re
-import unicodedata
-from collections import Counter
-
 from domain_kg.engine.scope import ScopePredicates
 from domain_kg.errors import BranchUnavailable, DomainError, ErrorCode
 from domain_kg.graph.repository import ACCEPTED
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.retrieval.evidence import SealedEvidence
 from domain_kg.retrieval.models import EvidenceCandidate, SearchRequest
+from domain_kg.retrieval.ranking import BM25, terms
 from domain_kg.revisions.models import ReadScope
 from domain_kg.storage.neo4j import inconsistent
-
-
-def terms(text: str) -> list[str]:
-    text = unicodedata.normalize("NFKC", text).casefold()
-    result = re.findall(r"[^\W_]+(?:[.:/@_-][^\W_]+)*", text)
-    for sequence in re.findall(r"[\u3400-\u9fff]+", text):
-        result.extend(sequence)
-        result.extend(sequence[index : index + 2] for index in range(len(sequence) - 1))
-    return result
 
 
 class LexicalRetrievalBranch:
@@ -71,33 +58,7 @@ class LexicalRetrievalBranch:
                 found.add(identifier)
         if found != set(chunks):
             raise inconsistent()
-        frequencies = {
-            identifier: Counter(terms(chunks[identifier].text)) for identifier in identifiers
-        }
-        lengths = {identifier: sum(value.values()) for identifier, value in frequencies.items()}
-        average = sum(lengths.values()) / len(lengths) or 1.0
-        document_frequency = {
-            term: sum(term in value for value in frequencies.values()) for term in query_terms
-        }
-        scores = {}
-        for identifier, counts in frequencies.items():
-            score = 0.0
-            for term in query_terms:
-                frequency = counts[term]
-                if frequency:
-                    inverse = math.log(
-                        1
-                        + (len(chunks) - document_frequency[term] + 0.5)
-                        / (document_frequency[term] + 0.5)
-                    )
-                    score += (
-                        inverse
-                        * frequency
-                        * 2.2
-                        / (frequency + 1.2 * (0.25 + 0.75 * lengths[identifier] / average))
-                    )
-            if score > 0:
-                scores[identifier] = score
+        scores = BM25({key: chunks[key].text for key in identifiers}).scores(request.query)
         ranked = sorted(scores, key=lambda identifier: (-scores[identifier], identifier))[:50]
         result = [
             data.candidate(chunks[identifier], "lexical", scores[identifier], rank)

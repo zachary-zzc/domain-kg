@@ -3,10 +3,11 @@
 from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from domain_kg.imports.provenance import ImportOrigin
-from domain_kg.ingestion.models import Span
+from domain_kg.ingestion.models import Span, span_status
+from domain_kg.materials.inspection_models import ImageSourceView
 from domain_kg.models import FrozenModel, ManualProvenance
 
 
@@ -21,17 +22,20 @@ class Citation(FrozenModel):
     chunk_id: UUID | None = None
     spans: tuple[Span, ...] = ()
     original_url: str | None = None
+    images: tuple[ImageSourceView, ...] = Field(default=(), exclude_if=lambda v: not v)
     curation_revision_id: UUID | None = None
     provenance: ManualProvenance | None = None
     import_origin: ImportOrigin | None = None
-    support_status: Literal["verified", "manual", "imported_unverified"] | None = None
+    support_status: (
+        Literal["verified", "model_interpreted", "manual", "imported_unverified"] | None
+    ) = None
 
     @model_validator(mode="after")
     def honest_import_citation(self) -> Self:
         expected = (
             "imported_unverified"
             if self.import_origin
-            else ("manual" if self.kind == "manual" else "verified")
+            else ("manual" if self.kind == "manual" else span_status(self.spans))
         )
         if self.support_status is None:
             object.__setattr__(self, "support_status", expected)

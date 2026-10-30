@@ -5,7 +5,7 @@ from uuid import UUID
 from mcp.server.auth.middleware.auth_context import get_access_token
 
 from domain_kg.errors import DomainError, ErrorCode
-from domain_kg.identity.models import AccessContext, Action, Principal
+from domain_kg.identity.models import AccessContext, Action, DelegationRef, Principal
 from domain_kg.transport.runtime import ServiceRuntime
 
 
@@ -23,5 +23,11 @@ async def verified_access(
     issuer = token.claims.get("iss")
     if issuer != runtime.identity.settings.oidc_issuer or token.claims.get("sub") != token.subject:
         raise DomainError(ErrorCode.UNAUTHENTICATED, "The verified credential is not valid here.")
-    principal = Principal(issuer=issuer, subject=token.subject, scopes=frozenset(token.scopes))
+    delegation = token.claims.get("delegation")
+    principal = Principal(
+        issuer=issuer,
+        subject=token.subject,
+        scopes=frozenset(token.scopes),
+        delegation=DelegationRef.model_validate(delegation) if delegation else None,
+    )
     return await runtime.access(principal, kg_ids, action, org_id)

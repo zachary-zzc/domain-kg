@@ -29,7 +29,20 @@ exactly one current wheel/source pair in the checked output directory.
 `Dockerfile` pins the official multi-platform Python 3.12 slim Bookworm image by
 registry digest. Its build installs hashed binary dependencies and the already
 checked application wheel. The runtime uses UID/GID 10001, one API process and no
-embedded database or model. `.dockerignore` permits only the Dockerfile, runtime
+embedded database or generative model. It installs local Tesseract with English
+and simplified Chinese language data, LibreOffice Writer/Calc/Impress and libseccomp at build time. Native macOS installations
+need `brew install tesseract tesseract-lang`; Debian installations need
+`apt-get install tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim`. The parser
+uses fixed system/Homebrew executable locations, never a client-supplied path.
+No OCR model downloads or page uploads occur at runtime. OCR renders at up to
+8 million pixels and 4,096 pixels per side, recognizes one page at a time, and
+limits each OCR subprocess to 30 seconds and 1 MiB of text. The overall parser
+still defaults to 120 seconds (maximum 300), 500 pages and bounded expansion;
+its process-group memory monitor includes OCR children and clears them on exit.
+Large/low-quality scans can require splitting or a better original. Upgrading
+the OCR engine/language data requires a parser-profile version bump and explicit
+reprocessing; old accepted artifacts are never rewritten automatically.
+`.dockerignore` permits only the Dockerfile, runtime
 lock and wheel into the build context. A release operator can build it with
 `docker build -t domain-kg:local .` after producing `dist/`. The image downloads
 and hash-validates its pinned cl100k vocabulary during construction; source
@@ -47,8 +60,11 @@ uv run --no-sync python scripts/check_image.py domain-kg:local --output .cache/i
 `check_image.py` exercises the image's actual default command using synthetic
 inputs streamed over stdin. Its container has no external network, a read-only
 root, UID/GID 10001, no capabilities, no-new-privileges, 64 PIDs, one CPU, a
-512-MiB memory/swap ceiling and a 128-MiB temporary filesystem. It verifies
-offline bilingual tokenization, sandboxed text and native two-page PDF parsing
+512-MiB memory/swap ceiling and a private 128-MiB temporary filesystem mounted at
+`/run/domain-kg` with UID/GID 10001 and mode 0700. The container sets `TMPDIR`
+there; public `/tmp` and `/var/tmp` are not writable. It verifies
+offline bilingual tokenization, sandboxed text, native two-page PDF parsing and
+English/simplified Chinese scanned PDF OCR
 with exact citations, console assets, the worker CLI, HTTP liveness and a 401
 Bearer challenge from unauthenticated MCP. No private files are mounted and the
 probe/testing code is absent from the wheel. The first measured local pass used
@@ -132,3 +148,29 @@ only the current approved owner after verification. Failed target copies retain
 their original-storage reservation until physical cleanup; do not manually refund
 it while files remain. The full physical-profile restore drill, generation
 migration and retention orchestration are still open release gates.
+
+
+Office conversion uses one private LibreOffice profile per task, disabled macros,
+no network, fixed source/output names and a private IPC directory. Install
+LibreOffice for native DOC/PPT/RTF/ODT conversion. Linux parsing requires
+Landlock and libseccomp; unavailable isolation fails closed. Only runtime/system
+resources and the task directory are readable, and only task files are writable.
+Network sockets, outbound connections and process-memory inspection are denied.
+macOS uses the existing native sandbox and private task directory. Conversion,
+OCR and native decoding inherit the parser's time/process/memory ceilings.
+
+The image gate additionally exercises real Office/legacy originals, standalone
+image OCR and native-child filesystem/network isolation in the offline 512-MiB
+container. Image originals (20 MiB each, 40 million pixels) and isolated previews
+are bounded to 128 sources and the document expansion budget. Source artifacts
+participate in material retention/purge and typed backup/restore; restored images
+retain exact hashes while all parent namespaces and references are rewritten.
+
+For a read-only application container, mount
+`--tmpfs /run/domain-kg:rw,noexec,nosuid,size=128m,uid=10001,gid=10001,mode=0700`.
+Do not replace this with a writable public `/tmp`: Debian's LibreOffice launcher
+prefers that public IPC location. The adapter selects the installed native
+`soffice.bin`, passes a private bootstrap IPC path and permits one exit-81 restart
+when creating a fresh profile. Linux native deployments need an equivalent private
+temporary filesystem arrangement for legacy Office conversion; the supplied
+container image establishes it directly.

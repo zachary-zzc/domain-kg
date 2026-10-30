@@ -8,7 +8,7 @@ from test_extraction_validation import proposal, source
 from test_provider_extraction import configured
 
 from domain_kg.errors import DomainError
-from domain_kg.ingestion.models import ExtractionContent
+from domain_kg.ingestion.models import ExtractionResult
 from domain_kg.providers.budget import extraction_fits
 from domain_kg.providers.extraction import ExtractionClient, extraction_payload
 from domain_kg.providers.profiles import ProviderProfile
@@ -78,7 +78,7 @@ async def call(chunk, value, *, authorize=None, format="source_refs_v1"):
         ),
     )
     try:
-        result = ExtractionContent.model_validate(await client.complete(chunk, schema))
+        result = ExtractionResult.model_validate(await client.complete(chunk, schema))
         return result, usage
     finally:
         await client.close()
@@ -139,8 +139,25 @@ async def test_bad_compact_fields_cannot_be_accepted(bad):
         value["commands"] = ["MATCH (n) DELETE n"]
     if bad == "positive_negation":
         chunk = source("Alpha does not use Beta.")
-    with pytest.raises(DomainError):
-        await call(chunk, value)
+    if bad in ("negative_ref", "bool_ref", "command"):
+        with pytest.raises(DomainError):
+            await call(chunk, value)
+    else:
+        from domain_kg.ingestion.extraction import validate_extraction
+
+        result, usage = await call(chunk, value)
+        assert not result.assertions and result.warnings
+        assert len(usage) == 2
+        template, schema = proposal(chunk)
+        accepted = template.model_copy(
+            update={
+                "entities": result.entities,
+                "assertions": result.assertions,
+                "warnings": result.warnings,
+            }
+        )
+        assert validate_extraction(chunk, schema, accepted) == accepted
+        assert all(e.name != "Invented" and e.entity_type != "admin" for e in result.entities)
 
 
 async def test_compact_preserves_negation_qualifiers_and_post_call_revocation():
@@ -172,8 +189,9 @@ async def test_names_refer_to_exact_entities_without_model_generated_array_indic
     assert result.assertions[0].target == result.entities[1].local_id
     for target in ("Invented", "Alpha"):
         value["assertions"][0]["target"] = target
-        with pytest.raises(DomainError):
-            await call(source("Alpha uses Beta."), value, format="source_names_v1")
+        result, _ = await call(source("Alpha uses Beta."), value, format="source_names_v1")
+        assert not result.assertions
+        assert result.warnings == ("extraction_rejected_assertions:1",)
 
 
 def test_medical_schema_can_express_the_leaflet_without_inventing_relations():

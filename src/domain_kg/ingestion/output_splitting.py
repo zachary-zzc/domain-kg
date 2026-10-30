@@ -1,9 +1,11 @@
 """Adapt to a model's output ceiling without accepting or repairing invalid facts."""
 
 from collections.abc import Awaitable, Callable
+from itertools import accumulate
 from uuid import UUID, uuid5
 
 from domain_kg.graph.models import DomainSchema
+from domain_kg.ingestion.chunking import overlap_tail, tokens
 from domain_kg.ingestion.extraction import validate_extraction
 from domain_kg.ingestion.models import (
     ExtractedAssertion,
@@ -12,44 +14,77 @@ from domain_kg.ingestion.models import (
     ParsedChunk,
     Span,
 )
-from domain_kg.providers.budget import source_window
+from domain_kg.ingestion.warnings import merge_warnings
 from domain_kg.providers.extraction import ExtractionOutputLimit
+
+OUTPUT_WINDOW_VERSION = "output-window-v3"
 
 
 def _halves(chunk: ParsedChunk) -> tuple[ParsedChunk, ParsedChunk]:
-    if len(chunk.spans) > 1:
-        middle = len(chunk.spans) // 2
-        groups = (chunk.spans[:middle], chunk.spans[middle:])
-
-        def window(spans: tuple[Span, ...]) -> ParsedChunk:
-            return ParsedChunk.model_validate(
-                chunk.model_copy(
-                    update={
-                        "id": uuid5(
-                            chunk.id,
-                            "output-window-v1/" + "".join(s.model_dump_json() for s in spans),
-                        ),
-                        "spans": spans,
-                        "text": "\n".join(s.quote for s in spans),
-                        "chunker_version": chunk.chunker_version + "/output-window-v1",
-                    }
-                )
+    def window(spans: tuple[Span, ...]) -> ParsedChunk:
+        return ParsedChunk.model_validate(
+            chunk.model_copy(
+                update={
+                    "id": uuid5(
+                        chunk.id,
+                        OUTPUT_WINDOW_VERSION + "/" + "".join(s.model_dump_json() for s in spans),
+                    ),
+                    "spans": spans,
+                    "text": "\n".join(s.quote for s in spans),
+                    "chunker_version": chunk.chunker_version + "/" + OUTPUT_WINDOW_VERSION,
+                }
             )
+        )
 
-        return window(groups[0]), window(groups[1])
-    if len(chunk.spans) != 1 or len(chunk.spans[0].quote) < 2:
+    if not chunk.spans:
         raise ExtractionOutputLimit()
-    span = chunk.spans[0]
-    middle = len(span.quote) // 2
+    weights = [tokens(span.quote) for span in chunk.spans]
+    target = max(1, sum(weights) // 2)
+    largest = max(range(len(weights)), key=weights.__getitem__)
+    span = chunk.spans[largest]
+    if weights[largest] <= target or len(span.quote) < 2:
+        if len(chunk.spans) == 1:
+            raise ExtractionOutputLimit()
+        middle = min(
+            enumerate(accumulate(weights[:-1]), 1), key=lambda pair: abs(pair[1] - target)
+        )[0]
+        left, right = chunk.spans[:middle], chunk.spans[middle:]
+        overlap = overlap_tail(left, min(100, tokens("\n".join(s.quote for s in left)) // 5))
+        return window(left), window((*overlap, *right))
+
+    # A PDF line or DOCX paragraph can contain most of the text. Splitting by
+    # passage count would keep that oversized passage intact through every retry.
+    within = max(1, target - sum(weights[:largest]))
+    low, high, middle = 1, len(span.quote) - 1, 1
+    while low <= high:
+        candidate = (low + high) // 2
+        if tokens(span.quote[:candidate]) <= within:
+            middle, low = candidate, candidate + 1
+        else:
+            high = candidate - 1
     # Prefer a nearby word/line boundary but never drop whitespace or characters.
     candidates = [
         i + 1 for i, c in enumerate(span.quote) if c.isspace() and 0 < i + 1 < len(span.quote)
     ]
     if candidates:
         middle = min(candidates, key=lambda i: abs(i - middle))
-    return source_window(chunk, span, 0, middle), source_window(
-        chunk, span, middle, len(span.quote)
+    left_span = Span(
+        location=span.location,
+        start=span.start,
+        end=span.start + middle,
+        quote=span.quote[:middle],
     )
+    left = (*chunk.spans[:largest], left_span)
+    overlap = overlap_tail(
+        left, min(100, tokens("\n".join(s.quote for s in left)) // 5), split_rows=True
+    )
+    tail = next((s for s in overlap if s.location == span.location), None)
+    start = tail.start - span.start if tail is not None else middle
+    right_span = Span(
+        location=span.location, start=span.start + start, end=span.end, quote=span.quote[start:]
+    )
+    preceding = tuple(s for s in overlap if s.location != span.location)
+    return window(left), window((*preceding, right_span, *chunk.spans[largest + 1 :]))
 
 
 async def extract_with_splitting(
@@ -100,6 +135,6 @@ async def extract_with_splitting(
             provider_profile_id=profile_id,
             entities=tuple(entities),
             assertions=tuple(assertions),
-            warnings=(*warnings, "model_output_split:2"),
+            warnings=merge_warnings((*warnings, "model_output_split:2")),
         ),
     )

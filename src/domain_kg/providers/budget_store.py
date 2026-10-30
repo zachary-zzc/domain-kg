@@ -61,7 +61,7 @@ class ProviderBudgets:
 
     def buckets(
         self, namespace: Namespace, day: str
-    ) -> tuple[tuple[dict[str, Any], BudgetLimits], ...]:
+    ) -> tuple[tuple[dict[str, Any], BudgetLimits | None], ...]:
         common = {"org_id": str(namespace.org_id), "day": day}
         return (
             (common | {"scope": "org", "kg_id": None}, self.limits.organization),

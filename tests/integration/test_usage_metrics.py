@@ -14,6 +14,31 @@ from domain_kg.providers.usage_budget import BudgetBounds
 pytestmark = pytest.mark.storage
 
 
+async def test_unlimited_usage_preserves_both_ledgers_and_reports_no_remaining_cap(team):
+    from domain_kg.operations.metrics import UsageMetrics
+    from domain_kg.providers.usage_budget import BudgetPolicy
+
+    _, policy, principals, _, org, kg = team
+    store = ProviderBudgets(policy, BudgetPolicy(organization=None, knowledge_base=None))
+    owner = await policy.resolve_access(principals["owner"], [kg], Action.CONFIGURE)
+    namespace = Namespace(org_id=org, kg_id=kg)
+
+    async def authorize():
+        await policy.revalidate(owner, action=Action.CONFIGURE)
+
+    for _ in range(2):
+        reserved = await store.reserve(
+            namespace, uuid4(), BudgetBounds(input_tokens=100), authorize=authorize
+        )
+        await store.finish(reserved, outcome="reported", input_tokens=7)
+    usage = await UsageMetrics(policy, store).get(owner, kg)
+    assert usage.limits is None and usage.available is None
+    assert usage.counts.spent_calls == 2 and usage.counts.spent_input_tokens == 14
+    rows = await policy.database.provider_budget_days.find({"org_id": str(org)}).to_list()
+    assert {row["scope"] for row in rows} == {"org", "kg"}
+    assert all(row["counts"]["spent_calls"] == 2 for row in rows)
+
+
 async def test_usage_metrics_scope_pending_spend_and_current_grants(team):
     from domain_kg.operations.metrics import UsageMetrics
 

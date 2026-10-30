@@ -34,9 +34,7 @@ META_FIELDS = {"title", "tags", "author", "source", "language"}
 
 
 def invalid_form() -> DomainError:
-    return DomainError(
-        ErrorCode.VALIDATION_ERROR, "The form fields or revision are invalid."
-    )
+    return DomainError(ErrorCode.VALIDATION_ERROR, "The form fields or revision are invalid.")
 
 
 def tags(value: str) -> tuple[str, ...]:

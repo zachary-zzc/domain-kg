@@ -15,6 +15,7 @@ async def test_http_discovery_includes_search_curation_jobs_and_lifecycle():
     paths = app.openapi()["paths"]
     for path in (
         "/api/v1/search",
+        "/api/v1/kgs/{kg_id}/provider",
         "/api/v1/kgs/{kg_id}/nodes/{entity_id}",
         "/api/v1/kgs/{kg_id}/subgraph",
         "/api/v1/kgs/{kg_id}/nodes/{entity_id}/curate",

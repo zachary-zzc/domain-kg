@@ -11,7 +11,7 @@ from domain_kg.materials.models import MaterialMetadata
 from domain_kg.models import FrozenModel, ManualProvenance, NonNegative, PreservedText, UTCDateTime
 
 Mode = Literal["fast", "deep", "vector", "lexical", "graph"]
-SupportStatus = Literal["verified", "manual", "imported_unverified"]
+SupportStatus = Literal["verified", "model_interpreted", "manual", "imported_unverified"]
 
 
 class SearchFilters(FrozenModel):
@@ -20,7 +20,7 @@ class SearchFilters(FrozenModel):
         """Explicit curator commands inspect all current provenance under the same ACLs."""
         return cls(
             material_ids=material_ids,
-            support_statuses=("verified", "manual", "imported_unverified"),
+            support_statuses=("verified", "model_interpreted", "manual", "imported_unverified"),
         )
 
     material_ids: tuple[UUID, ...] = ()
@@ -36,7 +36,7 @@ class SearchFilters(FrozenModel):
     entity_types: tuple[str, ...] = ()
     predicates: tuple[str, ...] = ()
     min_confidence: Annotated[float, Field(ge=0, le=1)] | None = None
-    support_statuses: tuple[SupportStatus, ...] = ("verified", "manual")
+    support_statuses: tuple[SupportStatus, ...] = ("verified", "model_interpreted", "manual")
     created_from: UTCDateTime | None = None
     created_before: UTCDateTime | None = None
     updated_from: UTCDateTime | None = None
@@ -168,6 +168,8 @@ class GraphStep(FrozenModel):
     assertion_id: UUID
     target_id: UUID
     support_id: UUID
+    predicate: str | None = None
+    polarity: str | None = None
     original_subject_id: UUID | None = None
     original_target_id: UUID | None = None
     identity_mappings: tuple[IdentityWitness, ...] = ()
@@ -205,7 +207,13 @@ class EvidenceCandidate(FrozenModel):
         expected = (
             "imported_unverified"
             if self.import_origin
-            else ("manual" if self.kind == "manual" else "verified")
+            else (
+                "manual"
+                if self.kind == "manual"
+                else "model_interpreted"
+                if self.support_status == "model_interpreted"
+                else "verified"
+            )
         )
         if self.support_status is None:
             object.__setattr__(self, "support_status", expected)

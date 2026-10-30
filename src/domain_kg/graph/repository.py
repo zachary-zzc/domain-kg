@@ -16,7 +16,7 @@ from domain_kg.graph.manual_relations import ManualRelation
 from domain_kg.graph.models import AssertionRecord
 from domain_kg.graph.views import EdgeView, NodeView, SubgraphView
 from domain_kg.graph.visibility import NodeMasks
-from domain_kg.imports.evidence import source_origin
+from domain_kg.imports.evidence import source_origin, source_status
 from domain_kg.ingestion.resolved import ResolvedEntity
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.models import Namespace, SourceVersion
@@ -409,6 +409,19 @@ async def scoped_graph_data(
     rows: tuple[ProjectionBody, ...],
     curations: tuple[ManualNode | ManualRelation | ManualIdentity, ...],
 ) -> GraphData:
+    rows = tuple(
+        row
+        for row in rows
+        if (
+            row.chunk is None
+            or source_status(scope, row.source, row.chunk.spans) in scope.filters.support_statuses
+        )
+        and (
+            row.observation is None
+            or source_status(scope, row.source, row.observation.spans)
+            in scope.filters.support_statuses
+        )
+    )
     if not scope.node_fences:
         return GraphData(scope, rows, curations)
     masks = NodeMasks(

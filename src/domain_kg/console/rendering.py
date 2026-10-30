@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
@@ -67,8 +68,12 @@ def html(template: str, context: dict[str, Any], *, status: int = 200) -> HTMLRe
                 "member": None,
                 "csrf": "",
                 "kg": None,
+                "lifecycle": None,
                 "can_team": False,
                 "can_operator": False,
+                "can_edit": False,
+                "can_owner": False,
+                "current_path": urlsplit(RETURN_TO.get()).path,
                 "locale": LANGUAGE.get(),
             }
             | context

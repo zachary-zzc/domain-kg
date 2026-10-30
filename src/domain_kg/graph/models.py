@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from domain_kg.ingestion.models import Span
+from domain_kg.ingestion.models import Span, span_status
 from domain_kg.models import FrozenModel, ManualProvenance, Namespace, NonNegative, ScopedRef
 
 
@@ -51,7 +51,7 @@ class AssertionRecord(ScopedRef):
 class SupportRecord(ScopedRef):
     assertion: ScopedRef
     version: ScopedRef | None = None
-    status: Literal["verified", "manual", "imported_unverified", "rejected"]
+    status: Literal["verified", "model_interpreted", "manual", "imported_unverified", "rejected"]
     spans: tuple[Span, ...] = ()
     curation: ScopedRef | None = None
     provenance: ManualProvenance | None = None
@@ -59,8 +59,14 @@ class SupportRecord(ScopedRef):
 
     @model_validator(mode="after")
     def supported_provenance(self) -> Self:
-        if self.status == "verified" and (self.version is None or not self.spans):
+        if self.status in ("verified", "model_interpreted") and (
+            self.version is None or not self.spans
+        ):
             raise ValueError("verified supports require a source version and spans")
+        if self.status in ("verified", "model_interpreted") and self.status != span_status(
+            self.spans
+        ):
+            raise ValueError("support status differs from image provenance")
         if self.status == "manual" and (self.curation is None or self.provenance is None):
             raise ValueError("manual supports require durable curation and actor/reason")
         if self.status == "imported_unverified" and self.version is None:

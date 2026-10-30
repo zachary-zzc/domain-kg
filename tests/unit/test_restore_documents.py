@@ -161,3 +161,47 @@ def test_nested_cross_source_extraction_and_schema_refs_are_rejected():
     with pytest.raises(DomainError):
         rewrite.resolved(resolved.model_copy(update={"batches": (batch,)}))
     assert Namespace(org_id=mapping.target.org_id, kg_id=mapping.target.kg_id) == mapping.target
+
+
+def test_restore_retains_image_assets_and_remaps_their_parent_scope():
+    import base64
+    from pathlib import Path
+
+    from domain_kg.ingestion.formats import Blocks
+    from domain_kg.ingestion.images import capture
+    from domain_kg.ingestion.models import ImageOrigin, ParseOptions, SourceImage
+    from domain_kg.operations.restore_documents import RestoreDocuments
+
+    mapping, parsed, *_ = documents()
+    data = (Path(__file__).parents[1] / "fixtures/materials/scanned-bilingual.png").read_bytes()
+    blocks = Blocks(parsed.blob, ParseOptions(ocr=False), "fixture")
+    image = capture(blocks, data, ImageOrigin(part="word/media/image.png"))
+    # Asset metadata must name one of the backup's exact original image objects.
+    raw = BlobRef(
+        **{f: getattr(parsed.blob, f) for f in ("org_id", "kg_id", "material_id", "version_id")},
+        object_id=uuid4(),
+        sha256=image.sha256,
+        size_bytes=len(data),
+        media_type="image/png",
+    )
+    preview_data = base64.b64decode(image.preview_base64)
+    preview = raw.model_copy(
+        update={
+            "object_id": uuid4(),
+            "sha256": image.preview_sha256,
+            "size_bytes": len(preview_data),
+        }
+    )
+    stored = SourceImage.model_validate(
+        image.model_dump()
+        | {"data_base64": None, "blob": raw, "preview_base64": None, "preview_blob": preview}
+    )
+    source = parsed.model_copy(update={"images": (stored,)})
+    restored = RestoreDocuments(
+        mapping, originals=(parsed.blob,), image_assets=(raw, preview)
+    ).parsed(source)
+    assert restored.images[0].blob.kg_id == mapping.target.kg_id
+    assert restored.images[0].sha256 == image.sha256
+    assert restored.images[0].preview_blob.kg_id == mapping.target.kg_id
+    with pytest.raises(DomainError):
+        RestoreDocuments(mapping, originals=(parsed.blob,)).parsed(source)

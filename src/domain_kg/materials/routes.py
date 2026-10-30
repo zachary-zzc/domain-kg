@@ -96,4 +96,71 @@ def material_router(identity: IdentityRuntime, service: MaterialService) -> APIR
             },
         )
 
+    from domain_kg.jobs.queue import JobQueue
+    from domain_kg.materials.image_sources import ImageSources
+    from domain_kg.materials.inspection_models import ImageSourceView
+
+    images = ImageSources(JobQueue(service.policy, service.router))
+
+    @router.get("/materials/{material_id}/versions/{version_id}/images")
+    async def image_list(
+        request: Request, kg_id: UUID, material_id: UUID, version_id: UUID
+    ) -> tuple[ImageSourceView, ...]:
+        return await images.list(
+            await access(request, kg_id, Action.READ), kg_id, material_id, version_id
+        )
+
+    async def image_response(
+        request: Request,
+        kg_id: UUID,
+        material_id: UUID,
+        version_id: UUID,
+        image_id: UUID,
+        *,
+        preview: bool,
+    ) -> StreamingResponse:
+        stream = images.stream(
+            await access(request, kg_id, Action.READ),
+            kg_id,
+            material_id,
+            version_id,
+            image_id,
+            preview=preview,
+        )
+        first = await anext(stream)
+
+        async def body() -> AsyncIterator[bytes]:
+            try:
+                yield first
+                async for part in stream:
+                    yield part
+            finally:
+                await stream.aclose()
+
+        return StreamingResponse(
+            body(),
+            media_type="image/png" if preview else "application/octet-stream",
+            headers={
+                "Content-Disposition": 'inline; filename="preview.png"'
+                if preview
+                else 'attachment; filename="source-image"',
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "no-store",
+            },
+        )
+
+    @router.get("/materials/{material_id}/versions/{version_id}/images/{image_id}")
+    async def image_original(
+        request: Request, kg_id: UUID, material_id: UUID, version_id: UUID, image_id: UUID
+    ) -> StreamingResponse:
+        return await image_response(
+            request, kg_id, material_id, version_id, image_id, preview=False
+        )
+
+    @router.get("/materials/{material_id}/versions/{version_id}/images/{image_id}/preview")
+    async def image_preview(
+        request: Request, kg_id: UUID, material_id: UUID, version_id: UUID, image_id: UUID
+    ) -> StreamingResponse:
+        return await image_response(request, kg_id, material_id, version_id, image_id, preview=True)
+
     return router

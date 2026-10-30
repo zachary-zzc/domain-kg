@@ -20,7 +20,7 @@ from domain_kg.providers.rerank import QueryProvider
 from domain_kg.providers.service import ProviderService
 from domain_kg.retrieval.deep import DeepRetrievalBranch
 from domain_kg.retrieval.federation import fan_out
-from domain_kg.retrieval.fusion import fuse, rank_pool, select_evidence
+from domain_kg.retrieval.fusion import fuse_evidence, rank_pool, select_evidence
 from domain_kg.retrieval.graph import GraphRetrievalBranch, source_citation
 from domain_kg.retrieval.identity import evidence_identity
 from domain_kg.retrieval.lexical import LexicalRetrievalBranch
@@ -82,7 +82,7 @@ class RetrievalService:
         if not valid:
             raise BranchUnavailable("All requested retrieval branches are unavailable.")
         if request.rerank:
-            pool = rank_pool(fuse(combined), 50)
+            pool = rank_pool(fuse_evidence(combined), 50)
             for scope in scopes:
                 try:
                     ranked = await self.queries.rerank(
@@ -111,7 +111,7 @@ class RetrievalService:
                         BranchStatus(kg_id=scope.view.kg_id, branch="rerank", status="unavailable")
                     )
         selected, limited = select_evidence(
-            fuse(combined), top_k=request.top_k, max_chars=request.max_context_chars
+            fuse_evidence(combined), top_k=request.top_k, max_chars=request.max_context_chars
         )
         for scope in scopes:
             await self.resolver.revalidate(scope)
@@ -261,11 +261,11 @@ class RetrievalService:
                 )
             ):
                 raise inconsistent()
-            from domain_kg.imports.evidence import source_origin
+            from domain_kg.imports.evidence import source_origin, source_status
 
             expected_origin = source_origin(scope, row.source)
-            if item.import_origin != expected_origin or item.support_status != (
-                "imported_unverified" if expected_origin else "verified"
+            if item.import_origin != expected_origin or item.support_status != source_status(
+                scope, row.source, row.chunk.spans
             ):
                 raise inconsistent()
             entities, witnesses = evidence_identity(data, row)
@@ -292,6 +292,8 @@ class RetrievalService:
                     ):
                         raise inconsistent()
                     fact = support.claim.assertion
+                    if (step.predicate, step.polarity) != (fact.predicate, fact.polarity):
+                        raise inconsistent()
                     mapped = data.endpoints(support)
                     if (step.subject_id, step.assertion_id, step.target_id) != (
                         mapped[0],

@@ -1,13 +1,15 @@
 """Small-model protocol. Only the server resolves numbered immutable evidence."""
 
 import json
+from collections import Counter
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 
+from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.graph.models import DomainSchema
-from domain_kg.ingestion.extraction import invalid, validate_extraction
+from domain_kg.ingestion.extraction import invalid, validate_extraction, validated_subset
 from domain_kg.ingestion.models import (
     ExtractedAssertion,
     ExtractedEntity,
@@ -149,45 +151,88 @@ def messages(
 
 
 def expand(
-    content: RefContent | NamedContent, chunk: ParsedChunk, schema: DomainSchema, profile_id: UUID
+    content: RefContent | NamedContent,
+    chunk: ParsedChunk,
+    schema: DomainSchema,
+    profile_id: UUID,
+    *,
+    partial: bool = False,
 ) -> ExtractionContent:
     def evidence(refs: tuple[int, ...]) -> tuple[Span, ...]:
         if len(set(refs)) != len(refs) or any(i >= len(chunk.spans) for i in refs):
-            raise invalid()
+            raise invalid("The model returned invalid or repeated source passage references.")
         return tuple(chunk.spans[i] for i in refs)
 
-    if len({(e.name, e.type) for e in content.entities}) != len(content.entities):
-        raise invalid()
-    entities = tuple(
-        ExtractedEntity(local_id=f"e{i}", name=e.name, entity_type=e.type, spans=evidence(e.refs))
-        for i, e in enumerate(content.entities)
+    if not partial and len({(e.name, e.type) for e in content.entities}) != len(content.entities):
+        raise invalid("The model returned duplicate entities.")
+    identities = Counter(
+        e.name if isinstance(content, NamedContent) else (e.name, e.type) for e in content.entities
     )
-    assertions = []
-    by_name = {e.name: i for i, e in enumerate(entities)}
-    if isinstance(content, NamedContent) and len(by_name) != len(entities):
-        raise invalid()
-    for a in content.assertions:
-        if isinstance(a, NamedAssertion):
-            if a.subject not in by_name or a.target not in by_name or a.subject == a.target:
-                raise invalid()
-            subject, target = by_name[a.subject], by_name[a.target]
-        else:
-            subject, target = a.subject, a.target
-        if subject >= len(entities) or target >= len(entities):
-            raise invalid()
-        assertions.append(
-            ExtractedAssertion(
-                subject=entities[subject].local_id,
-                target=entities[target].local_id,
-                predicate=a.predicate,
-                polarity=a.polarity,
-                confidence=a.confidence,
-                spans=evidence(a.refs),
-                qualifiers=tuple(
-                    ExtractedQualifier(name=q.name, value=q.value, spans=evidence(q.refs))
-                    for q in a.qualifiers
-                ),
+    entities_by_index = {}
+    rejected_entities, rejected_assertions = 0, 0
+    for i, entity in enumerate(content.entities):
+        try:
+            identity = (
+                entity.name if isinstance(content, NamedContent) else (entity.name, entity.type)
             )
+            if partial and identities[identity] != 1:
+                raise invalid("The model returned duplicate entities.")
+            entities_by_index[i] = ExtractedEntity(
+                local_id=f"e{i}",
+                name=entity.name,
+                entity_type=entity.type,
+                spans=evidence(entity.refs),
+            )
+        except DomainError as error:
+            if not partial or error.code != ErrorCode.EVIDENCE_VALIDATION_FAILED:
+                raise
+            rejected_entities += 1
+    entities = tuple(entities_by_index.values())
+    assertions = []
+    by_name = {e.name: i for i, e in entities_by_index.items()}
+    if isinstance(content, NamedContent) and len(by_name) != len(entities):
+        raise invalid("The model returned ambiguous entity names.")
+    for a in content.assertions:
+        try:
+            if isinstance(a, NamedAssertion):
+                if a.subject not in by_name or a.target not in by_name or a.subject == a.target:
+                    raise invalid("An extracted relation refers to an unknown or ambiguous entity.")
+                subject, target = by_name[a.subject], by_name[a.target]
+            else:
+                subject, target = a.subject, a.target
+            if subject not in entities_by_index or target not in entities_by_index:
+                raise invalid("An extracted relation refers to an unknown entity.")
+            assertions.append(
+                ExtractedAssertion(
+                    subject=entities_by_index[subject].local_id,
+                    target=entities_by_index[target].local_id,
+                    predicate=a.predicate,
+                    polarity=a.polarity,
+                    confidence=a.confidence,
+                    spans=evidence(a.refs),
+                    qualifiers=tuple(
+                        ExtractedQualifier(name=q.name, value=q.value, spans=evidence(q.refs))
+                        for q in a.qualifiers
+                    ),
+                )
+            )
+        except (DomainError, ValidationError) as error:
+            if not partial:
+                raise
+            if (
+                isinstance(error, DomainError)
+                and error.code != ErrorCode.EVIDENCE_VALIDATION_FAILED
+            ):
+                raise
+            rejected_assertions += 1
+    if partial:
+        return validated_subset(
+            chunk,
+            schema,
+            ExtractionContent(entities=entities, assertions=tuple(assertions)),
+            profile_id,
+            rejected_entities=rejected_entities,
+            rejected_assertions=rejected_assertions,
         )
     batch = validate_extraction(
         chunk,

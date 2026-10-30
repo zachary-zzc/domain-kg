@@ -43,6 +43,10 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "jobs": result,
                 "limit": limit,
+                "cursor": cursor,
+                "command_key": str(uuid4()),
+                "bulk_kind": "jobs",
+                "bulk_scope": "#job-list",
             },
             scope=scope,
         )

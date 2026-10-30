@@ -34,6 +34,13 @@ class Parser:
             str(Path(sys.base_prefix).resolve()),
             str(Path(__file__).resolve().parents[2]),
         ]
+        from domain_kg.ingestion.conversion import office_executable
+
+        office = office_executable()
+        if office is not None:
+            allowed.append(
+                str(office.parents[2] if office.parent.name == "MacOS" else office.parent)
+            )
         profile = "(version 1)(allow default)(deny network*)(deny file-write*)"
         profile += f"(allow file-write* (subpath {json.dumps(str(directory))}))"
         profile += '(allow file-write* (literal "/dev/null"))'
@@ -43,17 +50,39 @@ class Parser:
             + " ".join(f"(subpath {json.dumps(path)})" for path in allowed)
             + ")"
         )
+        if office is not None:
+            # UNO resolves its installation through ancestor directory metadata.
+            # This grants no private directory listing or file content access.
+            profile += (
+                "(allow file-read-metadata "
+                + " ".join(f"(literal {json.dumps(str(path))})" for path in office.parents)
+                + ")"
+            )
         return ["/usr/bin/sandbox-exec", "-p", profile, *arguments]
 
     @staticmethod
     async def _rss(process: asyncio.subprocess.Process) -> int:
+        def linux_group_rss() -> int:
+            total = 0
+            for entry in Path("/proc").iterdir():
+                if not entry.name.isdecimal():
+                    continue
+                try:
+                    # The command name may contain spaces or parentheses.
+                    fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+                    if int(fields[2]) == process.pid:
+                        total += int(fields[21]) * os.sysconf("SC_PAGE_SIZE")
+                except (FileNotFoundError, ProcessLookupError, PermissionError):
+                    continue  # Processes may exit while the group is sampled.
+            return total
+
         if sys.platform != "darwin":
-            return 0  # Linux has the hard address-space limit in parser_worker.
+            return await asyncio.to_thread(linux_group_rss)
         check = await asyncio.create_subprocess_exec(
             "/bin/ps",
             "-o",
             "rss=",
-            "-p",
+            "-g",
             str(process.pid),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
@@ -64,7 +93,7 @@ class Parser:
                 ErrorCode.BACKEND_UNAVAILABLE, "Parser memory monitoring is unavailable."
             )
         try:
-            return int(output.strip() or b"0") * 1024
+            return sum(int(line) for line in output.splitlines()) * 1024
         except ValueError as exc:
             raise DomainError(
                 ErrorCode.BACKEND_UNAVAILABLE, "Parser memory monitoring is unavailable."
@@ -73,7 +102,7 @@ class Parser:
     async def parse(self, blob: BlobRef, options: ParseOptions) -> ParsedDocument:
         blob, options = BlobRef.model_validate(blob), ParseOptions.model_validate(options)
         async with self._limit:
-            with TemporaryDirectory(prefix="domain-kg-parser-") as temporary:
+            with TemporaryDirectory(prefix="kg-parser-") as temporary:
                 directory = await asyncio.to_thread(Path(temporary).resolve)
                 original, output = directory / "original", directory / "parsed.json"
                 with original.open("wb") as stream:
@@ -103,9 +132,16 @@ class Parser:
                     "HF_HUB_OFFLINE": "1",
                     "TRANSFORMERS_OFFLINE": "1",
                     "OMP_NUM_THREADS": "1",
+                    "OMP_THREAD_LIMIT": "1",
                     "OPENBLAS_NUM_THREADS": "1",
                     "MKL_NUM_THREADS": "1",
+                    "HOME": str(directory),
                 }
+                from domain_kg.ingestion.conversion import office_executable
+
+                office = office_executable()
+                if office is not None:
+                    environment["DOMAIN_KG_OFFICE_EXECUTABLE"] = str(office)
                 process = await asyncio.create_subprocess_exec(
                     *self._command(directory, arguments),
                     stdin=asyncio.subprocess.DEVNULL,
@@ -168,11 +204,12 @@ class Parser:
                         "The native parser did not return a valid document.",
                     ) from exc
                 finally:
-                    if process.returncode is None:
-                        try:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
+                    # A failed/killed parser can leave an OCR child behind.
+                    # Always clear its group, even when the parent already exited.
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                     await process.wait()
                     read.cancel()
                     waiter.cancel()

@@ -63,7 +63,7 @@ def graph_data(
             )
             or edge.subject_id not in identifiers
             or edge.target_id not in identifiers
-            or edge.status not in {"verified", "manual", "imported_unverified"}
+            or edge.status not in {"verified", "model_interpreted", "manual", "imported_unverified"}
             for edge in view.edges
         )
     ):

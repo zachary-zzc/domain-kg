@@ -86,21 +86,40 @@ def preparation_steps(
     They never authorize cross-source or cross-visibility artifact reuse.
     """
     import hashlib
-    from importlib.metadata import version
 
     from domain_kg.ingestion.chunking import VERSION, chunk_document
     from domain_kg.ingestion.models import ChunkConfig, ParsedDocument, ParseOptions
     from domain_kg.ingestion.parsers import Parser
+    from domain_kg.ingestion.pdf import VERSION as PDF_VERSION
     from domain_kg.ingestion.repository import SourceRepository
+    from domain_kg.ingestion.text import VERSION as TEXT_VERSION
+    from domain_kg.providers.budget import WINDOW_VERSION
 
+    adaptive_windows = providers is not None and chunk_config is None
     options, chunk_config = options or ParseOptions(), chunk_config or ChunkConfig()
     source = SourceRepository(queue)
+    from domain_kg.ingestion.file_types import OFFICE_VERSION
+    from domain_kg.ingestion.images import VERSION as IMAGE_VERSION
+
     parse_hash = hashlib.sha256(
-        (f"native-v1/{version('docling-parse')}/" + options.model_dump_json()).encode()
+        (
+            PDF_VERSION
+            + OFFICE_VERSION
+            + IMAGE_VERSION
+            + TEXT_VERSION
+            + "/"
+            + options.model_dump_json()
+        ).encode()
     ).hexdigest()
     validate_hash = hashlib.sha256(b"source-validation-v1").hexdigest()
     chunk_hash = hashlib.sha256(
-        (parse_hash + VERSION + chunk_config.model_dump_json()).encode()
+        (
+            parse_hash
+            + VERSION
+            + WINDOW_VERSION
+            + ("/adaptive/" if adaptive_windows else "/fixed/")
+            + chunk_config.model_dump_json()
+        ).encode()
     ).hexdigest()
 
     async def current_chunk_hash(job: LeasedJob) -> str:
@@ -113,7 +132,7 @@ def preparation_steps(
 
         access = await queue.authorize(job)
         selected = await providers.selected(access, job.kg_id)
-        profile, _ = providers.registry.resolve(
+        profile, connection = providers.registry.resolve(
             UUID(selected["profile_id"]),
             Namespace(org_id=job.org_id, kg_id=job.kg_id),
             restricted=False,
@@ -122,8 +141,10 @@ def preparation_steps(
         return hashlib.sha256(
             (
                 chunk_hash
-                + "/model-window-v2/"
+                + "/"
                 + profile.model_dump_json()
+                + connection.endpoint
+                + connection.api_format
                 + schema.model_dump_json()
                 + str(selected["revision"])
             ).encode()
@@ -139,7 +160,9 @@ def preparation_steps(
 
     async def parse(job: LeasedJob) -> Checkpoint:
         blob, blobs = await source.original(job)
-        document = await Parser(blobs).parse(blob, options)
+        from domain_kg.ingestion.image_preparation import store_images
+
+        document = await store_images(queue, job, await Parser(blobs).parse(blob, options))
         checkpoint = await queue.store_artifact(
             job, "parsing", parse_hash, document.model_dump_json().encode()
         )
@@ -154,13 +177,17 @@ def preparation_steps(
                 ErrorCode.REVISION_NOT_READY, "Parsed source is not ready.", retryable=True
             )
         document = await source.read(job, parsed)
-        chunks = chunk_document(document, chunk_config)
+        if providers is not None:
+            from domain_kg.ingestion.image_preparation import interpret_images
+
+            document = await interpret_images(queue, job, document, providers, wanted_hash)
+        config = chunk_config
         if providers is not None:
             from uuid import UUID
 
             from domain_kg.graph.schema import schema_for_kg
             from domain_kg.models import Namespace
-            from domain_kg.providers.budget import fit_source_chunks
+            from domain_kg.providers.budget import adaptive_chunk_config, fit_source_chunks
 
             access = await queue.authorize(job)
             selected = await providers.selected(access, job.kg_id)
@@ -170,15 +197,21 @@ def preparation_steps(
                 restricted=False,
             )
             schema = await schema_for_kg(queue.policy, access, job.kg_id)
+            if adaptive_windows:
+                config = adaptive_chunk_config(profile)
+            chunks = chunk_document(document, config)
             chunks = fit_source_chunks(chunks, schema, profile)
             if await current_chunk_hash(job) != wanted_hash:
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "Model window configuration changed.")
+        else:
+            chunks = chunk_document(document, config)
         document = ParsedDocument.model_validate(
             document.model_copy(update={"chunks": tuple(chunks)})
         )
         checkpoint = await queue.store_artifact(
             job, "chunking", wanted_hash, document.model_dump_json().encode()
         )
+        await source.persist(job, document, checkpoint, chunked=False)
         await source.persist(job, document, checkpoint, chunked=True)
         return checkpoint
 
@@ -195,6 +228,7 @@ def preparation_steps(
             input_hash=chunk_hash,
             execute=chunk,
             input_hash_for=current_chunk_hash,
+            timeout_seconds=300,
         ),
     )
 
@@ -206,20 +240,25 @@ def extraction_steps(
     from uuid import UUID
 
     from domain_kg.graph.schema import schema_for_kg
+    from domain_kg.ingestion.output_splitting import OUTPUT_WINDOW_VERSION
     from domain_kg.ingestion.repository import SourceRepository
     from domain_kg.ingestion.resolution import ResolutionService
     from domain_kg.ingestion.resolved import ExtractionArtifact, ResolvedDocument
     from domain_kg.models import Namespace, SourceVersion
+    from domain_kg.providers.semantics import profile_cache_identity
     from domain_kg.storage.blobs import BlobStore
 
     source = SourceRepository(queue)
     configuration = "|".join(
-        profile.model_dump_json()
+        profile_cache_identity(profile)
         for _, profile in sorted(providers.registry.profiles.items(), key=lambda pair: str(pair[0]))
     )
     extract_hash = hashlib.sha256(
         (
-            chunk_step.input_hash + configuration + "strict-lightrag-1.5.7-v2-cached-output-split"
+            chunk_step.input_hash
+            + configuration
+            + "validated-subset-lightrag-1.5.7-v3-cached-output-split/"
+            + OUTPUT_WINDOW_VERSION
         ).encode()
     ).hexdigest()
     resolve_hash = hashlib.sha256(

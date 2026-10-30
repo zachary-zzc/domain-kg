@@ -1,7 +1,6 @@
 """Immutable server-selected original objects, with bounded memory and verified bytes."""
 
 import asyncio
-import codecs
 import hashlib
 from collections.abc import AsyncIterable, AsyncIterator
 from tempfile import SpooledTemporaryFile
@@ -10,6 +9,8 @@ from uuid import UUID, uuid4
 from botocore.exceptions import BotoCoreError, ClientError
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
+from domain_kg.ingestion.file_types import IMAGE_TYPES, OFFICE_ZIP_TYPES, OLE_TYPES
+from domain_kg.ingestion.text import TextValidator
 from domain_kg.materials.models import BlobRef, BlobScope
 from domain_kg.storage.router import BlobBinding
 
@@ -20,12 +21,13 @@ TEXT_TYPES = {
     "text/markdown",
     "text/html",
     "text/csv",
+    "text/tab-separated-values",
     "application/json",
     "application/graphml+xml",
 }
 ZIP_TYPES = {
     "application/zip",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    *OFFICE_ZIP_TYPES,
 }
 
 
@@ -46,13 +48,34 @@ class BlobStore:
 
     @staticmethod
     def _check_type(media_type: str, prefix: bytes) -> None:
-        if media_type == "application/msword":
-            raise DomainError(
-                ErrorCode.UNSUPPORTED_FORMAT,
-                "Export legacy Word documents as DOCX or PDF before uploading.",
-            )
-        if media_type in TEXT_TYPES:
-            if b"\x00" in prefix or prefix.startswith((b"%PDF-", b"PK\x03\x04")):
+        if media_type in IMAGE_TYPES:
+            magic = {
+                "image/png": (b"\x89PNG\r\n\x1a\n",),
+                "image/jpeg": (b"\xff\xd8\xff",),
+                "image/webp": (b"RIFF",),
+                "image/gif": (b"GIF87a", b"GIF89a"),
+                "image/tiff": (b"II*\x00", b"MM\x00*"),
+                "image/bmp": (b"BM",),
+            }
+            if not prefix.startswith(magic[media_type]) or (
+                media_type == "image/webp" and prefix[8:12] != b"WEBP"
+            ):
+                raise DomainError(
+                    ErrorCode.UNSUPPORTED_FORMAT, "Image bytes do not match the declared type."
+                )
+        elif media_type in OLE_TYPES:
+            if not prefix.startswith(bytes.fromhex("d0cf11e0a1b11ae1")):
+                raise DomainError(
+                    ErrorCode.UNSUPPORTED_FORMAT, "Content does not match legacy Office."
+                )
+        elif media_type in ("application/rtf", "text/rtf"):
+            if not prefix.startswith(b"{\\rtf"):
+                raise DomainError(ErrorCode.UNSUPPORTED_FORMAT, "Content does not match RTF.")
+        elif media_type in TEXT_TYPES:
+            if (
+                b"\x00" in prefix
+                and not prefix.startswith((b"\xff\xfe", b"\xfe\xff", b"\x00\x00\xfe\xff"))
+            ) or prefix.startswith((b"%PDF-", b"PK\x03\x04")):
                 raise DomainError(ErrorCode.UNSUPPORTED_FORMAT, "Content does not match its type.")
         elif media_type == "application/pdf":
             if not prefix.startswith(b"%PDF-"):
@@ -77,7 +100,7 @@ class BlobStore:
         identifier = object_id or uuid4()
         key = self._key(scope, identifier)
         digest, size, prefix = hashlib.sha256(), 0, b""
-        decoder = codecs.getincrementaldecoder("utf-8")() if media_type in TEXT_TYPES else None
+        decoder = TextValidator() if media_type in TEXT_TYPES else None
         with SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b") as spool:
             try:
                 async for part in stream:
@@ -96,7 +119,9 @@ class BlobStore:
                 if decoder:
                     decoder.decode(b"", final=True)
             except UnicodeError as exc:
-                raise DomainError(ErrorCode.UNSUPPORTED_FORMAT, "Text must be UTF-8.") from exc
+                raise DomainError(
+                    ErrorCode.UNSUPPORTED_FORMAT, "Use UTF-8, BOM-marked Unicode, or GB18030 text."
+                ) from exc
             self._check_type(media_type, prefix)
             if (
                 not size

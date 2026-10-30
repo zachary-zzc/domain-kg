@@ -10,16 +10,47 @@ from uuid import uuid5
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.graph.models import DomainSchema
-from domain_kg.ingestion.chunking import tokens
-from domain_kg.ingestion.models import ParsedChunk, Span
-from domain_kg.providers.extraction import extraction_payload
+from domain_kg.ingestion.chunking import overlap_tail, tokens
+from domain_kg.ingestion.models import ChunkConfig, ParsedChunk, Span
+from domain_kg.jobs.diagnostics import EVIDENCE_DETAILS
+from domain_kg.providers.extraction import evidence_correction, extraction_payload
 from domain_kg.providers.profiles import ProviderProfile
 
-WINDOW_VERSION = "model-window-v2"
+WINDOW_VERSION = "model-window-v5"
+CORRECTION_RESERVE = evidence_correction(max(EVIDENCE_DETAILS, key=lambda text: len(text.encode())))
+
+
+def adaptive_chunk_config(profile: ProviderProfile) -> ChunkConfig:
+    """Choose a planning ceiling; fit_source_chunks still measures each complete request."""
+    available = min(
+        profile.extraction_context_tokens - profile.max_completion_tokens - 256,
+        profile.embedding_context_tokens - 128,
+    )
+    if available < 1:
+        raise DomainError(
+            ErrorCode.QUOTA_EXCEEDED,
+            "Model context cannot hold the schema and one source character.",
+        )
+    defaults = ChunkConfig()
+    return ChunkConfig(
+        target_tokens=available,
+        overlap_tokens=min(
+            defaults.overlap_tokens,
+            available * defaults.overlap_tokens // defaults.target_tokens,
+        ),
+    )
 
 
 def extraction_fits(chunk: ParsedChunk, schema: DomainSchema, profile: ProviderProfile) -> bool:
-    payload = extraction_payload(chunk, schema, profile)
+    # Preparation must leave room for the one corrective request as well as the
+    # initial request. The actual correction remains checked before transmission.
+    return extraction_request_fits(
+        extraction_payload(chunk, schema, profile, correction=CORRECTION_RESERVE), profile
+    )
+
+
+def extraction_request_fits(payload: dict[str, object], profile: ProviderProfile) -> bool:
+    """Count the actual prompt, including correction instructions, before transmission."""
     prompt = {"messages": payload["messages"]}
     if profile.schema_in_context:
         prompt["response_format"] = payload["response_format"]
@@ -110,11 +141,11 @@ def fit_source_chunks(
                     )
                 if end == len(original.quote):
                     break
-                # Keep a small overlap, always making progress, capped at 100 cl100k tokens.
-                overlap = min((end - start) // 5, 100)
-                while overlap and tokens(original.quote[end - overlap : end]) > 100:
-                    overlap -= 1
-                start = max(start + 1, end - overlap)
+                overlap = overlap_tail(
+                    [pieces[-1]], min(tokens(pieces[-1].quote) // 5, 100), split_rows=True
+                )
+                next_start = overlap[0].start - original.start if overlap else end
+                start = max(start + 1, next_start)
 
         def packed(spans: list[Span], parent: ParsedChunk = chunk) -> ParsedChunk:
             return ParsedChunk.model_validate(
@@ -134,13 +165,25 @@ def fit_source_chunks(
         produced = 0
         for piece in pieces:
             candidate = [*pending, piece]
-            if pending and not fits(packed(candidate)):
+            shared = bool(
+                pending and pending[-1].location == piece.location and piece.start < pending[-1].end
+            )
+            if pending and (shared or not fits(packed(candidate))):
                 result.append(packed(pending))
                 produced += 1
-                # Retain a complete preceding source line for pronouns/headings
-                # where it fits. Never let overlap prevent forward progress.
-                overlap_spans = pending[-1:] if tokens(pending[-1].quote) <= 100 else []
-                pending = overlap_spans if fits(packed([*overlap_spans, piece])) else []
+
+                def tail_fits(tail: list[Span], current: Span = piece) -> bool:
+                    return fits(packed([*tail, current]))
+
+                pending = (
+                    []
+                    if shared
+                    else overlap_tail(
+                        pending,
+                        100,
+                        fits=tail_fits,
+                    )
+                )
             pending.append(piece)
             if produced >= 128 or len(result) > 100000:
                 raise DomainError(

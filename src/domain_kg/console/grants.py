@@ -32,6 +32,20 @@ def grant_router(runtime: ServiceRuntime) -> APIRouter:
             session.principal, (kg_id,), Action.MANAGE_GRANTS, session.member.org_id
         )
         result = await runtime.grants.list(access, kg_id, PageRequest(limit=limit, cursor=cursor))
+        subjects: list[dict[str, str]] = []
+        if session.member.role == "admin":
+            for kind in ("members", "services", "groups"):
+                directory = await runtime.identity.repository.list_page(
+                    session.member, kind, PageRequest(limit=100)
+                )
+                subjects.extend(
+                    {
+                        "id": item["id"],
+                        "name": item.get("name", item.get("subject", "")),
+                        "kind": "group" if kind == "groups" else "member",
+                    }
+                    for item in directory["items"]
+                )
         return await page(
             runtime,
             session,
@@ -43,6 +57,8 @@ def grant_router(runtime: ServiceRuntime) -> APIRouter:
                 "grants": result,
                 "limit": limit,
                 "command_key": str(uuid4()),
+                "subjects": subjects,
+                "subject_names": {item["id"]: item["name"] for item in subjects},
             },
         )
 

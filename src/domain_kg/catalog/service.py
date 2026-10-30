@@ -111,12 +111,17 @@ class CatalogService:
         self,
         access: AccessContext,
         kg_id: UUID,
-        state: Literal["ready", "read_only", "archived"],
+        state: Literal["ready", "read_only", "archived"] | None,
         *,
         expected_revision: int,
         idempotency_key: str,
+        name: str | None = None,
     ) -> KGReceipt:
-        if state not in ("ready", "read_only", "archived"):
+        if (
+            state not in (None, "ready", "read_only", "archived")
+            or (state is None and name is None)
+            or (name is not None and (not name.strip() or len(name) > 200))
+        ):
             raise DomainError(ErrorCode.VALIDATION_ERROR, "Unsupported KG state transition.")
         return self._receipt(
             await self.repository.set_state(
@@ -125,6 +130,35 @@ class CatalogService:
                 state,
                 expected_revision=expected_revision,
                 idempotency_key=idempotency_key,
+                name=name,
+            )
+        )
+
+    async def delete_kg(
+        self, access: AccessContext, kg_id: UUID, *, expected_revision: int, idempotency_key: str
+    ) -> KGReceipt:
+        """Fence data access while retaining sources for explicit restoration."""
+        return self._receipt(
+            await self.repository.set_state(
+                access,
+                kg_id,
+                "deleted",
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+            )
+        )
+
+    async def restore_kg(
+        self, access: AccessContext, kg_id: UUID, *, expected_revision: int, idempotency_key: str
+    ) -> KGReceipt:
+        return self._receipt(
+            await self.repository.set_state(
+                access,
+                kg_id,
+                "ready",
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+                restore_deleted=True,
             )
         )
 
@@ -146,7 +180,15 @@ class CatalogService:
         current = await self.policy.resolve_access(
             access.principal, [], Action.LIST_KGS, org_id=access.org_id
         )
-        if lifecycle not in (None, "provisioning", "ready", "read_only", "archived", "error"):
+        if lifecycle not in (
+            None,
+            "provisioning",
+            "ready",
+            "read_only",
+            "archived",
+            "error",
+            "deleted",
+        ):
             raise DomainError(ErrorCode.VALIDATION_ERROR, "Unsupported lifecycle filter.")
         binding = {
             "org_id": str(current.org_id),
@@ -173,6 +215,8 @@ class CatalogService:
         query: dict[str, Any] = {"org_id": str(current.org_id), "id": {"$gt": after}}
         if lifecycle is not None:
             query["state"] = lifecycle
+        else:
+            query["state"] = {"$ne": "deleted"}
         results: list[dict[str, Any]] = []
         last = after
         more = False

@@ -1,20 +1,16 @@
 """Typed MCP tools call shared services using only verified request credentials."""
 
-from collections.abc import Awaitable, Callable
-from functools import wraps
-from typing import Annotated, ParamSpec
+from typing import Annotated
 from uuid import UUID
 
 from mcp.server import MCPServer
-from mcp.types import CallToolResult, TextContent, ToolAnnotations
-from pydantic import BaseModel
+from mcp.types import CallToolResult
 
 from domain_kg.catalog.models import CreateKG, KGReceipt
 from domain_kg.catalog.routes import KGStateChange
-from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.graph.views import NodeView, SubgraphView
 from domain_kg.identity.grant_models import GrantPage, MemberRoleChange, PolicyReceipt
-from domain_kg.identity.models import AccessContext, Action
+from domain_kg.identity.models import Action
 from domain_kg.jobs.models import JobReceipt
 from domain_kg.materials.inspection_models import MaterialDetail, MaterialPage
 from domain_kg.materials.models import (
@@ -37,75 +33,33 @@ from domain_kg.revisions.models import (
     RevisionReceipt,
     RollbackRevision,
 )
-from domain_kg.transport.auth import verified_access
-from domain_kg.transport.errors import tool_error
-from domain_kg.transport.models import CurationResult, Health, KGPage, KGSummary
+from domain_kg.transport.mcp_common import MCPTools, output
+from domain_kg.transport.models import (
+    CurationResult,
+    Health,
+    KGPage,
+    KGSummary,
+    ProviderSelection,
+    ProviderSelectionReceipt,
+)
 from domain_kg.transport.runtime import ServiceRuntime
 
-P = ParamSpec("P")
 DEFAULT_PAGE = PageRequest()
 DEFAULT_FILTERS = SearchFilters()
 
 
-def output(value: BaseModel, text: str) -> CallToolResult:
-    return CallToolResult(
-        content=[TextContent(type="text", text=text)],
-        structured_content=value.model_dump(mode="json"),
-    )
-
-
 def register_tools(server: MCPServer[None], runtime: ServiceRuntime | None) -> None:
-    async def access(
-        kg_ids: tuple[UUID, ...],
-        action: Action,
-        org_id: UUID | None,
-    ) -> AccessContext:
-        return await verified_access(runtime, kg_ids, action, org_id)
+    context = MCPTools(server, runtime)
+    tool, access, services = context.tool, context.access, context.services
+    from domain_kg.transport.mcp_management import register_management
+    from domain_kg.transport.mcp_operations import register_operations
+    from domain_kg.transport.mcp_settings import register_settings
+    from domain_kg.transport.mcp_team import register_team
 
-    def tool(
-        name: str,
-        *,
-        read: bool = False,
-        destructive: bool = False,
-        external: bool = False,
-    ) -> Callable[[Callable[P, Awaitable[CallToolResult]]], Callable[P, Awaitable[CallToolResult]]]:
-        def decorate(
-            function: Callable[P, Awaitable[CallToolResult]],
-        ) -> Callable[P, Awaitable[CallToolResult]]:
-            @wraps(function)
-            async def guarded(*args: P.args, **kwargs: P.kwargs) -> CallToolResult:
-                try:
-                    return await function(*args, **kwargs)
-                except DomainError as error:
-                    return tool_error(error)
-                except Exception:
-                    return tool_error(
-                        DomainError(
-                            ErrorCode.BACKEND_UNAVAILABLE,
-                            "The requested service is unavailable.",
-                            retryable=True,
-                        )
-                    )
-
-            server.tool(
-                name="domain_kg_" + name,
-                annotations=ToolAnnotations(
-                    read_only_hint=read,
-                    destructive_hint=destructive,
-                    idempotent_hint=True,
-                    open_world_hint=external,
-                ),
-            )(guarded)
-            return guarded
-
-        return decorate
-
-    def services() -> ServiceRuntime:
-        if runtime is None:
-            raise DomainError(
-                ErrorCode.UNAUTHENTICATED, "A verified HTTP bearer credential is required."
-            )
-        return runtime
+    register_management(context)
+    register_operations(context)
+    register_settings(context)
+    register_team(context)
 
     @tool("list_kgs", read=True)
     async def list_kgs(
@@ -300,10 +254,29 @@ def register_tools(server: MCPServer[None], runtime: ServiceRuntime | None) -> N
             current,
             kg_id,
             command.state,
+            name=command.name,
             expected_revision=command.expected_revision,
             idempotency_key=command.idempotency_key,
         )
         return output(result, "KG state updated.")
+
+    @tool("set_provider", destructive=True)
+    async def set_provider(
+        kg_id: UUID, command: ProviderSelection, org_id: UUID | None = None
+    ) -> Annotated[CallToolResult, ProviderSelectionReceipt]:
+        """Select an operator-approved profile for this KG; requires current owner access."""
+        current = await access((kg_id,), Action.CONFIGURE, org_id)
+        revision = await services().providers.bind(
+            current,
+            kg_id,
+            command.profile_id,
+            expected_revision=command.expected_revision,
+            idempotency_key=command.idempotency_key,
+        )
+        return output(
+            ProviderSelectionReceipt(kg_id=kg_id, profile_id=command.profile_id, revision=revision),
+            "Approved provider selected.",
+        )
 
     @tool("list_members", read=True)
     async def list_members(

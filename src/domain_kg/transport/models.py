@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from domain_kg.graph.identity_commands import IdentityImpact
-from domain_kg.models import FrozenModel, NonNegative
+from domain_kg.models import FrozenModel, IdempotencyKey, NonNegative
 from domain_kg.revisions.models import CurationImpact, CurationReceipt, RevisionReceipt
 
 
@@ -27,6 +27,18 @@ class KGPage(FrozenModel):
 class Health(FrozenModel):
     kg_id: UUID
     status: str
+
+
+class ProviderSelection(FrozenModel):
+    profile_id: UUID
+    expected_revision: NonNegative
+    idempotency_key: IdempotencyKey
+
+
+class ProviderSelectionReceipt(FrozenModel):
+    kg_id: UUID
+    profile_id: UUID
+    revision: NonNegative
 
 
 class CurationResult(FrozenModel):

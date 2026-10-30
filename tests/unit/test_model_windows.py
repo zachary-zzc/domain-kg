@@ -1,7 +1,7 @@
 """Model limits change source windows without losing original citation offsets."""
 
 import pytest
-from test_chunking import document
+from test_chunking import document, document_blocks
 from test_provider_extraction import configured
 
 from domain_kg.errors import DomainError, ErrorCode
@@ -10,6 +10,89 @@ from domain_kg.ingestion.chunking import chunk_document
 from domain_kg.ingestion.models import ChunkConfig
 from domain_kg.models import Namespace
 from domain_kg.providers.budget import extraction_fits, fit_source_chunks, split_embedding_input
+
+
+def test_adaptive_windows_grow_with_input_capacity_and_shrink_for_output_reserve():
+    from domain_kg.ingestion.chunking import tokens
+    from domain_kg.providers.budget import adaptive_chunk_config
+
+    source = document("Neutral evidence. " * 600)
+    first = chunk_document(source, ChunkConfig())[0]
+    profile, _ = configured(first)
+    profile = profile.model_copy(
+        update={
+            "extraction_context_tokens": 16384,
+            "embedding_context_tokens": 8192,
+            "max_completion_tokens": 512,
+            "schema_in_context": False,
+        }
+    )
+    schema = schema_for(Namespace(org_id=first.org_id, kg_id=first.kg_id), "general")
+    variants = (
+        profile,
+        profile.model_copy(update={"embedding_context_tokens": 1536}),
+        profile.model_copy(update={"max_completion_tokens": 12288}),
+    )
+    groups = []
+    for current in variants:
+        base = chunk_document(source, adaptive_chunk_config(current))
+        windows = fit_source_chunks(base, schema, current)
+        groups.append(windows)
+        assert fit_source_chunks(base, schema, current) == windows
+        covered = set()
+        for chunk in windows:
+            assert extraction_fits(chunk, schema, current)
+            assert len(chunk.text.encode()) + 128 <= current.embedding_context_tokens
+            for span in chunk.spans:
+                assert span.quote == source.blocks[0].text[span.start : span.end]
+                covered.update(range(span.start, span.end))
+        assert covered == set(range(len(source.blocks[0].text)))
+    large, embedding_limited, output_limited = groups
+    assert max(tokens(c.text) for c in large) > 700
+    for smaller in (embedding_limited, output_limited):
+        assert len(smaller) > len(large)
+        assert max(tokens(c.text) for c in smaller) < max(tokens(c.text) for c in large)
+
+
+def test_adaptive_context_with_no_room_for_source_fails_before_chunking():
+    from domain_kg.providers.budget import adaptive_chunk_config
+
+    first = chunk_document(document("Evidence."), ChunkConfig())[0]
+    profile, _ = configured(first)
+    profile = profile.model_copy(
+        update={"extraction_context_tokens": 1024, "max_completion_tokens": 1024}
+    )
+    with pytest.raises(DomainError) as error:
+        adaptive_chunk_config(profile)
+    assert error.value.code == ErrorCode.QUOTA_EXCEEDED
+
+
+def test_model_repacking_retains_partial_previous_passage_within_both_budgets():
+    source = document_blocks(["Alpha evidence. " * 55, "Beta evidence. " * 55])
+    base = chunk_document(source, ChunkConfig())
+    assert len(base) == 1
+    profile, _ = configured(base[0])
+    profile = profile.model_copy(
+        update={"embedding_context_tokens": 1400, "extraction_context_tokens": 32000}
+    )
+    schema = schema_for(Namespace(org_id=source.blob.org_id, kg_id=source.blob.kg_id), "general")
+    windows = fit_source_chunks(base, schema, profile)
+    assert len(windows) == 2
+    overlap = windows[1].spans[0]
+    previous = windows[0].spans[-1]
+    assert overlap.location == previous.location
+    assert previous.start < overlap.start < overlap.end == previous.end
+    from domain_kg.ingestion.chunking import tokens
+
+    assert 0 < tokens(overlap.quote) <= 100
+    for chunk in windows:
+        assert extraction_fits(chunk, schema, profile)
+        assert len(chunk.text.encode()) + 128 <= 1400
+        for span in chunk.spans:
+            block = next(b for b in source.blocks if b.location == span.location)
+            assert span.quote == block.text[span.start : span.end]
+        points = [(s.location.block_id, i) for s in chunk.spans for i in range(s.start, s.end)]
+        assert len(points) == len(set(points))
 
 
 def test_windows_fit_both_models_and_preserve_unicode_source_offsets():

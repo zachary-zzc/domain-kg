@@ -6,6 +6,7 @@ commands, and no native LightRAG storage or mixed-source summary is served here.
 
 import json
 import re
+from collections import Counter
 from importlib.metadata import version
 from typing import Any, Protocol
 from uuid import UUID
@@ -15,7 +16,15 @@ from pydantic import ValidationError
 from domain_kg.engine.source_mapping import engine_name, engine_source
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.graph.models import DomainSchema
-from domain_kg.ingestion.models import ExtractionBatch, ExtractionContent, ParsedChunk, Span
+from domain_kg.ingestion.models import (
+    ExtractedAssertion,
+    ExtractedEntity,
+    ExtractionBatch,
+    ExtractionContent,
+    ExtractionResult,
+    ParsedChunk,
+    Span,
+)
 
 NEGATION = re.compile(
     r"\b(?:not|never|no|without|neither|cannot|can't|doesn't|fails? to|lacks?)\b"
@@ -27,10 +36,82 @@ IDENTIFIER = re.compile(
 )
 
 
-def invalid() -> DomainError:
+def invalid(
+    message: str = "Extraction fields must match the authorized source and domain schema.",
+) -> DomainError:
     return DomainError(
         ErrorCode.EVIDENCE_VALIDATION_FAILED,
-        "Extraction fields must match the authorized source and domain schema.",
+        message,
+    )
+
+
+def validated_subset(
+    chunk: ParsedChunk,
+    schema: DomainSchema,
+    content: ExtractionContent,
+    profile_id: UUID,
+    *,
+    rejected_entities: int = 0,
+    rejected_assertions: int = 0,
+) -> ExtractionResult:
+    """Keep only independently validated facts; never amend their evidence or qualifiers."""
+
+    def check(
+        entities: tuple[ExtractedEntity, ...], assertions: tuple[ExtractedAssertion, ...]
+    ) -> ExtractionBatch:
+        return validate_extraction(
+            chunk,
+            schema,
+            ExtractionBatch(
+                org_id=chunk.org_id,
+                kg_id=chunk.kg_id,
+                material_id=chunk.material_id,
+                version_id=chunk.version_id,
+                chunk_id=chunk.id,
+                schema_id=schema.id,
+                schema_revision=schema.revision,
+                provider_profile_id=profile_id,
+                entities=entities,
+                assertions=assertions,
+            ),
+        )
+
+    check((), ())  # A source/schema mismatch is never a discardable claim.
+    identifiers = Counter(entity.local_id for entity in content.entities)
+    accepted_entities = []
+    for entity in content.entities:
+        try:
+            if identifiers[entity.local_id] != 1:
+                raise invalid("The model returned duplicate entity identifiers.")
+            check((entity,), ())
+        except DomainError as error:
+            if error.code != ErrorCode.EVIDENCE_VALIDATION_FAILED:
+                raise
+            rejected_entities += 1
+        else:
+            accepted_entities.append(entity)
+    entities = tuple(accepted_entities)
+    accepted_assertions = []
+    for assertion in content.assertions:
+        try:
+            check(entities, (assertion,))
+        except ValidationError:
+            # Typed claims can still reference an entity that was rejected above.
+            rejected_assertions += 1
+        except DomainError as error:
+            if error.code != ErrorCode.EVIDENCE_VALIDATION_FAILED:
+                raise
+            rejected_assertions += 1
+        else:
+            accepted_assertions.append(assertion)
+    result = check(entities, tuple(accepted_assertions))
+    warnings = tuple(
+        f"extraction_rejected_{kind}:{count}"
+        for kind, count in (("entities", rejected_entities), ("assertions", rejected_assertions))
+        if count
+    )
+    return ExtractionResult(
+        entities=result.entities, assertions=result.assertions, warnings=warnings
     )
 
 
@@ -73,18 +154,22 @@ def validate_extraction(
                 and span.quote == known.quote[span.start - known.start : span.end - known.start]
                 for known in chunk.spans
             ):
-                raise invalid()
+                raise invalid(
+                    "An evidence quotation or location does not match the original source."
+                )
         return "\n".join(span.quote for span in spans)
 
     entities = {entity.local_id: entity for entity in batch.entities}
     if len(entities) != len(batch.entities):
-        raise invalid()
+        raise invalid("The model returned duplicate entity identifiers.")
     for entity in batch.entities:
         evidence = check(entity.spans)
+        if entity.entity_type not in schema.entity_types:
+            raise invalid("An extracted entity uses an unsupported type.")
+        if entity.name not in evidence:
+            raise invalid("An extracted entity name is absent from its cited source passages.")
         if (
-            entity.entity_type not in schema.entity_types
-            or entity.name not in evidence
-            or (entity.description and entity.description not in evidence)
+            (entity.description and entity.description not in evidence)
             or any(
                 not alias or len(alias) > 1000 or alias not in evidence for alias in entity.aliases
             )
@@ -95,28 +180,28 @@ def validate_extraction(
                 )
             )
         ):
-            raise invalid()
+            raise invalid(
+                "An entity description, alias or identifier is not grounded in its evidence."
+            )
     predicates = {predicate.name: predicate for predicate in schema.predicates}
     for assertion in batch.assertions:
         evidence = check(assertion.spans)
         subject, target = entities.get(assertion.subject), entities.get(assertion.target)
         predicate = predicates.get(assertion.predicate)
-        if (
-            subject is None
-            or target is None
-            or predicate is None
-            or subject.name not in evidence
-            or target.name not in evidence
-            or (
-                subject.entity_type not in predicate.subject_types
-                or target.entity_type not in predicate.target_types
-            )
-            or (assertion.polarity == "positive" and NEGATION.search(evidence))
+        if subject is None or target is None:
+            raise invalid("An extracted relation refers to an unknown entity.")
+        if predicate is None or (
+            subject.entity_type not in predicate.subject_types
+            or target.entity_type not in predicate.target_types
         ):
-            raise invalid()
+            raise invalid("An extracted relation uses an unsupported predicate or endpoint type.")
+        if subject.name not in evidence or target.name not in evidence:
+            raise invalid("The relation evidence does not contain both endpoint names.")
+        if assertion.polarity == "positive" and NEGATION.search(evidence):
+            raise invalid("A positive relation cites source text containing negation.")
         for qualifier in assertion.qualifiers:
             if qualifier.value not in check(qualifier.spans):
-                raise invalid()
+                raise invalid("An extracted qualifier is absent from its cited source passages.")
     return batch
 
 
@@ -142,7 +227,7 @@ class Extractor:
         # by reconstructing their type with one argument, which cannot preserve
         # a DomainError(code, message) or its safe classification.
         try:
-            content = ExtractionContent.model_validate(await self.provider.complete(chunk, schema))
+            content = ExtractionResult.model_validate(await self.provider.complete(chunk, schema))
             validated = validate_extraction(
                 chunk,
                 schema,

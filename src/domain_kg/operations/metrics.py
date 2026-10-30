@@ -18,8 +18,8 @@ class ProviderUsage(Namespace):
     as_of: UTCDateTime
     resets_at: UTCDateTime
     counts: BudgetCounts
-    limits: BudgetLimits
-    available: BudgetLimits
+    limits: BudgetLimits | None
+    available: BudgetLimits | None
 
 
 class UsageMetrics:
@@ -42,16 +42,20 @@ class UsageMetrics:
                 ErrorCode.PROJECTION_INCONSISTENT, "The KG budget counters are inconsistent."
             ) from None
         limits = self.budgets.limits.knowledge_base
-        available = BudgetLimits.model_validate(
-            {
-                field: max(
-                    0,
-                    getattr(limits, field)
-                    - getattr(counts, "spent_" + field)
-                    - getattr(counts, "reserved_" + field),
-                )
-                for field in BudgetLimits.model_fields
-            }
+        available = (
+            BudgetLimits.model_validate(
+                {
+                    field: max(
+                        0,
+                        getattr(limits, field)
+                        - getattr(counts, "spent_" + field)
+                        - getattr(counts, "reserved_" + field),
+                    )
+                    for field in BudgetLimits.model_fields
+                }
+            )
+            if limits is not None
+            else None
         )
         await self.policy.revalidate(current, action=Action.CONFIGURE)
         return ProviderUsage(

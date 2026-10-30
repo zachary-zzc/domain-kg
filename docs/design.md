@@ -56,11 +56,21 @@ KGs may share a profile or use independent endpoints. Validate both, including a
 
 Operators register approved connection-secret references and validate capabilities, index/schema versions, health, and placement policy. Owners select permitted placements without providing DSNs or passwords. Registration does not provision database servers. A referenced backend cannot be detached.
 
-KG states are `provisioning`, `ready`, `read_only`, `archived`, and `error`; backend health is `healthy`, `degraded`, or `unavailable`. Projection/publication status is separate. The console shows accepted/pending revisions, graph/vector lag, failures, quotas, and repair controls. Archiving or purging one KG never drops shared infrastructure.
+KG states are `provisioning`, `ready`, `read_only`, `archived`, `error`, and recoverably `deleted`; backend health is `healthy`, `degraded`, or `unavailable`. Projection/publication status is separate. The console shows accepted/pending revisions, graph/vector lag, failures, quotas, and repair controls. Archiving or purging one KG never drops shared infrastructure.
 
 ## Users and permissions
 
 Key identities by OIDC issuer and subject. Organization administrators admit users, manage local groups/service identities, and create KGs. KG grants are `owner`, `editor`, and `reader`. Readers inspect permitted evidence; editors ingest, revise, curate, and remove accessible materials; owners also manage configuration, grants, schema, archive, backup, restore, and purge. Operators have infrastructure privileges without implicit application data access.
+
+Approved Agent platforms can also provision ordinary members through the
+[identity bridge](identity-bridge.md). Operators pin identity endpoints and
+exchange-client trust; organization administrators and KG owners approve finite
+admission/delegation limits. The platform proves identity, the external OIDC
+service issues canonical tokens, and MongoDB owns stable identity links,
+approvals, independent group supports and revocable connections. HTTP, MCP and
+workers use the same Policy checks. An upstream disable blocks the linked
+organization member even through a previous browser session; it does not rewrite
+historical source/curation ownership or revive previously revoked connections.
 
 Materials use `acl_mode=kg` or `acl_mode=restricted`. Restricted grants narrow KG membership; they cannot confer KG access. Owners manage all material ACLs in their KG. Prevent concurrent removal of the last organization administrator or KG owner using MongoDB compare-and-set/transaction checks. Owner appointment is explicit and audited.
 
@@ -90,9 +100,34 @@ Version domain schemas for entity types, predicates, legal endpoints, and litera
 
 The pipeline is: authorize/reserve quota; preserve the upload; parse immutable blocks; chunk; run LightRAG extraction; validate source spans/schema; resolve stable IDs; stage graph/vector revisions; verify projection acknowledgements; publish.
 
-Use Docling for PDF, scanned PDF, and DOCX behind a parser interface. Deterministic parsers handle Markdown, text, sanitized HTML, CSV rows, and JSON pointers. PDF cites physical page/block locations; DOCX cites headings/paragraphs/tables. Retain OCR warnings. Legacy `.doc` needs configured sandboxed conversion; cloud documents initially require export. Rich image/equation understanding is staged separately.
+After one evidence correction, independently validated extraction facts may continue
+with explicit rejection counts and `ready_with_warnings`. Reject an entire relation
+when its endpoint, evidence, predicate or qualifier fails. Never amend evidence to
+force acceptance. Preserve the complete original. This completes preparation of a
+validated subset before atomic publication; malformed, refused or truncated model
+responses still fail and cannot publish an unfinished projection.
 
-Target 700-token chunks with at most 100 tokens overlap, preserving headings and table row locations. Uploads are limited to 50 MiB and PDF jobs to 500 pages. Bound decompressed archive size, OCR work, and runtime; HTML executes no scripts or linked fetches. Unclaimed uploads expire after 24 hours.
+Use one PDF adapter: pypdf validates encrypted/malformed/page-limited originals,
+Docling extracts native text and renders scan pages, and preinstalled local
+Tesseract recognizes English/simplified Chinese offline. OCR is automatic for
+image-only and image-dominant mixed pages; mask native text regions to avoid
+duplicate evidence. Keep native text exact and distinguish OCR source locations.
+DOCX uses deterministic archive/XML decoding; deterministic parsers also handle
+Markdown, text, sanitized HTML, CSV rows, and JSON pointers. PDF cites physical
+page/block locations; DOCX cites headings/paragraphs/tables. Retain OCR warnings.
+Legacy DOC/PPT, RTF and ODT normalize through sandboxed LibreOffice; ODP is read
+directly. XLSX/ODS retain formulas and cached values; XLS reads stored values,
+without recalculation.
+PPTX preserves slide text, tables and speaker notes. Cloud documents require export.
+Raster image originals are separate source-owned artifacts with isolated PNG
+previews. Explicit selected-model image capability permits bounded visual
+interpretation; otherwise local OCR reads image text. Generated sentences retain
+image/model provenance and publish with `model_interpreted` supports, never as
+literal original-text quotations. They share the KG publication, permissions,
+retrieval and deletion paths. Native-only evidence filters remove their chunks,
+observations, relationships and derived display fields.
+
+Model-backed imports adapt chunk size to the selected chat and embedding contexts, measuring the complete prompt with full output and framing reserves. Preserve headings and table row locations, with at most 100 tokens overlap. Explicit chunk targets remain supported; preparation without a model uses 700-token chunks. See [model windows](model-windows.md). Uploads are limited to 50 MiB and PDF jobs to 500 pages. Bound decompressed archive size, OCR work, and runtime; HTML executes no scripts or linked fetches. Unclaimed uploads expire after 24 hours.
 
 Raw SHA-256 identifies byte versions; versioned normalized hashes support authorized processing reuse. Reuse cannot reveal existence across organizations, KGs, or visibility classes. Metadata-only changes update authoritative filtering without re-embedding unchanged text. Content changes create a new version; diff parsed blocks and reuse unchanged extraction/embedding artifacts while retaining version-specific ownership and source records.
 
@@ -122,7 +157,9 @@ Deep mode uses a mix-style graph/vector workflow through context-aware adapters 
 
 For each KG, resolve eligible material/version and curation sets from MongoDB; apply them to Qdrant payload filters and Neo4j support traversals before branch top-k. Index namespace, version, observation, and embedding-profile fields. Current authoritative metadata/grants determine eligibility even when projection payload mirrors lag. [Qdrant indexes](https://qdrant.tech/documentation/manage-data/indexing/), [Neo4j full text](https://neo4j.com/docs/cypher-manual/current/indexes/search-indexes/full-text-indexes/).
 
-Start with 50 candidates per branch per KG. Deep/graph expansion is at most two hops, 200 nodes, and 400 edges, including seeds. Enforce caps during expansion and track visited nodes. Map every graph edge to visible support. Use reciprocal rank fusion with constant 60 and initial equal weights; optional deep reranking considers at most 50 candidates. Default final top-k is 10, maximum 50, and evidence text budget is 24,000 characters.
+Start with 50 candidates per branch per KG. Deep/graph expansion is at most two hops, 200 nodes, and 400 edges, including seeds. Enforce caps during expansion and track visited nodes. Map every graph edge to visible support. Rank graph evidence using visible source relevance and supported predicate/path cues before applying its candidate cap; IDs only break relevance ties. These lexical cues are not an entailment check or a natural-language query planner.
+
+Use reciprocal rank fusion with constant 60 for vector/text ranks. Graph hits already in the text pool add authenticated annotations without a correlated third vote; new graph sources compete by their graph rank without a reserved context quota. Graph-only mode retains graph ranking. Optional deep reranking considers at most 50 candidates. Default final top-k is 10, maximum 50, and evidence text budget is 24,000 characters. Preserve complete source passages, skip oversized candidates and backfill from the pool. Reserve a complete passage per nonempty KG when budgets permit; if no full representation fits, mark excerpts as truncated and omit their graph paths.
 
 Filters cover KG/material IDs and exclusions, active or explicit retained version, media type, tags, author, source, language, dates, node IDs/types/exclusions, predicates, confidence, and support status. Lists are OR, fields are AND, `tags_all`/`tags_any` are separate, and time ranges are half-open UTC. Assertion restrictions constrain every branch before ranking. Unsupported filters fail explicitly.
 

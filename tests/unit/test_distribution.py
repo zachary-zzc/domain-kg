@@ -18,6 +18,9 @@ def archives(folder, extra=None):
         for name in (
             "domain_kg/app.py",
             "domain_kg/console/templates/operations.html",
+            "domain_kg/console/templates/identity_integrations.html",
+            "domain_kg/console/templates/identity_connections.html",
+            "domain_kg/identity/bridge/routes.py",
             "domain_kg/console/static/app.css",
         ):
             wheel.writestr(name, b"synthetic")

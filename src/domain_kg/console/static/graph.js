@@ -14,8 +14,8 @@
     const nodes = new Map(data.nodes.map(node => [node.id, node]));
     const edges = new Map(data.edges.map(edge => [edge.id, edge]));
     if (nodes.size !== data.nodes.length || edges.size !== data.edges.length || data.edges.some(edge => !nodes.has(edge.source) || !nodes.has(edge.target))) throw new Error("graph references");
-    const colors = {verified: "#17654c", manual: "#265ac7", imported_unverified: "#a2650d"};
-    const statuses = {verified: section.dataset.verified, manual: section.dataset.manual, imported_unverified: section.dataset.imported};
+    const colors = {verified: "#17654c", model_interpreted: "#8051a1", manual: "#265ac7", imported_unverified: "#a2650d"};
+    const statuses = {verified: section.dataset.verified, model_interpreted: section.dataset.interpreted, manual: section.dataset.manual, imported_unverified: section.dataset.imported};
     const show = (item, text) => {
       const url = new URL(item.href, window.location.origin);
       if (url.origin !== window.location.origin || !url.pathname.startsWith("/admin/kgs/")) return;
@@ -35,7 +35,7 @@
       if (stopped) return;
       visual.nodes.add(data.nodes.map(node => ({id: node.id, label: [...node.name].slice(0, 80).join("")})));
       visual.edges.add(data.edges.map(edge => ({id: edge.id, from: edge.source, to: edge.target,
-        label: [...edge.predicate].slice(0, 80).join(""), color: colors[edge.status], dashes: edge.status === "imported_unverified"})));
+        label: [...edge.predicate].slice(0, 80).join(""), color: colors[edge.status], dashes: ["imported_unverified", "model_interpreted"].includes(edge.status)})));
       const network = visual.network;
       const settle = () => { network.stopSimulation(); network.setOptions({physics: {enabled: false}}); network.fit({animation: false}); };
       network.once("stabilizationIterationsDone", settle);

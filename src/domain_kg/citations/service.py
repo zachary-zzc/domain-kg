@@ -15,6 +15,7 @@ from domain_kg.retrieval.models import SearchFilters, SearchRequest
 class CitationService:
     def __init__(self, queue: JobQueue) -> None:
         self.graph = GraphService(queue)
+        self.queue = queue
 
     async def resolve(
         self,
@@ -29,9 +30,9 @@ class CitationService:
         filters = SearchFilters(
             material_ids=(material_id,) if material_id else (),
             version_id=version_id,
-            support_statuses=("verified", "manual", "imported_unverified")
+            support_statuses=("verified", "model_interpreted", "manual", "imported_unverified")
             if include_unverified
-            else ("verified", "manual"),
+            else ("verified", "model_interpreted", "manual"),
         )
         scope = await self.graph.resolver.resolve(
             access, SearchRequest(kg_ids=(kg,), query="citation", filters=filters), kg
@@ -51,7 +52,18 @@ class CitationService:
             origin = source_origin(scope, row.source)
             if origin is not None:
                 resolver_url += "&include_unverified=true"
+            from domain_kg.materials.image_sources import ImageSources
+
+            image_ids = {span.location.image_id for span in source.spans if span.location.image_id}
+            images = (
+                await ImageSources(self.queue).list(
+                    access, kg, source.material_id, source.version_id
+                )
+                if image_ids
+                else ()
+            )
             result = Citation(
+                images=tuple(i for i in images if i.id in image_ids),
                 id=citation_id,
                 kg_id=kg,
                 kind="source",

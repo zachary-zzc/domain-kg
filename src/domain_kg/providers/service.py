@@ -11,7 +11,7 @@ from domain_kg.graph.models import DomainSchema
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.policy import Policy
 from domain_kg.ingestion.extraction import Extractor
-from domain_kg.ingestion.models import ExtractionBatch, ParsedChunk
+from domain_kg.ingestion.models import ExtractionBatch, ParsedChunk, SourceImage
 from domain_kg.materials.models import ReprocessReadPermit
 from domain_kg.materials.repository import MaterialRepository
 from domain_kg.models import IdempotencyKey, Namespace, NonNegative, SourceVersion
@@ -25,6 +25,7 @@ from domain_kg.storage.router import KGStoreRouter
 if TYPE_CHECKING:
     from domain_kg.jobs.models import LeasedJob
     from domain_kg.providers.embeddings import EmbeddingProfile
+    from domain_kg.providers.vision import ImageDescription
 
 
 class ProviderService:
@@ -153,6 +154,28 @@ class ProviderService:
             )
         return dict(selected)
 
+    async def record_usage(
+        self, value: Usage, *, embedding: bool = False, probe: bool = False
+    ) -> None:
+        increments = {
+            "input_tokens": value.input_tokens,
+            "output_tokens": value.output_tokens,
+            "calls": 1,
+        }
+        if embedding:
+            increments.update(embedding_input_tokens=value.input_tokens, embedding_calls=1)
+        if probe:
+            increments["probe_calls"] = 1
+        await self.database.provider_usage.update_one(
+            {
+                "_id": f"{value.org_id}:{value.kg_id}:{value.profile_id}",
+                "org_id": str(value.org_id),
+                "kg_id": str(value.kg_id),
+            },
+            {"$inc": increments},
+            upsert=True,
+        )
+
     async def embeddings(
         self,
         access: AccessContext,
@@ -236,23 +259,7 @@ class ProviderService:
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider configuration changed.")
 
         async def usage(value: Usage) -> None:
-            await self.database.provider_usage.update_one(
-                {
-                    "_id": f"{value.org_id}:{value.kg_id}:{value.profile_id}",
-                    "org_id": str(value.org_id),
-                    "kg_id": str(value.kg_id),
-                },
-                {
-                    "$inc": {
-                        "input_tokens": value.input_tokens,
-                        "embedding_input_tokens": value.input_tokens,
-                        "output_tokens": 0,
-                        "calls": 1,
-                        "embedding_calls": 1,
-                    }
-                },
-                upsert=True,
-            )
+            await self.record_usage(value, embedding=True)
 
         await authorize()
         configured, connection = self.registry.resolve_embedding(
@@ -377,21 +384,7 @@ class ProviderService:
                 raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider configuration changed.")
 
         async def usage(value: Usage) -> None:
-            await self.database.provider_usage.update_one(
-                {
-                    "org_id": str(value.org_id),
-                    "kg_id": str(value.kg_id),
-                    "_id": f"{value.org_id}:{value.kg_id}:{value.profile_id}",
-                },
-                {
-                    "$inc": {
-                        "input_tokens": value.input_tokens,
-                        "output_tokens": value.output_tokens,
-                        "calls": 1,
-                    }
-                },
-                upsert=True,
-            )
+            await self.record_usage(value, embedding=False)
 
         await authorize(chunk)
         profile, connection = self.registry.resolve(
@@ -420,5 +413,73 @@ class ProviderService:
         )
         try:
             return await Extractor(client).extract(chunk, schema)
+        finally:
+            await client.close()
+
+    async def describe_image(
+        self,
+        access: AccessContext,
+        image: SourceImage,
+        preview: bytes,
+        *,
+        restoration: ReprocessReadPermit | None = None,
+    ) -> "ImageDescription":
+        from domain_kg.providers.vision import VisionClient
+
+        current = await self.policy.revalidate(access, action=Action.INGEST)
+        selected = await self.selected(current, image.kg_id)
+        namespace = Namespace(org_id=image.org_id, kg_id=image.kg_id)
+        source = SourceVersion(**{key: getattr(image, key) for key in SourceVersion.model_fields})
+
+        async def authorize() -> None:
+            await self.policy.revalidate(current, action=Action.INGEST)
+            if source.org_id != current.org_id or source.kg_id not in current.kg_ids:
+                raise inaccessible_reference()
+            await self._authorize_read(current, source, restoration)
+            if await self.selected(current, image.kg_id) != selected:
+                raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider selection changed.")
+            material = await self.database.material_access.find_one(
+                {
+                    "org_id": str(image.org_id),
+                    "kg_id": str(image.kg_id),
+                    "id": str(image.material_id),
+                }
+            )
+            if material is None:
+                raise inaccessible_reference()
+            configured, _ = self.registry.resolve(
+                UUID(selected["profile_id"]),
+                namespace,
+                restricted=material["acl_mode"] == "restricted",
+            )
+            if configured.revision != selected["profile_revision"]:
+                raise DomainError(ErrorCode.VERSION_CONFLICT, "Provider configuration changed.")
+
+        async def usage(value: Usage) -> None:
+            await self.record_usage(value, embedding=False)
+
+        await authorize()
+        profile, connection = self.registry.resolve(
+            UUID(selected["profile_id"]), namespace, restricted=False
+        )
+        client = VisionClient(
+            profile,
+            connection,
+            authorize=authorize,
+            record_usage=usage,
+            transport=self.transport,
+            budget=CallBudget(
+                self.budgets,
+                namespace,
+                profile.id,
+                BudgetBounds(
+                    input_tokens=profile.extraction_context_tokens,
+                    output_tokens=min(profile.max_completion_tokens, 2048),
+                ),
+                authorize=authorize,
+            ),
+        )
+        try:
+            return await client.describe(image, preview)
         finally:
             await client.close()

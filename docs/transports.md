@@ -2,7 +2,7 @@
 
 Run the app with the configured external OIDC issuer and client ID. The protected
 MCP endpoint is `/mcp`; the same application services serve `/api/v1`. The app
-registers the 22 `domain_kg_*` application tools in `contracts.md`, plus the
+registers the 23 `domain_kg_*` application tools in `contracts.md`, plus the
 compatibility probe. Without configured identity, only the protected probe is
 registered and its default verifier denies credentials.
 

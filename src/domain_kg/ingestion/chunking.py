@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from collections.abc import Callable, Sequence
 from functools import lru_cache
 from uuid import uuid5
 
@@ -10,7 +11,7 @@ import tiktoken
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.ingestion.models import ChunkConfig, ParsedBlock, ParsedChunk, ParsedDocument, Span
 
-VERSION = "source-chunker-cl100k-v1"
+VERSION = "source-chunker-cl100k-v3"
 
 
 @lru_cache(maxsize=1)
@@ -32,6 +33,50 @@ def fits(text: str, limit: int) -> bool:
     # Character count is a lower bound on UTF-8 bytes. Reject obviously large
     # blocks without allocating token IDs for a whole multi-megabyte paragraph.
     return len(text) <= limit * _max_token_bytes() and tokens(text) <= limit
+
+
+def overlap_tail(
+    spans: Sequence[Span],
+    limit: int,
+    *,
+    fits: Callable[[list[Span]], bool] | None = None,
+    split_rows: bool = False,
+) -> list[Span]:
+    """Keep a bounded suffix; split rows only when their source already requires subdivision."""
+    if limit <= 0:
+        return []
+    overlap: list[Span] = []
+
+    def acceptable(candidate: list[Span]) -> bool:
+        return tokens("\n".join(s.quote for s in candidate)) <= limit and (
+            fits is None or fits(candidate)
+        )
+
+    for previous in reversed(spans):
+        candidate = [previous, *overlap]
+        if acceptable(candidate):
+            overlap = candidate
+            continue
+        if previous.location.row is not None and not split_rows:
+            break
+        low, high = 1, len(previous.quote) - 1
+        best = overlap
+        while low <= high:
+            middle = (low + high) // 2
+            tail = Span(
+                location=previous.location,
+                start=previous.start + middle,
+                end=previous.end,
+                quote=previous.quote[middle:],
+            )
+            candidate = [tail, *overlap]
+            if acceptable(candidate):
+                best, high = candidate, middle - 1
+            else:
+                low = middle + 1
+        overlap = best
+        break
+    return overlap
 
 
 def _split(block: ParsedBlock, config: ChunkConfig) -> list[Span]:
@@ -56,13 +101,8 @@ def _split(block: ParsedBlock, config: ChunkConfig) -> list[Span]:
             break
         next_start = end
         if config.overlap_tokens and tokens(block.text[start:end]) > config.overlap_tokens:
-            low, high = start + 1, end
-            while low <= high:
-                middle = (low + high) // 2
-                if tokens(block.text[middle:end]) <= config.overlap_tokens:
-                    next_start, high = middle, middle - 1
-                else:
-                    low = middle + 1
+            overlap = overlap_tail([spans[-1]], config.overlap_tokens, split_rows=True)
+            next_start = overlap[0].start if overlap else end
         start = max(start + 1, next_start)
     return spans
 
@@ -73,7 +113,7 @@ def chunk_document(document: ParsedDocument, config: ChunkConfig) -> list[Parsed
         raise DomainError(ErrorCode.VALIDATION_ERROR, "Structured source blocks are required.")
     result: list[ParsedChunk] = []
     pending: list[Span] = []
-    group: tuple[str, str | None, int | None] | None = None
+    group: tuple[object, ...] | None = None
     config_hash = hashlib.sha256(config.model_dump_json().encode()).hexdigest()
 
     def emit(spans: list[Span]) -> None:
@@ -107,35 +147,49 @@ def chunk_document(document: ParsedDocument, config: ChunkConfig) -> list[Parsed
     for block in document.blocks:
         if not block.text:
             continue
-        key = (block.location.kind, block.location.heading, block.location.table)
+        key = (
+            block.location.kind,
+            block.location.heading,
+            block.location.table,
+            block.location.text_origin,
+            block.location.image_id,
+            block.location.sheet,
+            block.location.slide,
+        )
         if group != key:
             emit(pending)
             pending, group = [], key
-        if not fits(block.text, config.target_tokens):
-            emit(pending)
-            pending = []
-            for span in _split(block, config):
-                emit([span])
-            continue
-        span = Span(location=block.location, start=0, end=len(block.text), quote=block.text)
-        if (
-            pending
-            and tokens("\n".join(item.quote for item in [*pending, span])) > config.target_tokens
-        ):
-            emit(pending)
-            overlap: list[Span] = []
-            for previous in reversed(pending):
-                candidate = [previous, *overlap]
-                if tokens("\n".join(item.quote for item in candidate)) > config.overlap_tokens:
-                    break
-                overlap = candidate
-            pending = overlap
-            while (
-                pending
-                and tokens("\n".join(item.quote for item in [*pending, span]))
-                > config.target_tokens
+        spans = (
+            [Span(location=block.location, start=0, end=len(block.text), quote=block.text)]
+            if fits(block.text, config.target_tokens)
+            else _split(block, config)
+        )
+        for span in spans:
+            shared = bool(
+                pending and pending[-1].location == span.location and span.start < pending[-1].end
+            )
+            if pending and (
+                shared
+                or tokens("\n".join(item.quote for item in [*pending, span])) > config.target_tokens
             ):
-                pending.pop(0)
-        pending.append(span)
+                emit(pending)
+
+                # Long-block pieces already share source characters. Do not add
+                # those characters a second time inside the next chunk.
+                def tail_fits(tail: list[Span], current: Span = span) -> bool:
+                    return (
+                        tokens("\n".join(s.quote for s in [*tail, current])) <= config.target_tokens
+                    )
+
+                pending = (
+                    []
+                    if shared
+                    else overlap_tail(
+                        pending,
+                        config.overlap_tokens,
+                        fits=tail_fits,
+                    )
+                )
+            pending.append(span)
     emit(pending)
     return result

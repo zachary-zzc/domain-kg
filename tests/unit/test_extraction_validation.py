@@ -112,6 +112,7 @@ def test_every_extracted_field_and_location_is_grounded():
                 }
             ),
         )
+
     foreign = (
         batch.entities[0]
         .spans[0]
@@ -130,6 +131,47 @@ def test_every_extracted_field_and_location_is_grounded():
                 }
             ),
         )
+
+
+def test_failed_entity_and_relation_checks_report_distinct_safe_reasons():
+    from domain_kg.ingestion.extraction import validate_extraction
+
+    chunk = source()
+    batch, schema = proposal(chunk)
+    wrong = batch.model_copy(
+        update={
+            "entities": (
+                batch.entities[0].model_copy(update={"name": "private invented name"}),
+                batch.entities[1],
+            )
+        }
+    )
+    with pytest.raises(DomainError) as missing_name:
+        validate_extraction(chunk, schema, wrong)
+    assert (
+        missing_name.value.message
+        == "An extracted entity name is absent from its cited source passages."
+    )
+    assert "private" not in missing_name.value.message
+
+    with pytest.raises(DomainError) as unknown_predicate:
+        validate_extraction(
+            chunk,
+            schema,
+            batch.model_copy(
+                update={
+                    "assertions": (
+                        batch.assertions[0].model_copy(
+                            update={"predicate": "private unknown predicate"}
+                        ),
+                    )
+                }
+            ),
+        )
+    assert (
+        unknown_predicate.value.message
+        == "An extracted relation uses an unsupported predicate or endpoint type."
+    )
 
 
 def test_predicate_endpoints_negation_and_empty_assertions_are_explicit():

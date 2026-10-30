@@ -28,11 +28,17 @@ class Action(StrEnum):
     REGISTER_BACKEND = "register_backend"
 
 
+class DelegationRef(FrozenModel):
+    org_id: UUID
+    connection_id: UUID
+
+
 class Principal(FrozenModel):
     issuer: Annotated[PreservedText, Field(min_length=1)]
     subject: Annotated[PreservedText, Field(min_length=1)]
     scopes: frozenset[str] = frozenset()
     kind: Literal["human", "service"] = "human"
+    delegation: DelegationRef | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class KGGrant(FrozenModel):

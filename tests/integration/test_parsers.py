@@ -8,7 +8,7 @@ from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter, Transformation
 
 from domain_kg.errors import DomainError
 from domain_kg.ingestion.models import ParseOptions
@@ -97,8 +97,56 @@ async def test_scan_warns_without_ocr_and_malformed_or_encrypted_pdf_is_rejected
     for data in [(FIXTURES / "encrypted.pdf").read_bytes(), b"%PDF-not-a-document"]:
         with pytest.raises(DomainError):
             await parser.parse(await original(blob_store, data, "application/pdf"), ParseOptions())
-    with pytest.raises(DomainError):
-        await parser.parse(blob, ParseOptions(ocr=True))
+
+
+async def test_scanned_pdf_automatically_recognizes_bilingual_evidence_with_page_provenance(
+    blob_store,
+):
+    from domain_kg.ingestion.chunking import chunk_document
+    from domain_kg.ingestion.models import ChunkConfig
+    from domain_kg.ingestion.parsers import Parser
+
+    blob = await original(
+        blob_store, (FIXTURES / "scanned-bilingual.pdf").read_bytes(), "application/pdf"
+    )
+    parsed = await Parser(blob_store[0]).parse(blob, ParseOptions())
+    text = "".join(block.text for block in parsed.blocks)
+    assert "Scanned evidence" in text
+    assert "扫描证据" in "".join(text.split())
+    assert {block.location.page for block in parsed.blocks} == {1}
+    assert all(block.location.text_origin == "ocr" for block in parsed.blocks)
+    assert "OCR_APPLIED" in parsed.warnings and "OCR_REQUIRED" not in parsed.warnings
+    chunks = chunk_document(parsed, ChunkConfig())
+    for chunk in chunks:
+        for span in chunk.spans:
+            block = next(block for block in parsed.blocks if block.id == span.location.block_id)
+            assert block.text[span.start : span.end] == span.quote
+            assert span.location.text_origin == "ocr"
+
+
+async def test_mixed_pdf_keeps_native_text_once_and_recognizes_scan_at_physical_page(blob_store):
+    from domain_kg.ingestion.parsers import Parser
+
+    native = PdfReader(FIXTURES / "native.pdf")
+    scan = PdfReader(FIXTURES / "scanned-bilingual.pdf")
+    writer, data = PdfWriter(), io.BytesIO()
+    writer.add_page(native.pages[0])
+    page = writer.add_page(scan.pages[0])
+    page.mediabox.upper_right = (400, 170)
+    header = PdfWriter().add_page(native.pages[1])
+    header.add_transformation(Transformation().translate(tx=-60, ty=-570))
+    page.merge_page(header)
+    writer.write(data)
+    blob = await original(blob_store, data.getvalue(), "application/pdf")
+    parsed = await Parser(blob_store[0]).parse(blob, ParseOptions())
+    assert [block.text for block in parsed.blocks if block.location.text_origin == "native"] == [
+        "First page evidence.",
+        "Second page evidence.",
+    ]
+    ocr = [block for block in parsed.blocks if block.location.text_origin == "ocr"]
+    assert ocr and {block.location.page for block in ocr} == {2}
+    assert "Scanned evidence" in "".join(block.text for block in ocr)
+    assert all("Second page" not in block.text for block in ocr)
 
 
 async def test_page_limit_and_zip_expansion_or_traversal_are_rejected_before_work(blob_store):

@@ -51,6 +51,16 @@ async def test_owner_readiness_repair_and_operator_health_without_kg_access(
                 usage = await browser.get(f"/api/v1/kgs/{job.kg_id}/usage")
                 assert usage.status_code == 200 and usage.json()["kg_id"] == str(job.kg_id)
                 assert "organization_usage" not in usage.json()
+                from domain_kg.providers.usage_budget import BudgetPolicy
+
+                coordinator.providers.budgets.limits = BudgetPolicy(
+                    organization=None, knowledge_base=None
+                )
+                uncapped = await browser.get(operations)
+                assert uncapped.status_code == 200 and "Unlimited" in uncapped.text
+                uncapped_usage = await browser.get(f"/api/v1/kgs/{job.kg_id}/usage")
+                assert uncapped_usage.json()["limits"] is None
+                assert uncapped_usage.json()["available"] is None
                 repair = await browser.post(
                     f"{operations}/repair",
                     data={
@@ -73,7 +83,7 @@ async def test_owner_readiness_repair_and_operator_health_without_kg_access(
                 browser.cookies.set("domain_kg_session", operator.session_id)
                 browser.cookies.set("domain_kg_csrf", operator.csrf)
                 inventory = await browser.get("/admin/infrastructure")
-                assert inventory.status_code == 200 and "Registered backends" in inventory.text
+                assert inventory.status_code == 200 and "Database connections" in inventory.text
                 assert (
                     "Publication fixture" not in inventory.text
                     and "localhost:" not in inventory.text
@@ -90,7 +100,7 @@ async def test_owner_readiness_repair_and_operator_health_without_kg_access(
                     f"/admin/infrastructure/{backend.backend_id}/validate",
                     data={"csrf_token": operator.csrf},
                 )
-                assert health.status_code == 200 and "healthy" in health.text
+                assert health.status_code == 200 and "Healthy" in health.text
                 assert "replica_set" in health.text
                 denied = await browser.get(f"/admin/kgs/{job.kg_id}/search", params={"q": "Alpha"})
                 assert denied.status_code == 404 and "Alpha" not in denied.text

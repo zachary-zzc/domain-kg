@@ -104,6 +104,8 @@ class OIDCVerifier:
                 algorithms=[key.algorithm_name],
                 issuer=self.issuer,
                 audience=audience or self.audience,
+                # Independent IdP/application clocks can differ by a few seconds.
+                leeway=5,
                 options={"require": ["iss", "sub", "aud", "exp", "iat"]},
             )
             if not isinstance(claims["sub"], str) or not claims["sub"].strip():

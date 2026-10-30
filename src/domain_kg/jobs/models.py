@@ -6,7 +6,14 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from domain_kg.materials.models import BlobRef
-from domain_kg.models import SHA256, IdempotencyKey, Namespace, NonNegative, UTCDateTime
+from domain_kg.models import (
+    SHA256,
+    FrozenModel,
+    IdempotencyKey,
+    Namespace,
+    NonNegative,
+    UTCDateTime,
+)
 
 JobStage = Literal[
     "queued",
@@ -27,12 +34,33 @@ JobStage = Literal[
 ]
 
 
+class JobSource(FrozenModel):
+    material_id: UUID
+    version_id: UUID
+    title: Annotated[str, Field(min_length=1, max_length=1000)]
+    source: Annotated[str, Field(max_length=4000)] | None = None
+    sha256: SHA256
+    expected_active_version: UUID | None = None
+
+
+class JobFailure(FrozenModel):
+    code: str
+    stage: JobStage | None = None
+    request_id: UUID | None = None
+    message: str
+    action: str
+
+
 class JobReceipt(Namespace):
     job_id: UUID
     stage: JobStage = "queued"
     progress: Annotated[float, Field(ge=0, le=1)] = 0
     repair_job_id: UUID | None = None
     warnings: tuple[str, ...] = ()
+    kind: str | None = None
+    created_at: UTCDateTime | None = None
+    source: JobSource | None = None
+    error: JobFailure | None = None
 
 
 class JobCommand(Namespace):

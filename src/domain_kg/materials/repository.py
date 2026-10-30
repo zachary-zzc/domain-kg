@@ -5,11 +5,11 @@ from typing import TypeVar
 from uuid import UUID
 
 from pymongo.asynchronous.client_session import AsyncClientSession
-from pymongo.errors import DuplicateKeyError
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.policy import Policy
+from domain_kg.storage.transactions import transaction
 
 T = TypeVar("T")
 
@@ -48,14 +48,7 @@ class MaterialRepository:
     async def transaction(self, work: Callable[[AsyncClientSession], Awaitable[T]]) -> T:
         # Initial insert races have no pre-existing row to conflict on. Retry the
         # transaction to observe the winning durable command or quota reservation.
-        for attempt in range(3):
-            try:
-                async with self.database.client.start_session() as session:
-                    return await session.with_transaction(work)
-            except DuplicateKeyError:
-                if attempt == 2:
-                    raise
-        raise AssertionError("unreachable")
+        return await transaction(self.database, work)
 
     async def fence(
         self, access: AccessContext, action: Action, session: AsyncClientSession

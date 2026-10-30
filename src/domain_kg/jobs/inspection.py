@@ -3,7 +3,7 @@
 import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Self
+from typing import Annotated, Any, Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -56,8 +56,9 @@ class JobInspection:
             "generation": str(scope.view.generation),
             "published_revision": scope.view.revision,
             "limit": page.limit,
+            "order": "newest-v1",
         }
-        after = ""
+        after: dict[str, Any] | None = None
         if page.cursor:
             cursor = await self.database.job_read_cursors.find_one(
                 {
@@ -71,8 +72,14 @@ class JobInspection:
         items: list[JobReceipt] = []
         last, more = after, False
         count = 0
+        query: dict[str, Any] = dict(ns)
+        if after:
+            query["$or"] = [
+                {"created_at": {"$lt": after["created_at"]}},
+                {"created_at": after["created_at"], "id": {"$lt": after["id"]}},
+            ]
         async for raw in (
-            self.database.jobs.find(ns | {"id": {"$gt": after}}).sort("id", 1).limit(1001)
+            self.database.jobs.find(query).sort([("created_at", -1), ("id", -1)]).limit(1001)
         ):
             count += 1
             if count > 1000:
@@ -89,7 +96,7 @@ class JobInspection:
                 more = True
                 break
             items.append(receipt)
-            last = raw["id"]
+            last = {"id": raw["id"], "created_at": raw["created_at"]}
         await self.resolver.revalidate(scope)
         for item in items:
             await self.queue.get(current, item.job_id)

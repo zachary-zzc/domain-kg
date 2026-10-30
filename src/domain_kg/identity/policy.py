@@ -13,6 +13,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.errors import PyMongoError
 
 from domain_kg.errors import DomainError, ErrorCode, inaccessible_reference
+from domain_kg.identity.delegation import member_enabled, restrict, supported_groups
 from domain_kg.identity.invariants import assert_active_owners
 from domain_kg.identity.models import AccessContext, Action, KGGrant, Member, Principal
 from domain_kg.models import IdempotencyKey
@@ -76,6 +77,7 @@ class Policy:
     ) -> AccessContext:
         if len(kg_ids) != len(set(kg_ids)):
             raise DomainError(ErrorCode.VALIDATION_ERROR, "KG IDs must be distinct.")
+        org_id = await restrict(self.database, principal, kg_ids, action, org_id, session)
         memberships = await self.database.members.find(
             {"issuer": principal.issuer, "subject": principal.subject, "suspended": False},
             session=session,
@@ -86,6 +88,8 @@ class Policy:
                 {key: value for key, value in raw.items() if key != "_id"}
             )
             if org_id is not None and member.org_id != org_id:
+                continue
+            if not await member_enabled(self.database, member.org_id, member.id, session):
                 continue
             kgs = await self.database.kgs.find(
                 {"org_id": str(member.org_id), "id": {"$in": [str(value) for value in kg_ids]}},
@@ -123,9 +127,14 @@ class Policy:
             raise DomainError(ErrorCode.FORBIDDEN, "Platform operator access is required.")
         if not kg_ids and action not in ORG_ACTIONS | {Action.REGISTER_BACKEND, Action.LIST_KGS}:
             raise inaccessible_reference()
+        synchronized = await supported_groups(self.database, member.org_id, member.id, session)
         groups = (
             await self.database.groups.find(
-                {"org_id": str(member.org_id), "member_ids": str(member.id)}, session=session
+                {
+                    "org_id": str(member.org_id),
+                    "$or": [{"member_ids": str(member.id)}, {"id": {"$in": list(synchronized)}}],
+                },
+                session=session,
             ).to_list()
             if member.kind == "human"
             else []
@@ -135,6 +144,8 @@ class Policy:
         rank = {"reader": 1, "editor": 2, "owner": 3}
         for kg in kgs:
             kg_id = UUID(kg["id"])
+            if kg["state"] == "deleted" and action != Action.CONFIGURE:
+                raise inaccessible_reference()
             if member.kind == "service" and kg_id not in member.kg_ids:
                 raise inaccessible_reference()
             if kg["state"] not in ("ready", "read_only") and action in READ_ACTIONS | EDIT_ACTIONS:
@@ -185,7 +196,11 @@ class Policy:
             )
         return AccessContext(
             principal=Principal(
-                issuer=principal.issuer, subject=principal.subject, scopes=scopes, kind=member.kind
+                issuer=principal.issuer,
+                subject=principal.subject,
+                scopes=scopes,
+                kind=member.kind,
+                delegation=principal.delegation,
             ),
             org_id=member.org_id,
             kg_ids=tuple(kg_ids),

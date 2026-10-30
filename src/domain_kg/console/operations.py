@@ -138,7 +138,7 @@ def operations_router(runtime: ServiceRuntime) -> APIRouter:
             access,
             "infrastructure.html",
             {
-                "title": "Registered backends",
+                "title": "Database connections",
                 "inventory": result,
                 "health": None,
             },

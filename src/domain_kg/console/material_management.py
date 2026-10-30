@@ -45,6 +45,8 @@ def management_router(runtime: ServiceRuntime) -> APIRouter:
                 "state": state,
                 "limit": limit,
                 "command_key": str(uuid4()),
+                "bulk_kind": state,
+                "bulk_scope": "#managed-list",
             },
             scope=scope,
         )

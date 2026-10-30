@@ -1,0 +1,4 @@
+{% extends 'base.html' %}{% block content %}
+<section class="card"><h2>{{ kg.name }}</h2><p>{{ _('This knowledge graph is deleted. Its original files and history are retained, and search and processing are blocked.') }}</p>
+<form method="post" action="/admin/kgs/{{ kg.id }}/lifecycle/restore"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="expected_revision" value="{{ kg.revision }}"><input type="hidden" name="idempotency_key" value="restore-{{ command_key }}"><button type="submit">{{ _('Restore knowledge graph') }}</button></form><p><a href="/admin?lifecycle=deleted">{{ _('Deleted knowledge graphs') }}</a></p></section>
+{% endblock %}

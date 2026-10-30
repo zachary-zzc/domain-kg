@@ -1,0 +1,2269 @@
+{
+  "components": {
+    "schemas": {
+      "Action": {
+        "enum": [
+          "list_kgs",
+          "read",
+          "search",
+          "ingest",
+          "replace",
+          "remove",
+          "curate",
+          "manage_grants",
+          "configure",
+          "archive",
+          "backup",
+          "restore",
+          "purge",
+          "create_kg",
+          "manage_organization",
+          "register_backend"
+        ],
+        "title": "Action",
+        "type": "string"
+      },
+      "AssertionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "integration_id": {
+            "format": "uuid",
+            "title": "Integration Id",
+            "type": "string"
+          },
+          "subject_token": {
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Subject Token",
+            "type": "string"
+          },
+          "subject_token_type": {
+            "const": "urn:ietf:params:oauth:token-type:jwt",
+            "title": "Subject Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "integration_id",
+          "subject_token_type",
+          "subject_token"
+        ],
+        "title": "AssertionRequest",
+        "type": "object"
+      },
+      "BootstrapResult": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_allowed": {
+            "title": "Connection Allowed",
+            "type": "boolean"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "member_id": {
+            "format": "uuid",
+            "title": "Member Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "pending_approval",
+              "suspended"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id",
+          "created",
+          "status",
+          "connection_allowed"
+        ],
+        "title": "BootstrapResult",
+        "type": "object"
+      },
+      "ConnectionPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ConnectionPage",
+        "type": "object"
+      },
+      "ConnectionView": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/Action"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "application": {
+            "title": "Application",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "integration_id": {
+            "format": "uuid",
+            "title": "Integration Id",
+            "type": "string"
+          },
+          "kg_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Kg Ids",
+            "type": "array"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "member_id": {
+            "format": "uuid",
+            "title": "Member Id",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "revoked": {
+            "title": "Revoked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "org_id",
+          "integration_id",
+          "member_id",
+          "application",
+          "kg_ids",
+          "actions",
+          "created_at",
+          "expires_at",
+          "revoked",
+          "revision"
+        ],
+        "title": "ConnectionView",
+        "type": "object"
+      },
+      "DefaultGrant": {
+        "additionalProperties": false,
+        "properties": {
+          "kg_id": {
+            "format": "uuid",
+            "title": "Kg Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "reader",
+              "editor"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kg_id",
+          "role"
+        ],
+        "title": "DefaultGrant",
+        "type": "object"
+      },
+      "ErrorCode": {
+        "enum": [
+          "UNAUTHENTICATED",
+          "FORBIDDEN",
+          "RESOURCE_NOT_ACCESSIBLE",
+          "VALIDATION_ERROR",
+          "UNSUPPORTED_FORMAT",
+          "UNSUPPORTED_FILTER",
+          "QUOTA_EXCEEDED",
+          "VERSION_CONFLICT",
+          "IDEMPOTENCY_CONFLICT",
+          "CURSOR_EXPIRED",
+          "BACKEND_UNAVAILABLE",
+          "PROVIDER_UNAVAILABLE",
+          "PROVIDER_AUTHENTICATION_FAILED",
+          "PROVIDER_BILLING_REQUIRED",
+          "PROVIDER_QUOTA_EXCEEDED",
+          "PROVIDER_RATE_LIMITED",
+          "PROVIDER_MODEL_NOT_FOUND",
+          "EVIDENCE_VALIDATION_FAILED",
+          "POLICY_CHANGED",
+          "REVISION_NOT_READY",
+          "PROJECTION_INCONSISTENT"
+        ],
+        "title": "ErrorCode",
+        "type": "string"
+      },
+      "EventResult": {
+        "additionalProperties": false,
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "recovery_required": {
+            "default": false,
+            "title": "Recovery Required",
+            "type": "boolean"
+          },
+          "source_version": {
+            "title": "Source Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "event_id",
+          "applied",
+          "source_version"
+        ],
+        "title": "EventResult",
+        "type": "object"
+      },
+      "GroupMapping": {
+        "additionalProperties": false,
+        "properties": {
+          "external_group": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "External Group",
+            "type": "string"
+          },
+          "group_id": {
+            "format": "uuid",
+            "title": "Group Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "external_group",
+          "group_id"
+        ],
+        "title": "GroupMapping",
+        "type": "object"
+      },
+      "IdentityError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "request_id"
+        ],
+        "title": "IdentityError",
+        "type": "object"
+      },
+      "IntegrationChange": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "idempotency_key",
+          "active"
+        ],
+        "title": "IntegrationChange",
+        "type": "object"
+      },
+      "IntegrationCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_actions": {
+            "default": [
+              "read",
+              "search"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Action"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Allowed Actions",
+            "type": "array"
+          },
+          "allowed_kg_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Allowed Kg Ids",
+            "type": "array"
+          },
+          "auto_approve": {
+            "default": false,
+            "title": "Auto Approve",
+            "type": "boolean"
+          },
+          "default_grants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DefaultGrant"
+            },
+            "maxItems": 100,
+            "title": "Default Grants",
+            "type": "array"
+          },
+          "group_mappings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GroupMapping"
+            },
+            "maxItems": 100,
+            "title": "Group Mappings",
+            "type": "array"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "name",
+          "idempotency_key"
+        ],
+        "title": "IntegrationCreate",
+        "type": "object"
+      },
+      "IntegrationPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IntegrationView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "IntegrationPage",
+        "type": "object"
+      },
+      "IntegrationView": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "allowed_actions": {
+            "items": {
+              "$ref": "#/components/schemas/Action"
+            },
+            "title": "Allowed Actions",
+            "type": "array"
+          },
+          "allowed_kg_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Allowed Kg Ids",
+            "type": "array"
+          },
+          "auto_approve": {
+            "title": "Auto Approve",
+            "type": "boolean"
+          },
+          "default_grants": {
+            "items": {
+              "$ref": "#/components/schemas/DefaultGrant"
+            },
+            "title": "Default Grants",
+            "type": "array"
+          },
+          "group_mappings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GroupMapping"
+            },
+            "title": "Group Mappings",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "org_id",
+          "profile_id",
+          "name",
+          "allowed_kg_ids",
+          "allowed_actions",
+          "default_grants",
+          "auto_approve",
+          "active",
+          "revision"
+        ],
+        "title": "IntegrationView",
+        "type": "object"
+      },
+      "LinkApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "idempotency_key",
+          "approved"
+        ],
+        "title": "LinkApproval",
+        "type": "object"
+      },
+      "LinkPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LinkView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LinkPage",
+        "type": "object"
+      },
+      "LinkView": {
+        "additionalProperties": false,
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "disabled": {
+            "title": "Disabled",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "integration_id": {
+            "format": "uuid",
+            "title": "Integration Id",
+            "type": "string"
+          },
+          "member_id": {
+            "format": "uuid",
+            "title": "Member Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "member_id",
+          "integration_id",
+          "approved",
+          "disabled",
+          "revision"
+        ],
+        "title": "LinkView",
+        "type": "object"
+      },
+      "RevisionCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "idempotency_key"
+        ],
+        "title": "RevisionCommand",
+        "type": "object"
+      },
+      "SyncEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "event_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "external_subject": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "External Subject",
+            "type": "string"
+          },
+          "groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groups"
+          },
+          "integration_id": {
+            "format": "uuid",
+            "title": "Integration Id",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "disable",
+              "enable",
+              "profile"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "source_version": {
+            "minimum": 1.0,
+            "title": "Source Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "integration_id",
+          "event_id",
+          "external_subject",
+          "source_version",
+          "operation"
+        ],
+        "title": "SyncEvent",
+        "type": "object"
+      },
+      "TokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "default": [
+              "read",
+              "search"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Action"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Actions",
+            "type": "array"
+          },
+          "connection_seconds": {
+            "default": 86400,
+            "maximum": 604800.0,
+            "minimum": 60.0,
+            "title": "Connection Seconds",
+            "type": "integer"
+          },
+          "integration_id": {
+            "format": "uuid",
+            "title": "Integration Id",
+            "type": "string"
+          },
+          "kg_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Kg Ids",
+            "type": "array"
+          },
+          "subject_token": {
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Subject Token",
+            "type": "string"
+          },
+          "subject_token_type": {
+            "const": "urn:ietf:params:oauth:token-type:jwt",
+            "title": "Subject Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "integration_id",
+          "subject_token_type",
+          "subject_token",
+          "kg_ids"
+        ],
+        "title": "TokenRequest",
+        "type": "object"
+      },
+      "TokenResult": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "connection_expires_at": {
+            "format": "date-time",
+            "title": "Connection Expires At",
+            "type": "string"
+          },
+          "connection_id": {
+            "format": "uuid",
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "expires_in": {
+            "maximum": 600.0,
+            "minimum": 1.0,
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "token_type": {
+            "const": "Bearer",
+            "default": "Bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_in",
+          "connection_id",
+          "connection_expires_at"
+        ],
+        "title": "TokenResult",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "BearerCredential": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Trusted platform provisioning and revocable delegation. Administrative and own-connection endpoints also accept same-origin browser sessions with CSRF protection; platform endpoints require Bearer.",
+    "title": "Domain KG Identity Bridge API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/identity-bridge/bootstrap": {
+      "post": {
+        "operationId": "bootstrap_api_v1_identity_bridge_bootstrap_post",
+        "parameters": [
+          {
+            "description": "Reuse exactly this key and body after a lost response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssertionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Bootstrap",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/identity-bridge/events": {
+      "post": {
+        "operationId": "events_api_v1_identity_bridge_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncEvent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Events",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/identity-bridge/token": {
+      "post": {
+        "operationId": "exchange_api_v1_identity_bridge_token_post",
+        "parameters": [
+          {
+            "description": "Reuse exactly this key and body after a lost response.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Exchange",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/identity-connections/{connection_id}/revoke": {
+      "post": {
+        "operationId": "revoke_api_v1_identity_connections__connection_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisionCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Revoke",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/identity-integration-profiles": {
+      "get": {
+        "operationId": "profiles_api_v1_identity_integration_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Profiles Api V1 Identity Integration Profiles Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Profiles",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/identity-integrations": {
+      "get": {
+        "operationId": "integrations_api_v1_identity_integrations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Integrations",
+        "tags": [
+          "Identity bridge"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_v1_identity_integrations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntegrationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Create",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/identity-integrations/{integration_id}": {
+      "patch": {
+        "operationId": "change_api_v1_identity_integrations__integration_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "integration_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Integration Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntegrationChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Change",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/identity-integrations/{integration_id}/connections": {
+      "get": {
+        "operationId": "connections_api_v1_identity_integrations__integration_id__connections_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "integration_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Integration Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Connections",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/identity-integrations/{integration_id}/links": {
+      "get": {
+        "operationId": "links_api_v1_identity_integrations__integration_id__links_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "integration_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Integration Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Links",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/identity-links/{link_id}/approval": {
+      "post": {
+        "operationId": "approve_api_v1_identity_links__link_id__approval_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkApproval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Approve",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/me/connections": {
+      "get": {
+        "operationId": "own_connections_api_v1_me_connections_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Own Connections",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    },
+    "/api/v1/me/connections/{connection_id}/revoke": {
+      "post": {
+        "operationId": "revoke_own_api_v1_me_connections__connection_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisionCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Credential, assertion or connection is invalid or unavailable."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Membership, action scope or delegation does not permit the operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "The selected resource is unavailable in the authenticated organization."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Version, idempotency, cursor or policy conflict; inspect code and retryable."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Request fields are invalid."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                }
+              }
+            },
+            "description": "Identity or authority backend unavailable."
+          }
+        },
+        "security": [
+          {
+            "BearerCredential": []
+          }
+        ],
+        "summary": "Revoke Own",
+        "tags": [
+          "Identity bridge"
+        ]
+      }
+    }
+  }
+}

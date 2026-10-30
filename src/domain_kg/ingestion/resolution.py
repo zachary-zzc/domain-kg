@@ -15,7 +15,7 @@ from domain_kg.graph.schema import schema_for_kg
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.policy import Policy
 from domain_kg.ingestion.extraction import validate_extraction
-from domain_kg.ingestion.models import ExtractionBatch, ParsedChunk, ParsedDocument
+from domain_kg.ingestion.models import ExtractionBatch, ParsedChunk, ParsedDocument, span_status
 from domain_kg.ingestion.resolved import ResolvedAssertion, ResolvedBatch, ResolvedEntity
 from domain_kg.jobs.models import JobArtifact
 from domain_kg.materials.models import BlobRef, ReprocessReadPermit
@@ -247,7 +247,7 @@ class ResolutionService:
                 id=uuid5(batch.version_id, f"support/{support_identity}"),
                 assertion=ScopedRef(**namespace, id=fact.id),
                 version=ScopedRef(**namespace, id=batch.version_id),
-                status="verified",
+                status=span_status(assertion.spans),
                 spans=spans,
                 confidence=assertion.confidence,
             )

@@ -16,6 +16,7 @@ from domain_kg.materials.inspection import MaterialInspection
 from domain_kg.materials.lifecycle import MaterialLifecycle
 from domain_kg.materials.management import MaterialManagement
 from domain_kg.materials.service import MaterialService
+from domain_kg.operations.batch import BatchOperations
 from domain_kg.operations.jobs import OwnerOperations
 from domain_kg.operations.metrics import UsageMetrics
 from domain_kg.operations.projections import ProjectionManagement
@@ -49,6 +50,7 @@ class ServiceRuntime:
         self.management = MaterialManagement(self.queue)
         self.citations = CitationService(self.queue)
         self.lifecycle = MaterialLifecycle(materials, self.queue)
+        self.batch = BatchOperations(self.queue, self.lifecycle)
         self.graph = GraphService(self.queue)
         self.search = RetrievalService(self.queue, providers)
         self.revisions = RevisionService(self.queue, providers)

@@ -15,6 +15,7 @@ SOURCE_ROOTS = {
     "README.md",
     "uv.lock",
     "requirements.lock",
+    "stubs",
     "PKG-INFO",
 }
 
@@ -33,6 +34,9 @@ def check(folder: Path) -> None:
             if not {
                 "domain_kg/app.py",
                 "domain_kg/console/templates/operations.html",
+                "domain_kg/console/templates/identity_integrations.html",
+                "domain_kg/console/templates/identity_connections.html",
+                "domain_kg/identity/bridge/routes.py",
             }.issubset(names) or not any(
                 name.startswith("domain_kg/console/static/") for name in names
             ):

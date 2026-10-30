@@ -36,6 +36,7 @@ async def make_publishing(
     restricted=False,
     embedding_model="fixture-embedding",
     profile_overrides=None,
+    chunk_config=None,
 ):
     from domain_kg.revisions.publication import ProjectionCoordinator
 
@@ -117,7 +118,7 @@ async def make_publishing(
     access = await policy.resolve_access(principals["editor"], [kg], Action.INGEST)
     queue = JobQueue(policy, materials.router, lease_seconds=120)
     await queue.initialize()
-    preparation = preparation_steps(queue, providers=providers)
+    preparation = preparation_steps(queue, providers=providers, chunk_config=chunk_config)
     steps = preparation + extraction_steps(queue, providers, preparation[-1])
     coordinator = ProjectionCoordinator(queue, providers)
     return materials, access, queue, coordinator, steps, faults
@@ -480,7 +481,8 @@ async def test_native_scan_without_ocr_publishes_original_with_actionable_warnin
     import hashlib
     from pathlib import Path
 
-    from domain_kg.ingestion.pipeline import configured_pipeline
+    from domain_kg.ingestion.models import ParseOptions
+    from domain_kg.ingestion.pipeline import Pipeline, publication_steps
     from domain_kg.jobs.runner import JobRunner
     from domain_kg.materials.models import UploadCommand
 
@@ -514,9 +516,14 @@ async def test_native_scan_without_ocr_publishes_original_with_actionable_warnin
             idempotency_key="scan",
         ),
     )
-    await JobRunner(queue, configured_pipeline(queue, coordinator.providers)).run_job(
-        await queue.claim("native-scan")
+    preparation = preparation_steps(
+        queue, options=ParseOptions(ocr=False), providers=coordinator.providers
     )
+    extraction = extraction_steps(queue, coordinator.providers, preparation[-1])
+    pipeline = Pipeline(
+        preparation + extraction + publication_steps(queue, coordinator, extraction[-1])
+    )
+    await JobRunner(queue, pipeline).run_job(await queue.claim("native-scan"))
     state = await queue.get(access, receipt.job_id)
     assert state.stage == "ready_with_warnings" and "OCR_REQUIRED" in state.warnings
 

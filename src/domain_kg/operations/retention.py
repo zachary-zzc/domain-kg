@@ -62,9 +62,13 @@ class RetentionService:
         kg = await self.database.kgs.find_one(
             {"org_id": str(job.org_id), "id": str(job.kg_id)}, session=session
         )
-        if kg is None or kg.get("storage_profile_id") != str(plan.storage_profile_id) or (
-            plan.resources != "generations"
-            and kg.get("configuration_epoch", 0) != operation.snapshot.configuration_epoch
+        if (
+            kg is None
+            or kg.get("storage_profile_id") != str(plan.storage_profile_id)
+            or (
+                plan.resources != "generations"
+                and kg.get("configuration_epoch", 0) != operation.snapshot.configuration_epoch
+            )
         ):
             raise invalid()
         if target is not None:

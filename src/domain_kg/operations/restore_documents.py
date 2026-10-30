@@ -12,7 +12,13 @@ from domain_kg.graph.models import DomainSchema
 from domain_kg.imports.legacy_models import LegacyGraph
 from domain_kg.imports.prepared import PreparedImport
 from domain_kg.imports.provenance import ImportOrigin
-from domain_kg.ingestion.models import ExtractionBatch, ParsedBlock, ParsedChunk, ParsedDocument
+from domain_kg.ingestion.models import (
+    ExtractionBatch,
+    ParsedBlock,
+    ParsedChunk,
+    ParsedDocument,
+    SourceImage,
+)
 from domain_kg.ingestion.resolved import (
     ExtractionArtifact,
     ResolvedAssertion,
@@ -39,6 +45,7 @@ class RestoreDocuments:
         *,
         originals: tuple[BlobRef, ...],
         imports: tuple[RestoredImport, ...] = (),
+        image_assets: tuple[BlobRef, ...] = (),
     ) -> None:
         self.mapping = mapping
         if (
@@ -64,6 +71,27 @@ class RestoreDocuments:
             raise inaccessible_reference()
         for original in originals:
             mapping.source(self.owner(original))
+
+        from domain_kg.ingestion.file_types import IMAGE_TYPES
+
+        self.image_assets = {blob.object_id: blob for blob in image_assets}
+        if len(self.image_assets) != len(image_assets):
+            raise inaccessible_reference()
+        for blob in image_assets:
+            mapping.source(self.owner(blob))
+            if blob.media_type not in IMAGE_TYPES:
+                raise inaccessible_reference()
+
+    def image_asset(self, blob: BlobRef | None) -> BlobRef:
+        if blob is None:
+            raise self.inconsistent()
+        if self.originals.get(blob.version_id) == blob:
+            return self.original(blob)
+        if self.image_assets.get(blob.object_id) != blob:
+            raise self.inconsistent()
+        return BlobRef.model_validate(
+            blob.model_dump() | self.mapping.source(self.owner(blob)).model_dump()
+        )
 
     @staticmethod
     def owner(blob: BlobRef) -> SourceVersion:
@@ -143,6 +171,17 @@ class RestoreDocuments:
                             block.model_dump() | self.mapping.source(block).model_dump()
                         )
                         for block in item.blocks
+                    ),
+                    "images": tuple(
+                        SourceImage.model_validate(
+                            image.model_dump()
+                            | self.mapping.source(image).model_dump()
+                            | {
+                                "blob": self.image_asset(image.blob),
+                                "preview_blob": self.image_asset(image.preview_blob),
+                            }
+                        )
+                        for image in item.images
                     ),
                     "chunks": tuple(
                         ParsedChunk.model_validate(

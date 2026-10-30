@@ -149,9 +149,9 @@ class MaterialInspection:
         filters = SearchFilters(
             material_ids=(material,),
             version_id=version,
-            support_statuses=("verified", "manual", "imported_unverified")
+            support_statuses=("verified", "model_interpreted", "manual", "imported_unverified")
             if include_unverified
-            else ("verified", "manual"),
+            else ("verified", "model_interpreted", "manual"),
         )
         scope = await self.resolver.resolve(
             current, SearchRequest(kg_ids=(kg,), query="material metadata", filters=filters), kg
@@ -203,9 +203,14 @@ class MaterialInspection:
             key=lambda chunk: str(chunk.id),
         )
         await self.resolver.revalidate(scope)
+        from domain_kg.materials.image_sources import ImageSources
+
+        images = await ImageSources(self.queue).list(current, kg, material, source.version_id)
+        await self.resolver.revalidate(scope)
         return MaterialDetail(
             import_origin=source_origin(scope, source),
             material=summary,
+            images=images,
             versions=tuple(versions),
             selected_version_id=source.version_id,
             versions_truncated=len(rows) > 100,

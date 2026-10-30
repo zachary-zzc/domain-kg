@@ -1,0 +1,36 @@
+{
+  "budgets": {
+    "organization": {"input_tokens": 200000, "output_tokens": 8192, "calls": 12},
+    "knowledge_base": {"input_tokens": 200000, "output_tokens": 8192, "calls": 12}
+  },
+  "connections": [
+    {
+      "ref": "alibaba",
+      "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "REPLACE_IN_PRIVATE_COPY"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "908fbbfa-e1bc-4dbc-8339-e05f023e2f05",
+      "revision": 1,
+      "connection_ref": "alibaba",
+      "extraction_model": "qwen3.6-35b-a3b",
+      "extraction_revision": "source-names-roles-v1-json-object",
+      "extraction_format": "source_names_v1",
+      "extraction_semantics": "source_roles_v1",
+      "extraction_response_format": "json_object",
+      "extraction_enable_thinking": false,
+      "extraction_context_tokens": 16384,
+      "max_completion_tokens": 8192,
+      "embedding_model": "text-embedding-v4",
+      "embedding_dimensions": 1024,
+      "embedding_context_tokens": 8192,
+      "embedding_batch_size": 10,
+      "timeout_seconds": 60,
+      "allowed_namespaces": [],
+      "data_policy_approved": false,
+      "allow_restricted": false
+    }
+  ]
+}

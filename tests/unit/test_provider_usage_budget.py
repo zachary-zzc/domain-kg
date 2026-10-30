@@ -5,6 +5,25 @@ import pytest
 from domain_kg.errors import DomainError
 
 
+def test_unlimited_budget_still_reserves_and_settles_usage():
+    from domain_kg.providers.usage_budget import (
+        BudgetBounds,
+        BudgetCounts,
+        BudgetPolicy,
+        reserve,
+        settle,
+    )
+
+    policy = BudgetPolicy(organization=None, knowledge_base=None)
+    counts = BudgetCounts(spent_calls=5000, spent_input_tokens=9_000_000)
+    bounds = BudgetBounds(input_tokens=100, output_tokens=20)
+    pending = reserve(counts, bounds, policy.knowledge_base)
+    assert pending.reserved_calls == 1
+    result = settle(pending, bounds, outcome="reported", input_tokens=30, output_tokens=5)
+    assert result.spent_calls == 5001 and result.spent_input_tokens == 9_000_030
+    assert result.reserved_calls == 0
+
+
 def test_budget_reserves_full_call_bounds_and_rejects_concurrent_overcommit():
     from domain_kg.providers.usage_budget import BudgetBounds, BudgetCounts, BudgetLimits, reserve
 

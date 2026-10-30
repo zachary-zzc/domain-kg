@@ -53,15 +53,28 @@ def team_router(runtime: ServiceRuntime) -> APIRouter:
         result = await runtime.identity.repository.list_page(
             session.member, kind, PageRequest(limit=limit, cursor=cursor)
         )
+        members = (
+            await runtime.identity.repository.list_page(
+                session.member, "members", PageRequest(limit=100)
+            )
+            if kind == "groups"
+            else {"items": [], "next_cursor": None}
+        )
         return await page(
             runtime,
             session,
             access,
             "team.html",
             {
-                "title": "Team administration",
+                "title": {
+                    "members": "People",
+                    "groups": "Groups",
+                    "services": "Service identities",
+                }[kind],
                 "kind": kind,
                 "directory": result,
+                "members": members,
+                "member_names": {item["id"]: item["subject"] for item in members["items"]},
                 "limit": limit,
                 "command_key": str(uuid4()),
                 "issuer": runtime.identity.settings.oidc_issuer,

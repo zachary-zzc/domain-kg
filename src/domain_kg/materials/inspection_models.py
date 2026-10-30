@@ -4,7 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from domain_kg.imports.provenance import ImportOrigin
-from domain_kg.ingestion.models import ParsedChunk
+from domain_kg.ingestion.models import ImageOrigin, ParsedChunk
 from domain_kg.materials.models import MaterialMetadata
 from domain_kg.models import FrozenModel, NonNegative
 
@@ -31,6 +31,18 @@ class MaterialVersionSummary(FrozenModel):
     sha256: str
 
 
+class ImageSourceView(FrozenModel):
+    id: UUID
+    media_type: str
+    sha256: str
+    size_bytes: NonNegative
+    width: int
+    height: int
+    origins: tuple[ImageOrigin, ...]
+    original_url: str
+    preview_url: str
+
+
 class MaterialDetail(FrozenModel):
     material: MaterialSummary
     versions: tuple[MaterialVersionSummary, ...]
@@ -38,4 +50,5 @@ class MaterialDetail(FrozenModel):
     versions_truncated: bool = False
     chunks: tuple[ParsedChunk, ...] = ()
     chunks_truncated: bool = False
+    images: tuple[ImageSourceView, ...] = ()
     import_origin: ImportOrigin | None = None
