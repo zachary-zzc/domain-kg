@@ -11,6 +11,7 @@ from pymongo import AsyncMongoClient
 from domain_kg.catalog.backends import BackendRegistry, approved_from_settings
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.policy import Policy
+from domain_kg.ingestion.configuration import ParserConfigFile
 from domain_kg.ingestion.pipeline import configured_pipeline
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.jobs.runner import JobRunner
@@ -143,9 +144,13 @@ async def main(
                 "Configure approved provider profiles before starting a worker.",
             )
         providers = ProviderService(policy, router, approved_providers)
+        parser_config = ParserConfigFile(settings.parser_config)
         runner = JobRunner(
             queue,
-            configured_pipeline(queue, providers),
+            configured_pipeline(queue, providers, options=parser_config.read().options),
+            pipeline_factory=lambda: configured_pipeline(
+                queue, providers, options=parser_config.read().options
+            ),
             operations=GenerationService(queue)
             if generation_only
             else RestoreCleanupService(queue)

@@ -15,6 +15,7 @@ from domain_kg.console.model_settings import settings_context
 from domain_kg.console.rendering import browser_session, page
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import Action
+from domain_kg.ingestion.models import ParseOptions
 from domain_kg.models import Namespace, PageRequest
 from domain_kg.providers.configuration import ModelConfiguration, ModelSetup, ProfileApproval
 from domain_kg.providers.profiles import ProviderProfile, embedding_space_id
@@ -136,7 +137,7 @@ def setup_router(runtime: ServiceRuntime) -> APIRouter:
     @router.get("/kgs/{kg_id}/settings")
     @router.get("/kgs/{kg_id}/settings/advanced")
     async def settings(
-        request: Request, kg_id: UUID, setup_incomplete: bool = False
+        request: Request, kg_id: UUID, setup_incomplete: bool = False, parser_saved: bool = False
     ) -> HTMLResponse:
         session = await browser_session(runtime, request)
         access = await runtime.access(
@@ -200,11 +201,44 @@ def setup_router(runtime: ServiceRuntime) -> APIRouter:
                 "setup_incomplete": setup_incomplete,
                 "dimensions": runtime.catalog.router.dimensions,
                 "advanced_settings": request.url.path.endswith("/advanced"),
+                "parser_configuration": await runtime.parser_setup.get(access, kg_id),
+                "can_configure_parser": access.platform_operator
+                and runtime.parser_setup.store.path is not None,
+                "parser_saved": parser_saved,
             }
             | await settings_context(
                 runtime, access, kg_id, selected, choices, operator=access.platform_operator
             ),
         )
+
+    @router.post("/kgs/{kg_id}/settings/parser")
+    async def parser_settings(request: Request, kg_id: UUID) -> RedirectResponse:
+        fields, _, access = await command_context(runtime, request, kg_id, Action.CONFIGURE)
+        numeric = {"memory_limit_mib", "timeout_seconds", "max_pages", "max_expanded_mib"}
+        if set(fields) != numeric | {"expected_revision", "ocr"} or fields["ocr"] not in {
+            "enabled",
+            "disabled",
+        }:
+            raise invalid_form()
+        try:
+            values = {key: int(fields[key]) for key in numeric}
+            expanded_mib = values.pop("max_expanded_mib")
+            current = await runtime.parser_setup.get(access, kg_id)
+            options = ParseOptions.model_validate(
+                current.options.model_dump()
+                | values
+                | {
+                    "max_expanded_bytes": expanded_mib * 1024 * 1024,
+                    "ocr": fields["ocr"] == "enabled",
+                }
+            )
+            revision = int(fields["expected_revision"])
+            if revision < 0:
+                raise ValueError("negative revision")
+        except (ValueError, ValidationError):
+            raise invalid_form() from None
+        await runtime.parser_setup.save(access, kg_id, options, revision)
+        return redirect(f"/admin/kgs/{kg_id}/settings/advanced?parser_saved=true#document-parsing")
 
     @router.post("/kgs/{kg_id}/lifecycle/{operation}")
     async def lifecycle(

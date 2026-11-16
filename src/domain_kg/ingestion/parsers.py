@@ -14,8 +14,6 @@ from domain_kg.ingestion.models import ParsedDocument, ParseOptions
 from domain_kg.materials.models import BlobRef
 from domain_kg.storage.blobs import BlobStore
 
-MAX_RSS_BYTES = 384 * 1024 * 1024
-
 
 class Parser:
     def __init__(self, blobs: BlobStore) -> None:
@@ -101,6 +99,7 @@ class Parser:
 
     async def parse(self, blob: BlobRef, options: ParseOptions) -> ParsedDocument:
         blob, options = BlobRef.model_validate(blob), ParseOptions.model_validate(options)
+        max_rss_bytes = options.memory_limit_mib * 1024 * 1024
         async with self._limit:
             with TemporaryDirectory(prefix="kg-parser-") as temporary:
                 directory = await asyncio.to_thread(Path(temporary).resolve)
@@ -171,7 +170,7 @@ class Parser:
                         while not waiter.done():
                             if read.done():
                                 read.result()
-                            if await self._rss(process) > MAX_RSS_BYTES:
+                            if await self._rss(process) > max_rss_bytes:
                                 raise DomainError(
                                     ErrorCode.QUOTA_EXCEEDED, "Parser memory limit exceeded."
                                 )

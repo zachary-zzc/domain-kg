@@ -1,0 +1,16 @@
+{% set parser_options = parser_configuration.options %}
+<section class="card parser-settings" id="document-parsing">
+<div class="section-heading"><h2>{{ _('Document parsing') }}</h2><span class="badge">{{ _('Applies to all KGs on this server') }}</span></div>
+<p class="muted">{{ _('New jobs and retries use these settings. Running jobs keep their current settings. Saving makes no model calls and does not retry files.') }}</p>
+{% if parser_saved %}<p class="notice" role="status">{{ _('Parser settings saved. They apply to the next job without restarting the server.') }}</p>{% endif %}
+<form method="post" action="/admin/kgs/{{ kg.id }}/settings/parser" data-busy-form>
+<input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="expected_revision" value="{{ parser_configuration.revision }}">
+<fieldset {% if not can_configure_parser %}disabled{% endif %}>
+<div class="form-row"><div><label for="parser-memory">{{ _('Parser memory limit (MiB)') }}</label><input id="parser-memory" name="memory_limit_mib" type="number" min="64" max="8192" value="{{ parser_options.memory_limit_mib }}" required aria-describedby="parser-memory-help"><p id="parser-memory-help" class="field-help">{{ _('64–8192 MiB. 1024 MiB = 1 GiB. Includes the parser and its OCR/conversion children, for every file format.') }}</p></div><div><label for="parser-timeout">{{ _('Parsing timeout (seconds)') }}</label><input id="parser-timeout" name="timeout_seconds" type="number" min="1" max="300" value="{{ parser_options.timeout_seconds }}" required><p class="field-help">{{ _('1–300 seconds per file. Exceeding the budget stops that file and keeps its original.') }}</p></div></div>
+<div class="form-row"><div><label for="parser-pages">{{ _('Maximum pages or slides') }}</label><input id="parser-pages" name="max_pages" type="number" min="1" max="500" value="{{ parser_options.max_pages }}" required></div><div><label for="parser-expanded">{{ _('Expanded content limit (MiB)') }}</label><input id="parser-expanded" name="max_expanded_mib" type="number" min="1" max="100" value="{{ parser_options.max_expanded_bytes // (1024 * 1024) }}" required><p class="field-help">{{ _('1–100 MiB of decoded content. This is separate from the upload file size limit.') }}</p></div></div>
+<label for="parser-ocr">{{ _('Local OCR for scanned pages and images') }}</label><select id="parser-ocr" name="ocr"><option value="enabled" {% if parser_options.ocr %}selected{% endif %}>{{ _('Enabled') }}</option><option value="disabled" {% if not parser_options.ocr %}selected{% endif %}>{{ _('Disabled') }}</option></select>
+<p class="field-help">{{ _('OCR uses the installed local engine. Disable it only when native text is sufficient; scanned pages may otherwise have no searchable text.') }}</p>
+<button type="submit">{{ _('Save parser settings') }}</button>
+</fieldset></form>
+{% if not can_configure_parser %}<p class="field-help">{{ _('A platform operator must configure a writable parser policy file before these server-wide settings can be edited.') }}</p>{% endif %}
+</section>

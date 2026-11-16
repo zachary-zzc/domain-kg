@@ -1,11 +1,11 @@
 # Laptop parsing profile and source ledger
 
-The default local profile uses `docling-parse 7.22.3` for native PDF text and
-bounded deterministic decoders for DOCX, UTF-8 text/Markdown, inert HTML, CSV,
-and JSON. Docling's [native PDF component](https://github.com/docling-project/docling-parse)
-provides physical pages and text cells without OCR/layout models. The locked
-environment contains no Torch/OCR model dependency or model download step.
-This profile does not establish OCR/layout quality for scanned or complex PDFs.
+The local PDF adapter uses pypdf for native text and embedded image placement.
+Docling renders only pages needing OCR in a short-lived process, followed by
+preinstalled local Tesseract (English/simplified Chinese). Rendering exits before
+OCR starts. No model download or cloud OCR request is part of parsing. Native
+Office/text decoders and sandboxed legacy conversion retain the same source
+ledger; see [supported formats](console.md).
 
 Native PDF locations use one-based physical page numbers and immutable block
 IDs. DOCX uses body paragraph indices, heading context, or table/row indices.
@@ -18,20 +18,64 @@ Each original is checksum-verified before parsing in a separate process. On
 macOS that process has a network-denying kernel sandbox, can read runtime/source
 code and its private temporary original, and can write only within that temporary
 directory. Python networking is disabled too. Runtime, file-size and descriptor
-limits apply; the parent monitors macOS RSS with a 384 MiB ceiling. Linux also
-uses a 512 MiB address-space limit. These are parser bounds in addition to the
+limits apply; the parent monitors the whole process group's RSS with a default
+1024 MiB ceiling for every format. Linux also uses a per-process address-space
+limit equal to the configured RSS budget plus 256 MiB. These are parser bounds in addition to the
 documented service-container budget, not a claim about total laptop RAM.
 
 Inputs are limited to 50 MiB and PDFs to 500 pages. Archive member count,
 expanded size, XML size, JSON depth/pointers, and output size are bounded. ZIP
 traversal/symlinks/duplicates, XML entities, duplicate/nonfinite JSON keys/values,
 malformed and encrypted files are rejected. HTML never executes scripts or
-fetches links/images. Legacy `.doc` requires export to DOCX/PDF; no arbitrary
-converter command or server path is accepted.
+fetches links/images. Legacy DOC/PPT/RTF/ODT use preinstalled sandboxed LibreOffice;
+no arbitrary converter command or server path is accepted.
 
-Image-only pages emit `OCR_REQUIRED`; the native profile returns no invented
-text. Explicit OCR requests need a separately approved parser profile and are
-currently refused. Heavy OCR/model quality checks are outside this laptop run.
+Image-only/image-dominant pages use local OCR when enabled, with explicit OCR
+provenance and warnings. Disabling OCR may leave scanned pages with no searchable
+text. Missing engines, malformed/encrypted files and resource limits remain
+explicit failures; unreadable embedded PDF images can warn while preserving native
+text and the complete original.
+
+## Parser configuration
+
+Every format defaults to **1024 MiB (1 GiB)** for the entire parser process group,
+including OCR and conversion children. These settings control local parsing;
+model API/context/token settings are separate.
+
+| Setting | Default | Allowed range |
+| --- | --- | --- |
+| `memory_limit_mib` | 1024 | 64–8192 MiB |
+| `timeout_seconds` | 120 | 1–300 seconds |
+| `max_pages` | 500 | 1–500 PDF pages/presentation slides |
+| `max_expanded_bytes` | 104857600 | 1–104857600 bytes; browser form uses 1–100 MiB |
+| `ocr` | true | true/false |
+
+The server's `DOMAIN_KG_PARSER_CONFIG` selects a JSON file using the schema in
+[`config/parser.example.json`](../config/parser.example.json). Copy it to a private
+writable directory and point both API and workers at the same absolute path.
+Leaving the variable unset uses the defaults and makes the browser form read-only.
+A missing file at a configured path starts with defaults; saving creates it with
+mode 0600. Invalid, oversized or unreadable configuration fails explicitly.
+
+In the local workspace launcher the path is already configured as
+`secrets/local-browser/parser.json`. Open **KG settings → Advanced settings →
+Document parsing** to edit it. The settings affect **all KGs on that server**, so
+saving requires a human platform operator who also owns the displayed KG. API
+and workers must share the same mounted file when deployed separately. The API
+uses a lock, expected revision and atomic replacement; a stale conflicting save
+leaves the accepted file unchanged. MCP exposes the same policy through
+`domain_kg_get_parser_settings` and `domain_kg_configure_parser`.
+
+The worker captures the current file once at the start of each job execution,
+including retries. That execution keeps one immutable pipeline and configuration
+hash; a save applies to the next execution without restarting the worker. Existing
+jobs are not automatically retried, and saving makes no model request. Raising
+the budget permits higher peak RAM use; parser and any container/host limits both
+apply, so the host/container must have room for the chosen parser budget.
+
+The JSON `target_tokens`/`overlap_tokens` fields retain the existing `ParseOptions`
+contract; this form configures parsing resources. Production chunking continues
+to follow the selected model's adaptive context-window policy.
 
 Chunking measures `cl100k_base` tokens, targets at most 700, and permits at most
 100 overlap tokens. It preserves whole small table rows and source locations,

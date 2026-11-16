@@ -4,7 +4,7 @@ from typing import get_args
 from uuid import UUID
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from domain_kg.console.i18n import label, translate
 from domain_kg.console.rendering import browser_session, page
@@ -12,10 +12,24 @@ from domain_kg.errors import ErrorCode
 from domain_kg.identity.models import Action
 from domain_kg.jobs.diagnostics import DEFAULT_FAILURE, FAILURES, SAFE_DETAILS, failure_copy
 from domain_kg.jobs.models import JobStage
-from domain_kg.models import PageRequest
 from domain_kg.transport.runtime import ServiceRuntime
 
 FOLDER_COPY = (
+    "Files",
+    "Folder",
+    "Select",
+    "Submitting",
+    "Resume file",
+    "Current import",
+    "Open source",
+    "View KG",
+    "Upload and construct KG",
+    "No files selected.",
+    "Choose files or a folder and review before uploading.",
+    "Select the same original files above to finish uploading.",
+    "This file’s status could not be refreshed. Other files continue; reconnecting automatically.",
+    "Published with warnings. Review the job for details.",
+    "Processing continues in the background.",
     "No folder selected.",
     "Checking files",
     "Review complete",
@@ -60,8 +74,21 @@ FOLDER_COPY = (
     "of",
     "Errors",
     "bytes",
+    "Choose folder",
+    "Choose files",
+    "Saved import. Reselect originals only for unfinished uploads.",
+    "No files match this view. Change the filter or search.",
+    "Included files",
+    "Needs attention",
+    "All files",
+    "Found",
+    "Review the included files, then upload. Skipped files are not uploaded.",
+    "Each file runs independently. You can leave after uploads finish.",
+    "Loading saved import status. Accepted jobs continue in the background.",
 )
 FOLDER_ISSUES = {
+    "IMPORT_TOO_MANY": "Choose up to 100 files per import.",
+    "ORIGINAL_REQUIRED": "Select the same original to continue this upload.",
     "EMPTY_FILE": "Empty file; skipped.",
     "HIDDEN_FILE": "Hidden file; skipped.",
     "UNSUPPORTED_FILE": "Unsupported format; export to TXT, PDF or DOCX.",
@@ -99,35 +126,37 @@ def folder_copy() -> dict[str, str]:
 def browser_tools_router(runtime: ServiceRuntime) -> APIRouter:
     router = APIRouter()
 
-    async def render(request: Request, kg: UUID, *, folder: bool) -> HTMLResponse:
+    async def render_mcp(request: Request, kg: UUID) -> HTMLResponse:
         session = await browser_session(runtime, request)
         access = await runtime.access(
             session.principal,
             (kg,),
-            Action.INGEST if folder else Action.READ,
+            Action.READ,
             session.member.org_id,
         )
         return await page(
             runtime,
             session,
             access,
-            "folder.html" if folder else "mcp_test.html",
+            "mcp_test.html",
             {
-                "title": "Import folder" if folder else "MCP playground",
+                "title": "MCP playground",
                 "kg": await runtime.catalog.get_kg(access, kg),
-                "jobs": await runtime.job_inspection.list(access, kg, PageRequest(limit=10))
-                if folder
-                else None,
-                "folder_copy": folder_copy() if folder else {},
             },
         )
 
     @router.get("/kgs/{kg_id}/folder")
-    async def folder(request: Request, kg_id: UUID) -> HTMLResponse:
-        return await render(request, kg_id, folder=True)
+    async def folder(request: Request, kg_id: UUID) -> RedirectResponse:
+        session = await browser_session(runtime, request)
+        await runtime.access(session.principal, (kg_id,), Action.INGEST, session.member.org_id)
+        return RedirectResponse(
+            f"/admin/kgs/{kg_id}/materials?add=folder",
+            status_code=303,
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.get("/kgs/{kg_id}/mcp-test")
     async def mcp_test(request: Request, kg_id: UUID) -> HTMLResponse:
-        return await render(request, kg_id, folder=False)
+        return await render_mcp(request, kg_id)
 
     return router

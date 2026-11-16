@@ -20,6 +20,37 @@ class DomainSchema(Namespace):
     revision: NonNegative
     entity_types: tuple[str, ...]
     predicates: tuple[PredicateDefinition, ...]
+    # Omit the historical default so sealed legacy artifacts keep their hashes.
+    vocabulary: Literal["closed", "open"] = Field(
+        default="closed", exclude_if=lambda value: value == "closed"
+    )
+
+    def allows_entity_type(self, value: str) -> bool:
+        return self._label(value) and (self.vocabulary == "open" or value in self.entity_types)
+
+    def allows_predicate(self, value: str) -> bool:
+        return self._label(value) and (
+            self.vocabulary == "open" or any(p.name == value for p in self.predicates)
+        )
+
+    def allows_relation(self, predicate: str, subject_type: str, target_type: str) -> bool:
+        if not (
+            self.allows_predicate(predicate)
+            and self.allows_entity_type(subject_type)
+            and self.allows_entity_type(target_type)
+        ):
+            return False
+        return self.vocabulary == "open" or any(
+            p.name == predicate
+            and subject_type in p.subject_types
+            and target_type in p.target_types
+            for p in self.predicates
+        )
+
+    @staticmethod
+    def _label(value: str) -> bool:
+        # Labels are bounded property values, never Cypher labels or instructions.
+        return bool(value.strip()) and len(value) <= 200 and value.isprintable()
 
     @model_validator(mode="after")
     def known_types(self) -> Self:

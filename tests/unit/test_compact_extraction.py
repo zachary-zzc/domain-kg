@@ -102,6 +102,66 @@ async def test_compact_request_fits_small_model_and_restores_exact_source_locati
     assert usage[0].input_tokens == 120
 
 
+@pytest.mark.parametrize("format", ["source_refs_v1", "source_names_v1"])
+async def test_unrelated_negative_sentence_does_not_invalidate_positive_evidence(format):
+    chunk = source("Alpha uses Beta. Gamma does not use Delta.")
+    original = chunk.model_dump_json()
+    profile, _ = compact_profile(chunk, format)
+    _, schema = proposal(chunk)
+    payload = extraction_payload(chunk, schema, profile)
+    assert json.loads(payload["messages"][1]["content"])["sources"] == [
+        {"id": 0, "text": chunk.text},
+    ]
+    value = facts()
+    if format == "source_names_v1":
+        value["assertions"][0].update(subject="Alpha", target="Beta")
+    result, usage = await call(chunk, value, format=format)
+    assert len(usage) == 1
+    assert result.assertions[0].spans[0].quote == chunk.text
+    assert result.assertions[0].spans[0].location == chunk.spans[0].location
+    assert chunk.model_dump_json() == original
+
+
+async def test_source_refs_preserve_offsets_and_model_assigned_negation():
+    chunk = source("Other facts. Alpha does not use Beta.")
+    span = chunk.spans[0].model_copy(update={"start": 37, "end": 37 + len(chunk.text)})
+    chunk = chunk.model_copy(update={"spans": (span,)})
+    value = facts()
+    value["assertions"][0]["polarity"] = "negative"
+    result, _ = await call(chunk, value)
+    evidence = result.assertions[0].spans[0]
+    assert result.assertions[0].polarity == "negative"
+    assert evidence.quote == chunk.text
+    assert evidence.start == 37
+    assert evidence.end == span.end
+
+
+async def test_multiple_citations_do_not_override_claim_polarity_from_keywords():
+    from test_chunking import document_blocks
+
+    from domain_kg.ingestion.chunking import chunk_document
+    from domain_kg.ingestion.models import ChunkConfig
+
+    chunk = chunk_document(
+        document_blocks(["Alpha uses Beta.", "Gamma does not use Delta."]), ChunkConfig()
+    )[0]
+    value = facts()
+    value["assertions"][0]["refs"] = [0, 1]
+    result, _ = await call(chunk, value)
+    assert result.assertions[0].polarity == "positive"
+    assert result.assertions[0].spans == chunk.spans
+    assert not result.warnings
+
+
+def test_canonical_evidence_preserves_names_abbreviations_decimals_and_chinese():
+    from domain_kg.providers.compact import evidence_passages
+
+    text = "Dr. A. Smith uses 1.5 mg of Beta. 阿尔法不使用贝塔。伽马使用德尔塔。"
+    spans = evidence_passages(source(text))
+    assert [s.quote for s in spans] == [text]
+    assert all(text[s.start:s.end] == s.quote for s in spans)
+
+
 @pytest.mark.parametrize(
     "bad",
     [
@@ -114,7 +174,6 @@ async def test_compact_request_fits_small_model_and_restores_exact_source_locati
         "endpoint",
         "duplicate",
         "command",
-        "positive_negation",
     ],
 )
 async def test_bad_compact_fields_cannot_be_accepted(bad):
@@ -137,8 +196,6 @@ async def test_bad_compact_fields_cannot_be_accepted(bad):
         value["entities"][1]["name"] = "Alpha"
     if bad == "command":
         value["commands"] = ["MATCH (n) DELETE n"]
-    if bad == "positive_negation":
-        chunk = source("Alpha does not use Beta.")
     if bad in ("negative_ref", "bool_ref", "command"):
         with pytest.raises(DomainError):
             await call(chunk, value)

@@ -1,4 +1,4 @@
-"""No model output can invent evidence, choose authority, or lose negation."""
+"""Validate source provenance and authority, preserving model-assigned polarity."""
 
 from uuid import uuid4
 
@@ -37,6 +37,9 @@ def proposal(chunk, *, polarity="positive"):
     from domain_kg.graph.schema import schema_for
 
     schema = schema_for(Namespace(org_id=chunk.org_id, kg_id=chunk.kg_id), "general")
+    # These tests exercise an explicitly closed custom vocabulary. Built-in open
+    # profile behavior has separate content-derived extraction regression tests.
+    schema = schema.model_copy(update={"vocabulary": "closed"})
     batch = ExtractionBatch(
         org_id=chunk.org_id,
         kg_id=chunk.kg_id,
@@ -174,13 +177,26 @@ def test_failed_entity_and_relation_checks_report_distinct_safe_reasons():
     )
 
 
-def test_predicate_endpoints_negation_and_empty_assertions_are_explicit():
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Alpha (阿尔法, urn:fixture:alpha) uses Beta (贝塔, urn:fixture:beta). Gamma is not used.",
+        "Alpha (阿尔法, urn:fixture:alpha) not only uses Beta (贝塔, urn:fixture:beta).",
+    ],
+)
+def test_source_validation_does_not_decide_claim_polarity_from_keywords(text):
+    from domain_kg.ingestion.extraction import validate_extraction
+
+    chunk = source(text)
+    batch, schema = proposal(chunk)
+    assert validate_extraction(chunk, schema, batch) == batch
+
+
+def test_predicate_endpoints_model_polarity_and_empty_assertions_are_explicit():
     from domain_kg.ingestion.extraction import validate_extraction
 
     chunk = source("Alpha (阿尔法, urn:fixture:alpha) does not use Beta (贝塔, urn:fixture:beta).")
-    positive, schema = proposal(chunk)
-    with pytest.raises(DomainError):
-        validate_extraction(chunk, schema, positive)
+    _, schema = proposal(chunk)
     negative, _ = proposal(chunk, polarity="negative")
     assert validate_extraction(chunk, schema, negative).assertions[0].polarity == "negative"
     with pytest.raises(DomainError):

@@ -13,6 +13,7 @@ from domain_kg.console.rendering import browser_session, page
 from domain_kg.console.workspace import filters_for, read_context
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import Action
+from domain_kg.jobs.inspection import JobFilters, JobView
 from domain_kg.models import IdempotencyKey, PageRequest
 from domain_kg.operations.models import RestoreCleanupCommand
 from domain_kg.operations.restore_results import RestoreResults
@@ -28,10 +29,11 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
         kg_id: UUID,
         cursor: str | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 25,
+        view: JobView = "active",
     ) -> HTMLResponse:
         session, access, scope = await read_context(runtime, request, kg_id, filters_for(False))
         result = await runtime.job_inspection.list(
-            access, kg_id, PageRequest(limit=limit, cursor=cursor)
+            access, kg_id, PageRequest(limit=limit, cursor=cursor), JobFilters(view=view)
         )
         return await page(
             runtime,
@@ -39,11 +41,12 @@ def job_router(runtime: ServiceRuntime) -> APIRouter:
             access,
             "jobs.html",
             {
-                "title": "Processing jobs",
+                "title": "Task history",
                 "kg": await runtime.catalog.get_kg(access, kg_id),
                 "jobs": result,
                 "limit": limit,
                 "cursor": cursor,
+                "job_view": view,
                 "command_key": str(uuid4()),
                 "bulk_kind": "jobs",
                 "bulk_scope": "#job-list",

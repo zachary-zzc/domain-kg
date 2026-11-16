@@ -13,11 +13,51 @@ names, types and predicates; a valid JSON response alone is not sufficient.
 Changing the format requires a new approved profile revision. Checkpoint hashes
 include the serialized profile and the model-window version.
 
-Model-window-v2 packs consecutive source spans under extraction and embedding
+Numbered formats expose canonical source spans unchanged (`source-spans-v3-open-qualifiers`).
+Entity meaning, relationship meaning and polarity are model judgments. The server
+does not use negation-keyword regexes to reject claims, or regex sentence splitting
+to modify evidence numbering. An unrelated `not`, or a phrase such as `not only`,
+cannot invalidate a positive relation by itself. Typed polarity and qualifiers are
+preserved; source offsets, endpoints, namespace, schema and authorization are still
+validated. Identifier-format syntax checks remain separate from semantic extraction.
+This removes a heuristic semantic gate, not the possibility of a model getting
+polarity wrong: source correspondence does not prove entailment. The evidence
+version and extraction pipeline revision invalidate incompatible checkpoints for
+new builds. Accepted graphs and frozen evaluation snapshots are not rewritten.
+
+Model-window-v6-unicode packs consecutive source spans under extraction and embedding
 budgets, retaining a short preceding span where possible. Oversized individual
 spans still split with exact Unicode offsets. The conservative context preflight
 remains active; neither a context fit nor processed-page coverage establishes
 semantic or clinical completeness.
+
+New browser-created profiles and the Alibaba example use `lightrag_general_v2`.
+This follows LightRAG 1.5.7's initial extraction plus one gleaning pass through the
+approved provider adapter. The same working model reviews the original source for
+missing facts, with a compact inventory of prior claims to avoid duplicates.
+Both responses require their own endpoint records and valid source references.
+The server unions validated facts, remaps local IDs and deduplicates exact claims.
+Version 2 adds source-supported decomposition of compound descriptions and explicit alternate-name relations, without domain-specific types, regex entity rules or inferred links. Version 1 retains its original prompt and checkpoint identity. Existing explicitly configured policies are not silently migrated.
+
+Each source window permits at most two model calls: an initial response followed
+by either gleaning or correction. Invalid model JSON/schema receives one model
+correction, rather than local regex repair; source-evidence correction uses the
+same second-call allowance. Transport failures, refusal and authorization/billing
+errors do not trigger an initial-response retry. Every transmitted call is separately
+authorized, budgeted and metered. Gleaning that cannot fit the actual context is
+skipped with `extraction_gleaning_context_limit`; an optional gleaning failure keeps
+the validated initial facts with `extraction_gleaning_incomplete`. Authority,
+billing and quota errors still propagate. Output-limit subdivision remains bounded
+to two levels; the two-call limit applies to each attempted source window.
+
+Entity, predicate and qualifier labels come from source meaning under open schemas.
+Qualifier names are bounded strings, not a three-key enum; their values and evidence
+remain source-validated. An omitted optional qualifier list means an empty list.
+Closed custom entity/relation schemas retain their restrictions. The general policy
+does not append the historical domain/role dictionary or require a fixed set of facets.
+Per-response record limits remain unchanged; the validated union permits up to
+two full responses. No model output can choose authority or database operations.
+See [implementation and evaluation](general-lightrag-optimization-2026-11-02.md).
 
 Set `DOMAIN_KG_PROVIDER_CONFIG` to an owner-readable-only JSON file outside Git.
 The file has `connections` and `profiles` arrays validated by
@@ -100,6 +140,28 @@ negative claims keep distinct assertion identities. Grounded explicit
 identifiers can unite entities across materials; equal names alone cannot.
 Ambiguous homonyms remain separate until an authorized curation merges them.
 
+Built-in general, medical and scientific schemas now use revision 2 with an open
+vocabulary: the model derives types and predicates from the supplied content.
+Open requests omit preset label lists to avoid anchoring the model to them.
+Labels remain bounded
+property values; they never become database commands or permissions. Existing
+stored custom schemas without `vocabulary` remain closed and retain their endpoint
+restrictions. Extraction, curation and imports apply the same schema policy.
+
+Open-profile prompts extract supported relations before their endpoint entities,
+including facts expressed by lists and tables. After evidence validation and any
+corrective response, automatic extraction keeps only entities used by accepted
+relations. Standalone mentions remain in the original and searchable source chunks.
+It never adds an edge just to connect a node. Explicit imported records and manual
+curation are preserved. Extraction checkpoint identities change with this algorithm;
+existing accepted graphs change only through normal re-ingestion and verified
+publication, never by an in-place cleanup of accepted projections.
+
+Responses exceeding the format's entity/assertion count limits use the same
+bounded source-splitting path as a token-truncated response. Each smaller source
+window must still pass all validation; arrays are never silently truncated. Other
+malformed fields remain provider failures.
+
 An approved profile may opt into `extraction_semantics: "source_roles_v1"`
 (default `"legacy"`). This adds shared source-role guidance to all three extraction
 formats: check active/passive direction, creator versus performer/owner, event-date
@@ -107,7 +169,7 @@ meaning, and necessary temporal/conditional qualifiers. It describes only predic
 already allowed by the selected schema; it does not extend or migrate that schema.
 When changing a deployed profile, increment its revision through the existing
 configuration workflow. The policy participates in extraction checkpoint identity;
-legacy profiles retain their previous identity and embedding spaces do not change.
+legacy full-format profiles retain their previous identity and embedding spaces do not change.
 Accepted projections and manual curation remain unchanged until explicit normal
 re-ingestion/publication. This is prompt guidance, not a semantic acceptance gate or
 a claim of measured improvement. The source-only comparison and current status are
@@ -117,9 +179,26 @@ The extra instructions count toward the existing conservative context budget. A
 actually supported larger model window or retain the legacy policy. Do not raise
 the configured limit above the provider's real limit or bypass the budget check.
 
+Two experimental open-schema prompt policies are available for measured comparison:
+`source_facets_v1` asks for source-stated properties, measurements, methods, requirements,
+outcomes and limitations as well as named-entity relations; `source_facets_v2` additionally
+requires every relation endpoint, including literal values, to have an entity record.
+They encourage reusable labels, preserve event roles and qualifiers, and forbid invented
+links. These reminders do not define a fixed vocabulary or a minimum edge count.
+Closed schemas retain the existing vocabulary and source-role instructions.
+
+Both policies are opt-in through `ProviderProfile.extraction_semantics`; the browser
+configuration default is now `lightrag_general_v2`. The policy is part of checkpoint
+identity. Existing sources, validators, output limits, correction/splitting limits,
+permissions and publication behavior remain in force. The policies do not repair
+fragmented OCR or establish semantic accuracy. See
+[the prompt experiment](graph-prompt-optimization-2026-11-02.md) before adoption.
+
 LightRAG 1.5.7 processes server-generated opaque engine names under the source
 namespace. Its output must preserve every expected entity, endpoint and source
 mapping. Canonical IDs and database operations are constructed by the server.
+Native entity types also use opaque identifiers because LightRAG rejects type
+punctuation such as `Test/Service`; canonical content-derived labels stay intact.
 Display observations, spans and supports remain source-owned in MongoDB.
 Preparation never makes records searchable by itself.
 
@@ -210,9 +289,12 @@ A source-evidence validation failure permits one corrective completion containin
 its safe reason. The service asks for all required passage references or omission
 of unsupported claims. It checks the actual corrected request size before sending,
 revalidates current source access and selection, and books each call separately.
-The reply still passes the same canonical source/schema checks. After the one
-correction, independently valid entities and relations can continue with server
-warnings counting discarded entities and relations. Duplicate/ambiguous identities,
+The reply still passes the same canonical source/schema checks. Valid first-response
+relations and their endpoints survive a correction that omits them. The service
+unions independently validated facts, remaps temporary IDs, and deduplicates exact
+facts without counting a changed confidence estimate as additional evidence.
+After the one correction, independently valid entities and relations can continue
+with server warnings counting discarded entities and relations. Duplicate/ambiguous identities,
 unsupported spans, invalid endpoints or predicates, and invalid qualifiers never
 become accepted facts. Reject an entire relation when any of its required fields
 fails; do not remove a qualifier or append evidence to make it pass. The model's
@@ -248,3 +330,12 @@ provider billing diagnostics and revocation recheck. A Hello test validates chat
 and embedding connectivity; it does not establish image capability or guarantee
 future account credit. Live multimodal quality on private documents requires its
 own approved diagnostic; this change uses synthetic/mocked model validation.
+
+
+Deep retrieval with `rerank=true` sends complete original candidates to the selected
+working model, under its configured context window. It interleaves independent recall
+branches before the 50-source cap, then uses the validated semantic selection as the
+final order. It does not truncate each source to an equal excerpt or count the reranker
+as another RRF vote. Oversized requests fail with `QUOTA_EXCEEDED`; configure a provider
+window sufficient for the pool. JSON-object providers use the same local schema and
+subset validation as JSON-schema providers. Fast retrieval never invokes this model.

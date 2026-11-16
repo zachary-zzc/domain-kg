@@ -15,7 +15,7 @@ from domain_kg.identity.models import AccessContext, Action
 from domain_kg.identity.routes import HTTPPageRequest
 from domain_kg.imports.models import ImportPlan
 from domain_kg.imports.requests import ImportRequest
-from domain_kg.jobs.inspection import JobPage
+from domain_kg.jobs.inspection import JobFilters, JobPage, JobView
 from domain_kg.jobs.models import JobReceipt
 from domain_kg.materials.inspection_models import MaterialDetail, MaterialPage
 from domain_kg.materials.management import ManagedMaterialPage, ManagementState
@@ -40,6 +40,7 @@ from domain_kg.revisions.models import (
     RevisionReceipt,
     RollbackRevision,
 )
+from domain_kg.transport.import_runs import import_run_router
 from domain_kg.transport.models import CurationResult, ProviderSelection, ProviderSelectionReceipt
 from domain_kg.transport.operations import operation_router
 from domain_kg.transport.runtime import ServiceRuntime
@@ -52,6 +53,11 @@ class MaterialQuery(SearchFilters):
 
 class ManagementQuery(HTTPPageRequest):
     state: ManagementState = "removed"
+
+
+class JobQuery(HTTPPageRequest):
+    view: JobView = "all"
+    sources_only: bool = False
 
 
 class HistoryQuery(HTTPPageRequest):
@@ -73,6 +79,7 @@ def matching(*pairs: tuple[UUID, UUID]) -> None:
 def service_router(runtime: ServiceRuntime) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
     router.include_router(operation_router(runtime))
+    router.include_router(import_run_router(runtime))
 
     async def access(
         request: Request,
@@ -279,12 +286,13 @@ def service_router(runtime: ServiceRuntime) -> APIRouter:
 
     @router.get("/kgs/{kg_id}/jobs")
     async def jobs(
-        request: Request, kg_id: UUID, page: Annotated[HTTPPageRequest, Query()]
+        request: Request, kg_id: UUID, page: Annotated[JobQuery, Query()]
     ) -> JobPage:
         return await runtime.job_inspection.list(
             await access(request, (kg_id,), Action.READ),
             kg_id,
-            PageRequest.model_validate(page.model_dump()),
+            PageRequest(limit=page.limit, cursor=page.cursor),
+            JobFilters(view=page.view, sources_only=page.sources_only),
         )
 
     @router.get("/kgs/{kg_id}/jobs/{job_id}")

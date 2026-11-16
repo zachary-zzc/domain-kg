@@ -1,5 +1,6 @@
 """Approved endpoint only, untrusted data, bounded structured response and revocation."""
 
+import asyncio
 import json
 from uuid import uuid4
 
@@ -195,5 +196,89 @@ async def test_truncated_output_is_rejected_but_its_actual_usage_is_counted():
         with pytest.raises(DomainError):
             await client.complete(chunk, schema)
         assert len(usage) == 1 and usage[0].input_tokens == 123 and usage[0].output_tokens == 512
+    finally:
+        await client.close()
+
+
+@pytest.mark.parametrize(
+    "failure,expected,reported_usage",
+    [
+        ("deadline", "The extraction request timed out.", False),
+        ("read_timeout", "The extraction request timed out.", False),
+        ("connection", "The extraction model could not be reached.", False),
+        (
+            "invalid_json",
+            "The extraction model returned an invalid structured response.",
+            False,
+        ),
+        (
+            "invalid_content",
+            "The extraction model returned an invalid structured response.",
+            True,
+        ),
+        (
+            "blocked",
+            "The extraction response was blocked or contained unsupported content.",
+            True,
+        ),
+    ],
+)
+async def test_extraction_failure_kind_is_safe_specific_and_never_adds_a_request(
+    failure, expected, reported_usage
+):
+    from domain_kg.jobs.diagnostics import SAFE_DETAILS, failure_copy
+
+    chunk = source()
+    _, schema = proposal(chunk)
+    profile, connection = configured(chunk)
+    profile = ProviderProfile.model_validate(profile.model_dump() | {"timeout_seconds": 1})
+    calls, usage = [], []
+
+    async def noop(_):
+        pass
+
+    async def record(value):
+        usage.append(value)
+
+    async def respond(request):
+        calls.append(request.url.path)
+        if failure == "deadline":
+            await asyncio.sleep(2)
+        if failure == "read_timeout":
+            raise httpx.ReadTimeout("private provider token", request=request)
+        if failure == "connection":
+            raise httpx.ConnectError("private connection secret", request=request)
+        if failure == "invalid_json":
+            return httpx.Response(200, content=b"private upstream body")
+        message = {"content": '{"entities": [], "assertions": [], "private": "source"}'}
+        if failure == "blocked":
+            message["refusal"] = "private rejected source text"
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"finish_reason": "stop", "message": message}],
+                "usage": {"prompt_tokens": 123, "completion_tokens": 45},
+            },
+        )
+
+    client = ExtractionClient(
+        profile,
+        connection,
+        authorize=noop,
+        record_usage=record,
+        transport=httpx.MockTransport(respond),
+    )
+    try:
+        with pytest.raises(DomainError) as caught:
+            await client.complete(chunk, schema)
+        assert caught.value.code == "PROVIDER_UNAVAILABLE"
+        assert caught.value.message == expected
+        assert expected in SAFE_DETAILS
+        assert failure_copy("PROVIDER_UNAVAILABLE", expected)[0] == expected
+        assert "private" not in str(caught.value)
+        assert calls == ["/v1/chat/completions"]
+        assert len(usage) == int(reported_usage)
+        if usage:
+            assert (usage[0].input_tokens, usage[0].output_tokens) == (123, 45)
     finally:
         await client.close()

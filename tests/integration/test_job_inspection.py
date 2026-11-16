@@ -6,12 +6,45 @@ import pytest
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import Action
-from domain_kg.jobs.inspection import JobInspection
+from domain_kg.jobs.inspection import JobFilters, JobInspection
 from domain_kg.jobs.queue import JobQueue
 from domain_kg.materials.models import AddMaterial
 from domain_kg.models import PageRequest
 
 pytestmark = pytest.mark.storage
+
+
+async def test_job_views_filter_before_paging_and_bind_cursors(material_service, team):
+    materials, kg = material_service
+    access = await team[1].resolve_access(team[2]["editor"], [kg], Action.INGEST)
+    receipts = [
+        await materials.add(
+            access,
+            AddMaterial(
+                kg_id=kg, title=f"View {i}", inline_text="Fixture", idempotency_key=f"view-{i}"
+            ),
+        )
+        for i in range(4)
+    ]
+    queue = JobQueue(team[1], materials.router)
+    await queue.initialize()
+    await queue.cancel(access, receipts[1].job_id, idempotency_key="view-cancel-1")
+    await queue.cancel(access, receipts[3].job_id, idempotency_key="view-cancel-3")
+    inspection = JobInspection(queue)
+    active = JobFilters(view="active", sources_only=True)
+    first = await inspection.list(access, kg, PageRequest(limit=1), active)
+    assert [item.job_id for item in first.items] == [receipts[2].job_id]
+    second = await inspection.list(
+        access, kg, PageRequest(limit=1, cursor=first.next_cursor), active
+    )
+    assert [item.job_id for item in second.items] == [receipts[0].job_id]
+    attention = await inspection.list(access, kg, PageRequest(), JobFilters(view="attention"))
+    assert [item.job_id for item in attention.items] == [receipts[3].job_id, receipts[1].job_id]
+    with pytest.raises(DomainError) as changed:
+        await inspection.list(
+            access, kg, PageRequest(limit=1, cursor=first.next_cursor), JobFilters()
+        )
+    assert changed.value.code == ErrorCode.CURSOR_EXPIRED
 
 
 async def test_job_pages_skip_denied_jobs_and_expire_on_policy_or_actor_change(

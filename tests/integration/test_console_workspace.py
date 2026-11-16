@@ -3,6 +3,7 @@
 
 import html
 import re
+from hashlib import sha256
 
 import httpx
 import pytest
@@ -12,8 +13,9 @@ from test_transport_authorization import settings_for
 
 from domain_kg.app import create_app
 from domain_kg.identity.models import Action
+from domain_kg.materials.import_runs import CreateImportRun, ImportFile, ImportRunSubmission
 from domain_kg.materials.lifecycle import MaterialLifecycle
-from domain_kg.materials.models import RemoveMaterial
+from domain_kg.materials.models import AddMaterial, RemoveMaterial
 
 pytestmark = pytest.mark.storage
 
@@ -138,3 +140,161 @@ async def test_source_withdrawal_after_search_fences_rendered_evidence(
                 result = await browser.get(f"/admin/kgs/{job.kg_id}/search", params={"q": "Alpha"})
                 assert result.status_code == 409 and "POLICY_CHANGED" in result.text
                 assert "Alpha" not in result.text
+
+
+@pytest.mark.parametrize(
+    ("view", "withdrawal"),
+    [
+        ("processing", "remove"),
+        ("attention", "remove"),
+        ("saved", "remove"),
+        ("saved", "acl"),
+        ("published", None),
+    ],
+)
+async def test_source_monitoring_allows_publication_but_fences_late_source_withdrawal(
+    publishing, team, catalog, issuer_fixture, monkeypatch, view, withdrawal
+):
+    materials, editor, queue, coordinator, _, _ = publishing
+    _, advancing_job, checkpoint = await prepare(publishing, key="advance-during-monitor-render")
+    publication = await ready(publishing, advancing_job, checkpoint)
+    title, text = "live-monitor-unique.txt", "Synthetic monitoring fixture."
+    monitor = await materials.add(
+        editor,
+        AddMaterial(
+            kg_id=advancing_job.kg_id,
+            title=title,
+            source="folder:" + title,
+            inline_text=text,
+            idempotency_key="monitor-during-publication",
+        ),
+    )
+    if view == "attention":
+        await queue.cancel(editor, monitor.job_id, idempotency_key="monitor-needs-attention")
+    identities, policy, principals, _, org, _ = team
+    _, state, transport, _ = issuer_fixture
+    state["issuer"] = principals["owner"].issuer
+    async with httpx.AsyncClient(transport=transport) as oidc:
+        app = create_app(
+            settings_for(state["issuer"]),
+            identity_repository=identities,
+            oidc_http_client=oidc,
+            catalog_service=catalog[0],
+            providers=coordinator.providers,
+        )
+        async with app.router.lifespan_context(app):
+            runtime = app.state.services
+            params = {"view": "processing" if view == "saved" else view}
+            if view == "saved":
+                run = await runtime.import_runs.create(
+                    editor,
+                    monitor.kg_id,
+                    CreateImportRun(
+                        files=(
+                            ImportFile(
+                                path=title,
+                                sha256=sha256(text.encode()).hexdigest(),
+                                size_bytes=len(text.encode()),
+                                media_type="text/plain",
+                            ),
+                        ),
+                        idempotency_key="monitor-saved-import",
+                    ),
+                )
+                await runtime.import_runs.submit(
+                    editor,
+                    monitor.kg_id,
+                    run.id,
+                    0,
+                    ImportRunSubmission(job_id=monitor.job_id),
+                )
+                params["import_id"] = str(run.id)
+            original = runtime.catalog.get_kg
+            advanced = False
+            full_import_read = runtime.import_runs.get
+
+            async def no_progress_read_for_html(*args, **kwargs):
+                raise AssertionError("Saved-run HTML must load only its actor-owned head.")
+
+            if view == "saved":
+                monkeypatch.setattr(runtime.import_runs, "get", no_progress_read_for_html)
+
+            async def publish_after_metadata_read(access, kg):
+                nonlocal advanced
+                value = await original(access, kg)
+                if not advanced:
+                    advanced = True
+                    await coordinator.publish(editor, publication)
+                return value
+
+            monkeypatch.setattr(runtime.catalog, "get_kg", publish_after_metadata_read)
+            ticket = await app.state.identity.sessions.create(principals["editor"], org)
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://localhost:8000",
+                cookies={"domain_kg_session": ticket.session_id, "domain_kg_csrf": ticket.csrf},
+            ) as browser:
+                path = f"/admin/kgs/{monitor.kg_id}/materials"
+                result = await browser.get(path, params=params)
+                assert advanced
+                if view == "published":
+                    assert result.status_code == 409 and "POLICY_CHANGED" in result.text
+                    return
+                assert result.status_code == 200
+                if view == "saved":
+                    assert title not in result.text and str(monitor.job_id) not in result.text
+                    monkeypatch.setattr(runtime.import_runs, "get", full_import_read)
+                    progress_path = f"/api/v1/kgs/{monitor.kg_id}/import-runs/{run.id}"
+                    progress = await browser.get(progress_path)
+                    assert progress.status_code == 200 and title in progress.text
+                    other_actor = await app.state.identity.sessions.create(principals["owner"], org)
+                    async with httpx.AsyncClient(
+                        transport=httpx.ASGITransport(app=app),
+                        base_url="http://localhost:8000",
+                        cookies={
+                            "domain_kg_session": other_actor.session_id,
+                            "domain_kg_csrf": other_actor.csrf,
+                        },
+                    ) as foreign:
+                        hidden = await foreign.get(path, params=params)
+                        assert hidden.status_code == 404 and title not in hidden.text
+                else:
+                    assert title in result.text
+
+                async def withdraw_after_metadata_read(access, kg):
+                    value = await original(access, kg)
+                    if withdrawal == "acl":
+                        owner = await policy.resolve_access(
+                            principals["owner"], [kg], Action.MANAGE_GRANTS
+                        )
+                        await policy.set_material_acl(
+                            owner,
+                            kg,
+                            monitor.material_id,
+                            "restricted",
+                            member_ids=(),
+                            group_ids=(),
+                            idempotency_key="restrict-after-monitor-read",
+                        )
+                    else:
+                        await runtime.lifecycle.remove(
+                            editor,
+                            RemoveMaterial(
+                                kg_id=kg,
+                                material_id=monitor.material_id,
+                                action="exclude",
+                                expected_revision=0,
+                                idempotency_key="remove-after-monitor-read",
+                            ),
+                        )
+                    return value
+
+                monkeypatch.setattr(runtime.catalog, "get_kg", withdraw_after_metadata_read)
+                denied = await browser.get(path, params=params)
+                assert title not in denied.text
+                if view == "saved":
+                    assert denied.status_code in (200, 403, 404, 409)
+                    progress = await browser.get(progress_path)
+                    assert progress.status_code in (403, 404, 409) and title not in progress.text
+                else:
+                    assert denied.status_code in (403, 404, 409)

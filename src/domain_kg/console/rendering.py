@@ -3,11 +3,13 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
+from uuid import UUID
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
+from pydantic import TypeAdapter, ValidationError
 
 from domain_kg.console.i18n import LANGUAGE, RETURN_TO, label, language_url, translate
 from domain_kg.errors import DomainError, ErrorCode
@@ -115,11 +117,56 @@ async def page(
     return response
 
 
-def error_page(error: DomainError, status: int) -> HTMLResponse:
+def _cursor_restart(request: Request) -> str | None:
+    """Rebuild only known list queries; never reflect a request as a return URL."""
+    parts = request.url.path.split("/")
+    if (
+        request.method != "GET"
+        or len(parts) != 5
+        or parts[:3] != ["", "admin", "kgs"]
+        or parts[4] not in ("materials", "jobs")
+    ):
+        return None
+    try:
+        kg = UUID(parts[3])
+        limit = int(request.query_params.get("limit", "25"))
+    except ValueError:
+        return None
+    collection = parts[4]
+    views = (
+        ("published", "processing", "attention", "removed")
+        if collection == "materials"
+        else ("active", "attention", "finished", "all", "incomplete")
+    )
+    view = request.query_params.get("view", views[0])
+    if view not in views or not 1 <= limit <= 100:
+        return None
+    query = {"view": view, "limit": str(limit)}
+    if collection == "materials":
+        try:
+            unverified = TypeAdapter(bool).validate_python(
+                request.query_params.get("include_unverified", "false")
+            )
+        except ValidationError:
+            return None
+        query["include_unverified"] = "true" if unverified else "false"
+    return f"/admin/kgs/{kg}/{collection}?" + urlencode(query)
+
+
+def error_page(
+    error: DomainError, status: int, *, request: Request | None = None
+) -> HTMLResponse:
+    restart = (
+        _cursor_restart(request)
+        if error.code == ErrorCode.CURSOR_EXPIRED and request is not None
+        else None
+    )
     token = RETURN_TO.set("/admin")
     try:
         return html(
-            "error.html", {"title": "Request could not be completed", "error": error}, status=status
+            "error.html",
+            {"title": "Request could not be completed", "error": error, "restart_list": restart},
+            status=status,
         )
     finally:
         RETURN_TO.reset(token)

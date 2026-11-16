@@ -202,7 +202,7 @@ async def test_opt_in_keywords_and_reranking_only_select_existing_visible_data(r
     publishing, reader, _ = retrieval_corpus
     providers = publishing[3].providers
     original = providers.transport
-    calls, invalid = [], []
+    calls, invalid, partial, payloads = [], [], [], []
 
     async def respond(request):
         body = json.loads(request.content)
@@ -211,11 +211,18 @@ async def test_opt_in_keywords_and_reranking_only_select_existing_visible_data(r
             return await original.handle_async_request(request)
         calls.append(name)
         payload = json.loads(body["messages"][1]["content"])
+        payloads.append(payload)
         assert "PRIVATE_NEAREST" not in json.dumps(body)
         value = (
             {"keywords": ["Alpha"]}
             if name == "Keywords"
-            else {"order": [999] if invalid else list(reversed(range(len(payload["evidence"]))))}
+            else {
+                "order": [999]
+                if invalid
+                else [len(payload["evidence"]) - 1]
+                if partial
+                else list(reversed(range(len(payload["evidence"]))))
+            }
         )
         return httpx.Response(
             200,
@@ -234,6 +241,10 @@ async def test_opt_in_keywords_and_reranking_only_select_existing_visible_data(r
     assert calls == ["Keywords", "Ranking"]
     assert any(warning.startswith("keyword_generation_ms:") for warning in result.warnings)
     assert all("rerank" in item.method_ranks for item in result.results)
+    partial.append(True)
+    subset = await service.search(reader, request)
+    assert subset.results[0].text == payloads[-1]["evidence"][-1]["text"]
+    assert len(subset.results) == len(result.results)
     invalid.append(True)
     with pytest.raises(DomainError) as error:
         await service.search(reader, request)

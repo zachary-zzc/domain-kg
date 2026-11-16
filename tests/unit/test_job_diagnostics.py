@@ -72,3 +72,27 @@ def test_output_truncation_explains_the_model_output_setting():
     assert "output" in action.lower()
     assert "Advanced settings" in action
     assert "private" not in str(failure_copy("PROVIDER_UNAVAILABLE", "private model response"))
+
+
+def test_specific_extraction_failures_keep_safe_actions_without_raw_provider_fields():
+    for detail, action_keyword in (
+        ("The extraction request timed out.", "timeout"),
+        ("The extraction model could not be reached.", "network"),
+        ("The extraction model returned an invalid structured response.", "JSON"),
+        ("The extraction response was blocked or contained unsupported content.", "policy"),
+    ):
+        result = JobQueue._receipt(
+            {
+                "org_id": str(uuid4()),
+                "kg_id": str(uuid4()),
+                "id": str(uuid4()),
+                "stage": "failed",
+                "error_code": "PROVIDER_UNAVAILABLE",
+                "failure_stage": "extracting",
+                "error_detail": detail,
+                "error_message": "private provider payload",
+            }
+        )
+        assert result.error.message == detail
+        assert action_keyword.lower() in result.error.action.lower()
+        assert "private" not in result.model_dump_json()

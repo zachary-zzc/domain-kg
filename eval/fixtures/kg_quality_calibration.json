@@ -1,0 +1,553 @@
+[
+  {
+    "id": "paraphrase-is-sufficient",
+    "kind": "evidence",
+    "packet": {
+      "question": "Where was the author of Blue born?",
+      "answers": [],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "Ada was born in Rome."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "Blue was written by Ada."
+          },
+          {
+            "id": "s2",
+            "text": "Ada was born in Rome."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "Identify the birthplace of the author of Blue."
+        }
+      ]
+    },
+    "expected": {
+      "sufficiency": "sufficient",
+      "requirements": [
+        {
+          "id": "r1",
+          "coverage": "covered"
+        }
+      ]
+    }
+  },
+  {
+    "id": "partial-bridge",
+    "kind": "evidence",
+    "packet": {
+      "question": "Where was the author of Blue born?",
+      "answers": [],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "Blue was written by Ada."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "Blue was written by Ada."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "Identify the birthplace of the author of Blue."
+        }
+      ]
+    },
+    "expected": {
+      "sufficiency": "partial"
+    }
+  },
+  {
+    "id": "memorized-answer-is-not-evidence",
+    "kind": "evidence",
+    "packet": {
+      "question": "What is the capital of France?",
+      "answers": [],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "Blue was written by Ada."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "Blue was written by Ada."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "Identify the capital of France."
+        }
+      ]
+    },
+    "expected": {
+      "sufficiency": "insufficient"
+    }
+  },
+  {
+    "id": "alternative-source-is-sufficient",
+    "kind": "evidence",
+    "packet": {
+      "question": "Where was the author of Blue born?",
+      "answers": [],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "The author of Blue was born in Rome."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "The author of Blue was born in Rome."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "Identify the birthplace of the author of Blue."
+        }
+      ]
+    },
+    "expected": {
+      "sufficiency": "sufficient",
+      "requirements": [
+        {
+          "id": "r1",
+          "coverage": "covered"
+        }
+      ]
+    }
+  },
+  {
+    "id": "list-vs-joined-span",
+    "kind": "qa",
+    "packet": {
+      "question": "Which molecules are named?",
+      "answers": [
+        [
+          "immunoglobulins and T cell receptors"
+        ]
+      ],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "The molecules are immunoglobulins and T cell receptors."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "The molecules are immunoglobulins and T cell receptors."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "Identify all named molecules."
+        }
+      ]
+    },
+    "reader": {
+      "answer": [
+        "immunoglobulins",
+        "T cell receptors"
+      ],
+      "citations": [
+        "s1"
+      ],
+      "abstain": false,
+      "protocol_valid": true,
+      "invalid_citations": []
+    },
+    "expected": {
+      "correctness": "correct",
+      "grounding": "supported",
+      "citations": "supported",
+      "requirements": [
+        {
+          "id": "r1",
+          "coverage": "covered"
+        }
+      ]
+    }
+  },
+  {
+    "id": "numeric-word-equivalence",
+    "kind": "qa",
+    "packet": {
+      "question": "How many games were allowed per developer each year?",
+      "answers": [
+        [
+          "5"
+        ]
+      ],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "A developer could release at most five games each year."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "A developer could release at most five games each year."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "State the annual per-developer game limit."
+        }
+      ]
+    },
+    "reader": {
+      "answer": "five games",
+      "citations": [
+        "s1"
+      ],
+      "abstain": false,
+      "protocol_valid": true,
+      "invalid_citations": []
+    },
+    "expected": {
+      "correctness": "correct",
+      "grounding": "supported",
+      "requirements": [
+        {
+          "id": "r1",
+          "coverage": "covered"
+        }
+      ]
+    }
+  },
+  {
+    "id": "alias-equivalence",
+    "kind": "qa",
+    "packet": {
+      "question": "Who wrote Blue?",
+      "answers": [
+        [
+          "Ada Lovelace"
+        ]
+      ],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "Ada Lovelace, also called Augusta Ada King, wrote Blue."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "Ada Lovelace, also called Augusta Ada King, wrote Blue."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "Identify the author of Blue."
+        }
+      ]
+    },
+    "reader": {
+      "answer": "Augusta Ada King",
+      "citations": [
+        "s1"
+      ],
+      "abstain": false,
+      "protocol_valid": true,
+      "invalid_citations": []
+    },
+    "expected": {
+      "correctness": "correct",
+      "grounding": "supported",
+      "requirements": [
+        {
+          "id": "r1",
+          "coverage": "covered"
+        }
+      ]
+    }
+  },
+  {
+    "id": "arithmetic",
+    "kind": "qa",
+    "packet": {
+      "question": "How many points in total?",
+      "answers": [
+        [
+          "27"
+        ]
+      ],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "Ada scored 10 points and then 17 points."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "Ada scored 10 points and then 17 points."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "State the total points scored."
+        }
+      ]
+    },
+    "reader": {
+      "answer": "27",
+      "citations": [
+        "s1"
+      ],
+      "abstain": false,
+      "protocol_valid": true,
+      "invalid_citations": []
+    },
+    "expected": {
+      "correctness": "correct",
+      "grounding": "supported",
+      "requirements": [
+        {
+          "id": "r1",
+          "coverage": "covered"
+        }
+      ]
+    }
+  },
+  {
+    "id": "correct-guess-unsupported",
+    "kind": "qa",
+    "packet": {
+      "question": "What is the capital of France?",
+      "answers": [
+        [
+          "Paris"
+        ]
+      ],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "The capital of France is Paris."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "Blue was written by Ada."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "Identify the capital of France."
+        }
+      ]
+    },
+    "reader": {
+      "answer": "Paris",
+      "citations": [
+        "s1"
+      ],
+      "abstain": false,
+      "protocol_valid": true,
+      "invalid_citations": []
+    },
+    "expected": {
+      "grounding": "unsupported",
+      "citations": "unsupported"
+    }
+  },
+  {
+    "id": "abstention-is-not-correct-answer",
+    "kind": "qa",
+    "packet": {
+      "question": "Where was Ada born?",
+      "answers": [
+        [
+          "Rome"
+        ]
+      ],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "Ada wrote Blue."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "Ada wrote Blue."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "Identify Ada’s birthplace."
+        }
+      ]
+    },
+    "reader": {
+      "answer": "",
+      "citations": [],
+      "abstain": true,
+      "protocol_valid": true,
+      "invalid_citations": []
+    },
+    "expected": {
+      "correctness": "abstained",
+      "grounding": "none",
+      "citations": "none",
+      "claims": [],
+      "requirements": [
+        {
+          "id": "r1",
+          "coverage": "missing"
+        }
+      ]
+    }
+  },
+  {
+    "id": "negation-matters",
+    "kind": "qa",
+    "packet": {
+      "question": "Did Ada write Blue?",
+      "answers": [
+        [
+          "no"
+        ]
+      ],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "Ada did not write Blue. Bea wrote Blue."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "Ada did not write Blue. Bea wrote Blue."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "Determine whether Ada wrote Blue."
+        }
+      ]
+    },
+    "reader": {
+      "answer": "yes",
+      "citations": [
+        "s1"
+      ],
+      "abstain": false,
+      "protocol_valid": true,
+      "invalid_citations": []
+    },
+    "expected": {
+      "correctness": "incorrect",
+      "grounding": "unsupported"
+    }
+  },
+  {
+    "id": "cited-irrelevant-source",
+    "kind": "qa",
+    "packet": {
+      "question": "Where was Ada born?",
+      "answers": [
+        [
+          "Rome"
+        ]
+      ],
+      "reference_sources": [
+        {
+          "id": "gold",
+          "text": "Ada was born in Rome."
+        }
+      ],
+      "evidence": {
+        "sources": [
+          {
+            "id": "s1",
+            "text": "Bea was born in Paris."
+          },
+          {
+            "id": "s2",
+            "text": "Ada was born in Rome."
+          }
+        ],
+        "paths": []
+      },
+      "requirements": [
+        {
+          "id": "r1",
+          "text": "Identify Ada’s birthplace."
+        }
+      ]
+    },
+    "reader": {
+      "answer": "Rome",
+      "citations": [
+        "s1"
+      ],
+      "abstain": false,
+      "protocol_valid": true,
+      "invalid_citations": []
+    },
+    "expected": {
+      "correctness": "correct",
+      "grounding": "supported",
+      "citations": "unsupported"
+    }
+  }
+]

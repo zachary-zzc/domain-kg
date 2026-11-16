@@ -231,14 +231,15 @@ class Importer:
             namespace, source.format, b"".join(parts), origin=source.origin or blob.sha256
         )
         schema = await schema_for_kg(self.policy, current, source.kg_id)
-        predicates = {predicate.name: predicate for predicate in schema.predicates}
         entities = {entity.entity_id: entity for entity in graph.entities}
-        if any(entity.entity_type not in schema.entity_types for entity in graph.entities) or any(
-            relation.predicate not in predicates
-            or entities[relation.subject_id].entity_type
-            not in predicates[relation.predicate].subject_types
-            or entities[relation.target_id].entity_type
-            not in predicates[relation.predicate].target_types
+        if any(
+            not schema.allows_entity_type(entity.entity_type) for entity in graph.entities
+        ) or any(
+            not schema.allows_relation(
+                relation.predicate,
+                entities[relation.subject_id].entity_type,
+                entities[relation.target_id].entity_type,
+            )
             for relation in graph.relations
         ):
             raise DomainError(

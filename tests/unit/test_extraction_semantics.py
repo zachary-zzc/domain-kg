@@ -53,6 +53,56 @@ def test_relation_definitions_are_selected_and_unknown_policy_is_rejected():
         ProviderProfile.model_validate({**profile.model_dump(), "extraction_semantics": "bad"})
 
 
+def test_compact_evidence_numbering_versions_extraction_checkpoints():
+    profile, _ = configured(source())
+    compact = profile.model_copy(update={"extraction_format": "source_names_v1"})
+    identity = json.loads(profile_cache_identity(compact))
+    assert identity["evidence_passages"] == "source-spans-v3-open-qualifiers"
+    assert "evidence_passages" not in json.loads(profile_cache_identity(profile))
+
+
+@pytest.mark.parametrize("format", ["full", "source_refs_v1", "source_names_v1"])
+@pytest.mark.parametrize("policy", ["source_facets_v1", "source_facets_v2"])
+def test_source_facets_policy_preserves_source_schema_and_call_budget(format, policy):
+    from domain_kg.graph.schema import schema_for
+    from domain_kg.models import Namespace
+
+    chunk = source()
+    schema = schema_for(Namespace(org_id=chunk.org_id, kg_id=chunk.kg_id), "general")
+    profile, _ = configured(chunk)
+    profile = ProviderProfile.model_validate(
+        {
+            **profile.model_dump(),
+            "extraction_format": format,
+            "extraction_semantics": "source_roles_v1",
+        }
+    )
+    candidate = ProviderProfile.model_validate(
+        {**profile.model_dump(), "extraction_semantics": policy}
+    )
+    old, new = (extraction_payload(chunk, schema, p) for p in (profile, candidate))
+    assert old["messages"][1:] == new["messages"][1:]
+    assert {k: v for k, v in old.items() if k != "messages"} == {
+        k: v for k, v in new.items() if k != "messages"
+    }
+    assert profile_cache_identity(profile) != profile_cache_identity(candidate)
+    assert policy in new["messages"][0]["content"]
+    assert policy not in old["messages"][0]["content"]
+    assert "entity_types" not in new["messages"][1]["content"]
+
+
+@pytest.mark.parametrize("policy", ["source_facets_v1", "source_facets_v2"])
+def test_facets_policy_keeps_custom_closed_vocabulary_and_roles(policy):
+    chunk = source()
+    _, schema = proposal(chunk)
+    profile, _ = configured(chunk)
+    old = profile.model_copy(update={"extraction_semantics": "source_roles_v1"})
+    new = ProviderProfile.model_validate(
+        {**profile.model_dump(), "extraction_semantics": policy}
+    )
+    assert extraction_payload(chunk, schema, old) == extraction_payload(chunk, schema, new)
+
+
 def test_role_instructions_consume_context_and_fail_before_calls_when_too_small():
     from domain_kg.graph.schema import schema_for
     from domain_kg.models import Namespace

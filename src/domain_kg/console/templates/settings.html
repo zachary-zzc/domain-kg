@@ -6,6 +6,7 @@
 <div data-model-settings data-copy="{{ model_copy|tojson|forceescape }}" data-presets="{{ model_presets|tojson|forceescape }}">
 {% if setup_incomplete %}<p class="notice" role="alert">{{ _('Your KG was created, but model setup did not finish. Complete its configuration below; you do not need to create another KG.') }}</p>{% endif %}
 <p class="lead">{{ _('Manage model connections, test API access and review the local usage budget.') }}</p>
+{% if advanced_settings %}{% include 'parser_settings.html' %}{% endif %}
 <div class="two-column"><section class="card"><div class="section-heading"><h2>{{ _('Models & APIs') }}</h2><span class="badge">{{ _('Configured') if configured else _('Setup required') }}</span></div>
 {% if current_model %}<dl class="details-list"><dt>{{ _('Language model') }}</dt><dd>{{ current_model.extraction_model }}</dd><dt>{{ _('Embedding model') }}</dt><dd>{{ current_model.embedding_model }} · {{ dimensions }} {{ _('dimensions') }}</dd></dl>{% elif selected %}<p>{{ _('Embedding model') }}: <strong>{{ selected.embedding_model }}</strong> · {{ selected.embedding_dimensions }} {{ _('dimensions') }}</p>{% endif %}
 {% if default_model %}<p>{{ _('Default for new KGs') }}: <strong>{{ default_model.name or default_model.extraction_model }}</strong></p>{% endif %}

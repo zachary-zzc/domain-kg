@@ -33,6 +33,10 @@ async def test_folder_and_mcp_pages_enforce_roles_and_do_not_embed_credentials(
                     cookies={"domain_kg_session": ticket.session_id, "domain_kg_csrf": ticket.csrf},
                 ) as browser:
                     folder = await browser.get(f"/admin/kgs/{kg}/folder")
+                    if role in ("owner", "editor"):
+                        assert folder.status_code == 303
+                        assert folder.headers["location"] == f"/admin/kgs/{kg}/materials?add=folder"
+                        folder = await browser.get(folder.headers["location"])
                     mcp = await browser.get(f"/admin/kgs/{kg}/mcp-test")
                     assert (folder.status_code == 200) == (role in ("owner", "editor"))
                     assert (mcp.status_code == 200) == (role != "denied")

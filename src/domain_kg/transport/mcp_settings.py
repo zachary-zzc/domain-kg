@@ -6,6 +6,9 @@ from uuid import UUID
 from mcp.types import CallToolResult
 
 from domain_kg.identity.models import Action
+from domain_kg.ingestion.configuration import ParserConfiguration
+from domain_kg.ingestion.models import ParseOptions
+from domain_kg.models import NonNegative
 from domain_kg.providers.configuration import ModelConfiguration, ModelSetup, ProfileApproval
 from domain_kg.providers.health import ConnectionCheck, ProviderChecks
 from domain_kg.providers.inspection import ModelSettings, inspect_models
@@ -16,6 +19,31 @@ from domain_kg.transport.models import ProviderSelectionReceipt
 
 def register_settings(context: MCPTools) -> None:
     tool, access, services = context.tool, context.access, context.services
+
+    @tool("get_parser_settings", read=True)
+    async def parser_settings(
+        kg_id: UUID, org_id: UUID | None = None
+    ) -> Annotated[CallToolResult, ParserConfiguration]:
+        """Owner: read server-wide parsing budgets. Defaults to 1024 MiB for every format."""
+        current = await access((kg_id,), Action.CONFIGURE, org_id)
+        return output(await services().parser_setup.get(current, kg_id), "Server parser settings.")
+
+    @tool("configure_parser", destructive=True)
+    async def configure_parser(
+        kg_id: UUID,
+        options: ParseOptions,
+        expected_revision: NonNegative,
+        org_id: UUID | None = None,
+    ) -> Annotated[CallToolResult, ParserConfiguration]:
+        """Human owner + operator: save global parsing budgets for ALL KGs on this server.
+
+        Read get_parser_settings first and submit its revision. Running jobs keep their
+        configuration; the next job or retry uses the new settings. No model calls or retries
+        are triggered by this operation. No server path can be supplied.
+        """
+        current = await access((kg_id,), Action.CONFIGURE, org_id)
+        result = await services().parser_setup.save(current, kg_id, options, expected_revision)
+        return output(result, "Parser settings saved for the next job; running jobs are unchanged.")
 
     @tool("get_model_settings", read=True)
     async def settings(

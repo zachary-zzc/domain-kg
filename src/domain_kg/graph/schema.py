@@ -58,8 +58,9 @@ def schema_for(namespace: Namespace, name: str) -> DomainSchema:
         raise ValueError("unknown approved domain profile")
     return DomainSchema(
         **namespace.model_dump(),
-        id=uuid5(namespace.kg_id, f"schema/{name}/v1"),
-        revision=1,
+        id=uuid5(namespace.kg_id, f"schema/{name}/v2"),
+        revision=2,
+        vocabulary="open",
         entity_types=types,
         predicates=tuple(
             PredicateDefinition(name=value, subject_types=types, target_types=types)
@@ -85,7 +86,9 @@ async def schema_for_kg(
         {"org_id": str(current.org_id), "kg_id": str(kg_id)}, session=session
     )
     if stored:
-        return DomainSchema.model_validate({key: stored[key] for key in DomainSchema.model_fields})
+        return DomainSchema.model_validate(
+            {key: stored[key] for key in DomainSchema.model_fields if key in stored}
+        )
     kg = await policy.database.kgs.find_one(
         {"org_id": str(current.org_id), "id": str(kg_id)}, session=session
     )

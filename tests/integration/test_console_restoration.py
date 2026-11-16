@@ -49,7 +49,9 @@ async def test_console_can_remove_and_reconstruct_pending_original_without_evide
                 cookies={"domain_kg_session": ticket.session_id, "domain_kg_csrf": ticket.csrf},
             ) as browser:
                 root = f"/admin/kgs/{kg}/materials"
-                pending = await browser.get(root + "/manage", params={"state": "pending"})
+                pending = await browser.get(
+                    root + "/manage", params={"state": "pending"}, follow_redirects=True
+                )
                 assert pending.status_code == 200 and "Pending restoration source" in pending.text
                 assert "urn:fixture:alpha" not in pending.text
                 api = await browser.get(
@@ -71,7 +73,9 @@ async def test_console_can_remove_and_reconstruct_pending_original_without_evide
                 )
                 assert removed.status_code == 303
                 assert (await browser.get(root + f"/{receipt.material_id}")).status_code == 404
-                withdrawn = await browser.get(root + "/manage", params={"state": "removed"})
+                withdrawn = await browser.get(
+                    root + "/manage", params={"state": "removed"}, follow_redirects=True
+                )
                 assert (
                     withdrawn.status_code == 200 and "Pending restoration source" in withdrawn.text
                 )

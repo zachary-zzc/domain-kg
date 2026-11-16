@@ -10,13 +10,13 @@ from uuid import uuid5
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.graph.models import DomainSchema
-from domain_kg.ingestion.chunking import overlap_tail, tokens
+from domain_kg.ingestion.chunking import overlap_tail, split_span, tokens
 from domain_kg.ingestion.models import ChunkConfig, ParsedChunk, Span
 from domain_kg.jobs.diagnostics import EVIDENCE_DETAILS
 from domain_kg.providers.extraction import evidence_correction, extraction_payload
 from domain_kg.providers.profiles import ProviderProfile
 
-WINDOW_VERSION = "model-window-v5"
+WINDOW_VERSION = "model-window-v6-unicode"
 CORRECTION_RESERVE = evidence_correction(max(EVIDENCE_DETAILS, key=lambda text: len(text.encode())))
 
 
@@ -119,33 +119,29 @@ def fit_source_chunks(
             if fits(source_window(chunk, original, 0, len(original.quote))):
                 pieces.append(original)
                 continue
-            start = 0
-
-            while start < len(original.quote):
-                low, high, end = start + 1, len(original.quote), start
-                while low <= high:
-                    middle = (low + high) // 2
-                    if fits(source_window(chunk, original, start, middle)):
-                        end, low = middle, middle + 1
-                    else:
-                        high = middle - 1
-                if end == start:
+            capacity = max(1, tokens(original.quote) // 2)
+            while True:
+                divided = split_span(original, capacity, overlap=min(100, capacity // 5))
+                if all(
+                    fits(
+                        source_window(
+                            chunk, original, s.start - original.start, s.end - original.start
+                        )
+                    )
+                    for s in divided
+                ):
+                    pieces.extend(divided)
+                    break
+                if capacity == 1:
                     raise DomainError(
                         ErrorCode.QUOTA_EXCEEDED,
                         "Model context cannot hold the schema and one source character.",
                     )
-                pieces.append(source_window(chunk, original, start, end).spans[0])
-                if len(pieces) > 100000:
-                    raise DomainError(
-                        ErrorCode.QUOTA_EXCEEDED, "Source exceeds the model-window budget."
-                    )
-                if end == len(original.quote):
-                    break
-                overlap = overlap_tail(
-                    [pieces[-1]], min(tokens(pieces[-1].quote) // 5, 100), split_rows=True
+                capacity = max(1, capacity // 2)
+            if len(pieces) > 100000:
+                raise DomainError(
+                    ErrorCode.QUOTA_EXCEEDED, "Source exceeds the model-window budget."
                 )
-                next_start = overlap[0].start - original.start if overlap else end
-                start = max(start + 1, next_start)
 
         def packed(spans: list[Span], parent: ParsedChunk = chunk) -> ParsedChunk:
             return ParsedChunk.model_validate(

@@ -1,5 +1,6 @@
 """Reciprocal text ranks and graph supplements; preserve complete source passages."""
 
+from itertools import zip_longest
 from uuid import UUID
 
 from domain_kg.errors import DomainError, ErrorCode
@@ -84,8 +85,24 @@ def fuse_evidence(
     Vector/text establish the baseline. A graph hit already in that pool keeps
     its baseline score and gains authenticated path annotations. Graph-only hits
     compete by their graph rank; they do not receive a reserved context quota.
-    Explicit reranking remains an independent, opt-in ranking signal.
+    An explicit semantic reranking is final, not another recall vote.
     """
+    if "rerank" in candidates:
+        recalled = fuse_evidence(
+            {method: items for method, items in candidates.items() if method != "rerank"}, constant
+        )
+        known = {evidence_key(item) for item in recalled}
+        keys = [evidence_key(item) for item in candidates["rerank"]]
+        if len(keys) != len(set(keys)) or not set(keys) <= known:
+            raise DomainError(
+                ErrorCode.PROJECTION_INCONSISTENT, "Reranked evidence is inconsistent."
+            )
+        authenticated = {evidence_key(item): item for item in fuse(candidates, constant)}
+        ranked = [
+            authenticated[evidence_key(item)].model_copy(update={"score": item.score})
+            for item in fuse({"rerank": candidates["rerank"]}, constant)
+        ]
+        return ranked + [item for item in recalled if evidence_key(item) not in set(keys)]
     merged = fuse(candidates, constant)  # Authenticate duplicate consistency first.
     if not candidates.get("graph"):
         return merged
@@ -103,6 +120,22 @@ def fuse_evidence(
         for item in merged
     ]
     return sorted(result, key=lambda item: (-item.score, str(evidence_key(item))))
+
+
+def recall_pool(
+    candidates: dict[str, list[EvidenceCandidate]], limit: int = 50
+) -> list[EvidenceCandidate]:
+    """Admit independent recall branches before semantic comparison of original passages."""
+    if not 1 <= limit <= 50 or "rerank" in candidates:
+        raise ValueError("Recall pool requires unranked branches and a limit between 1 and 50.")
+    merged = {evidence_key(item): item for item in fuse_evidence(candidates)}
+    ordered: dict[tuple[object, ...], EvidenceCandidate] = {}
+    for row in zip_longest(*candidates.values()):
+        for item in row:
+            if item is not None:
+                key = evidence_key(item)
+                ordered.setdefault(key, merged[key])
+    return rank_pool(list(ordered.values()), limit)
 
 
 def select_evidence(

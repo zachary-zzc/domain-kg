@@ -557,7 +557,9 @@ class RevisionService:
 
     @staticmethod
     def _validate_type(command: _NodeRevision, schema: DomainSchema) -> None:
-        if command.changes.entity_type and command.changes.entity_type not in schema.entity_types:
+        if command.changes.entity_type and not schema.allows_entity_type(
+            command.changes.entity_type
+        ):
             raise DomainError(ErrorCode.VALIDATION_ERROR, "Choose a configured entity type.")
 
     async def _validate_relation(
@@ -584,8 +586,7 @@ class RevisionService:
         subject = UUID(str(after.get("subject_id") or (base.subject.id if base else "")))
         target = UUID(str(after.get("target_id") or (base.target.id if base else "")))
         predicate = after.get("predicate") or (base.predicate if base else None)
-        definition = next((item for item in schema.predicates if item.name == predicate), None)
-        if definition is None:
+        if not isinstance(predicate, str) or not schema.allows_predicate(predicate):
             raise DomainError(ErrorCode.VALIDATION_ERROR, "Choose a configured predicate.")
         graph = GraphService(self.queue)
         scope = await graph.resolver.resolve(
@@ -599,15 +600,16 @@ class RevisionService:
             kg,
         )
         data = await graph.repository.open(scope)
-        for endpoint, allowed in (
-            (subject, definition.subject_types),
-            (target, definition.target_types),
+        subject_node = graph.repository.node(data, subject)
+        target_node = graph.repository.node(data, target)
+        if subject_node is None or target_node is None:
+            raise inaccessible_reference()
+        if not any(
+            schema.allows_relation(predicate, source_type, target_type)
+            for source_type in subject_node.entity_types
+            for target_type in target_node.entity_types
         ):
-            node = graph.repository.node(data, endpoint)
-            if node is None:
-                raise inaccessible_reference()
-            if not set(node.entity_types).intersection(allowed):
-                raise DomainError(ErrorCode.VALIDATION_ERROR, "Predicate endpoint type differs.")
+            raise DomainError(ErrorCode.VALIDATION_ERROR, "Predicate endpoint type differs.")
 
     async def _rollback_visibility(
         self, access: AccessContext, command: RollbackRevision

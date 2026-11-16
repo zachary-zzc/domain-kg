@@ -18,7 +18,7 @@
       "extraction_model": "qwen3.6-35b-a3b",
       "extraction_revision": "source-names-roles-v1-json-object",
       "extraction_format": "source_names_v1",
-      "extraction_semantics": "source_roles_v1",
+      "extraction_semantics": "lightrag_general_v2",
       "extraction_response_format": "json_object",
       "extraction_enable_thinking": false,
       "extraction_context_tokens": 16384,

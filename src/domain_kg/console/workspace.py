@@ -7,10 +7,12 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 
+from domain_kg.console.browser_tools import folder_copy
 from domain_kg.console.forms import read_form
 from domain_kg.console.rendering import BrowserSession, browser_session, page
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.identity.models import AccessContext, Action
+from domain_kg.jobs.inspection import JobFilters
 from domain_kg.materials.models import RemoveMaterial
 from domain_kg.models import PageRequest
 from domain_kg.retrieval.models import SearchFilters, SearchRequest
@@ -51,12 +53,67 @@ def workspace_router(runtime: ServiceRuntime) -> APIRouter:
 
     @router.get("/kgs/{kg_id}/materials")
     async def materials(
-        request: Request, kg_id: UUID, cursor: str | None = None, include_unverified: bool = False
+        request: Request,
+        kg_id: UUID,
+        cursor: str | None = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 25,
+        include_unverified: bool = False,
+        view: Literal["published", "processing", "attention", "removed"] = "published",
+        add: Literal["files", "folder", "text"] | None = None,
+        import_id: UUID | None = None,
+        batch_id: UUID | None = None,
     ) -> HTMLResponse:
         filters = filters_for(include_unverified)
-        session, access, scope = await read_context(runtime, request, kg_id, filters)
-        result = await runtime.inspection.list(access, kg_id, PageRequest(cursor=cursor), filters)
-        return await page(
+        scope = None
+        if import_id is not None or view in ("processing", "attention"):
+            session = await browser_session(runtime, request)
+            access = await runtime.access(
+                session.principal, (kg_id,), Action.READ, session.member.org_id
+            )
+        else:
+            session, access, scope = await read_context(runtime, request, kg_id, filters)
+        can_edit = any(grant.role in ("owner", "editor") for grant in access.grants)
+        if (add or import_id or view == "removed") and not can_edit:
+            await runtime.policy.revalidate(access, action=Action.INGEST)
+        import_head = (
+            await runtime.import_runs.head(access, kg_id, import_id) if import_id else None
+        )
+        # A selected run owns its rows; global history must not appear beneath it.
+        materials = jobs = managed = None
+        if import_head is None:
+            if view == "published":
+                materials = await runtime.inspection.list(
+                    access, kg_id, PageRequest(limit=limit, cursor=cursor), filters
+                )
+            elif view == "removed":
+                managed = await runtime.management.list(
+                    access, kg_id, "removed", PageRequest(limit=limit, cursor=cursor)
+                )
+            else:
+                jobs = await runtime.job_inspection.list(
+                    access,
+                    kg_id,
+                    PageRequest(limit=limit, cursor=cursor),
+                    JobFilters(
+                        view="active" if view == "processing" else "attention", sources_only=True
+                    ),
+                )
+        batch = await runtime.batch.get(access, kg_id, batch_id) if batch_id else None
+        counts = {
+            state: sum(item.outcome == state for item in batch.items) if batch else 0
+            for state in ("submitted", "completed", "skipped", "failed", "pending")
+        }
+        bulk_kind = "jobs" if import_id or jobs else "removed" if managed else "materials"
+        bulk_scope = (
+            "#import-rows"
+            if import_id
+            else "#job-list"
+            if jobs
+            else "#managed-list"
+            if managed
+            else "#material-list"
+        )
+        response = await page(
             runtime,
             session,
             access,
@@ -64,14 +121,43 @@ def workspace_router(runtime: ServiceRuntime) -> APIRouter:
             {
                 "title": "Sources",
                 "kg": await runtime.catalog.get_kg(access, kg_id),
-                "materials": result,
+                "materials": materials,
+                "jobs": jobs,
+                "managed": managed,
+                "source_view": view,
+                "add_mode": add,
+                "import_id": import_id,
+                "import_run": None,
+                "import_head": import_head,
+                "import_runs": await runtime.import_runs.list(access, kg_id) if can_edit else (),
+                "folder_copy": folder_copy(),
+                "batch": batch,
+                "batch_counts": counts,
+                "cursor": cursor,
+                "limit": limit,
                 "include_unverified": include_unverified,
                 "command_key": str(uuid4()),
-                "bulk_kind": "materials",
-                "bulk_scope": "#material-list",
+                "bulk_kind": bulk_kind,
+                "bulk_scope": bulk_scope,
             },
+            # Jobs and actor-owned import manifests are management metadata,
+            # independent of an unrelated accepted graph publication.
             scope=scope,
         )
+        if import_head is not None:
+            await runtime.import_runs.head(access, kg_id, import_head.id)
+        elif jobs is not None:
+            for job in jobs.items:
+                await runtime.queue.get(access, job.job_id)
+        if (import_head is not None or jobs is not None) and batch is not None:
+            fresh = await runtime.batch.get(access, kg_id, batch.batch_id)
+            if tuple((item.id, item.title) for item in fresh.items) != tuple(
+                (item.id, item.title) for item in batch.items
+            ):
+                raise DomainError(
+                    ErrorCode.POLICY_CHANGED, "Batch source visibility changed during the request."
+                )
+        return response
 
     @router.get("/kgs/{kg_id}/materials/{material_id}")
     async def material(
@@ -199,7 +285,9 @@ def workspace_router(runtime: ServiceRuntime) -> APIRouter:
             raise DomainError(ErrorCode.VALIDATION_ERROR, "The form fields are invalid.") from None
         await runtime.lifecycle.remove(access, command)
         return RedirectResponse(
-            f"/admin/kgs/{kg_id}/materials", status_code=303, headers={"Cache-Control": "no-store"}
+            f"/admin/kgs/{kg_id}/materials?view=removed",
+            status_code=303,
+            headers={"Cache-Control": "no-store"},
         )
 
     return router

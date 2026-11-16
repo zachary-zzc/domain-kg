@@ -168,7 +168,7 @@ def prepare_model(
         allowed_namespaces=(namespace,),
         allow_restricted=command.allow_restricted,
         extraction_format="source_names_v1",
-        extraction_semantics="source_roles_v1",
+        extraction_semantics="lightrag_general_v2",
         extraction_response_format=command.response_format,
         extraction_enable_thinking=None
         if command.thinking == "default"

@@ -90,7 +90,7 @@ async def test_team_roles_namespace_csrf_and_revoked_session_acceptance(
                             f"{root}/operations", headers={"Accept-Language": "zh-CN"}
                         )
                         assert chinese.status_code == 200 and "检索索引更新任务" in chinese.text
-                    upload = await browser.get(f"{root}/materials/new")
+                    upload = await browser.get(f"{root}/materials/new", follow_redirects=True)
                     assert (upload.status_code == 200) == (role in ("owner", "editor")), role
                     missing = await browser.get(
                         f"/admin/kgs/{uuid4()}/materials/{source.material_id}"

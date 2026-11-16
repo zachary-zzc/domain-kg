@@ -46,7 +46,14 @@ class ProviderProfile(FrozenModel):
     )
     extraction_revision: Annotated[str, Field(min_length=1, max_length=200)] = "1"
     extraction_format: Literal["full", "source_refs_v1", "source_names_v1"] = "full"
-    extraction_semantics: Literal["legacy", "source_roles_v1"] = "legacy"
+    extraction_semantics: Literal[
+        "legacy",
+        "source_roles_v1",
+        "source_facets_v1",
+        "source_facets_v2",
+        "lightrag_general_v1",
+        "lightrag_general_v2",
+    ] = "legacy"
     # Omit historical defaults from serialization so existing cache identities stay stable.
     extraction_response_format: Literal["json_schema", "json_object"] = Field(
         default="json_schema", exclude_if=lambda value: value == "json_schema"
@@ -62,7 +69,7 @@ class ProviderProfile(FrozenModel):
     allow_restricted: bool = False
     max_completion_tokens: Annotated[int, Field(ge=128, le=16384, strict=True)] = 4096
     schema_string_limit: Annotated[int, Field(ge=64, le=1000, strict=True)] | None = None
-    timeout_seconds: Annotated[int, Field(ge=1, le=120, strict=True)] = 60
+    timeout_seconds: Annotated[int, Field(ge=1, le=600, strict=True)] = 60
     extraction_context_tokens: Annotated[int, Field(ge=1024, le=131072, strict=True)] = 16384
     embedding_context_tokens: Annotated[int, Field(ge=256, le=32768, strict=True)] = 8192
     schema_in_context: bool = True

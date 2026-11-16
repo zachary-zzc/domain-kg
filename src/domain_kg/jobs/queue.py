@@ -1134,6 +1134,11 @@ class JobQueue:
                 proposed = version.get("proposed", {})
                 if not isinstance(proposed, dict):
                     raise ValueError("invalid job source metadata")
+                metadata = await self.database.material_access.find_one(
+                    ns | {"id": str(blob.material_id)}
+                )
+                if metadata is None:
+                    raise ValueError("missing job source metadata")
                 source = JobSource(
                     material_id=blob.material_id,
                     version_id=blob.version_id,
@@ -1141,6 +1146,7 @@ class JobQueue:
                     source=proposed.get("source"),
                     sha256=blob.sha256,
                     expected_active_version=raw.get("expected_active_version"),
+                    material_revision=metadata["revision"],
                 )
             except (ValueError, TypeError, KeyError):
                 raise DomainError(

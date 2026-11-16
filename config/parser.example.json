@@ -1,0 +1,12 @@
+{
+  "revision": 0,
+  "options": {
+    "memory_limit_mib": 1024,
+    "timeout_seconds": 120,
+    "max_pages": 500,
+    "max_expanded_bytes": 104857600,
+    "ocr": true,
+    "target_tokens": 700,
+    "overlap_tokens": 100
+  }
+}

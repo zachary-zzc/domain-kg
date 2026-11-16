@@ -7,11 +7,12 @@ from functools import lru_cache
 from uuid import uuid5
 
 import tiktoken
+from semantic_text_splitter import MarkdownSplitter, TextSplitter
 
 from domain_kg.errors import DomainError, ErrorCode
 from domain_kg.ingestion.models import ChunkConfig, ParsedBlock, ParsedChunk, ParsedDocument, Span
 
-VERSION = "source-chunker-cl100k-v3"
+VERSION = "source-chunker-unicode-v4"
 
 
 @lru_cache(maxsize=1)
@@ -35,6 +36,29 @@ def fits(text: str, limit: int) -> bool:
     return len(text) <= limit * _max_token_bytes() and tokens(text) <= limit
 
 
+def split_span(span: Span, limit: int, *, overlap: int = 0) -> list[Span]:
+    """Library-owned Unicode/Markdown boundaries, with exact source correspondence."""
+    if limit < 1 or not 0 <= overlap < limit:
+        raise DomainError(ErrorCode.VALIDATION_ERROR, "Invalid source token budget.")
+    splitter_type = MarkdownSplitter if span.location.kind == "text" else TextSplitter
+    splitter = splitter_type.from_callback(tokens, limit, overlap=overlap, trim=False)
+    parts: list[Span] = []
+    covered = 0
+    for start, text in splitter.chunk_indices(span.quote):
+        end = start + len(text)
+        if not text or start > covered or span.quote[start:end] != text or tokens(text) > limit:
+            raise DomainError(
+                ErrorCode.QUOTA_EXCEEDED, "Token budget cannot preserve a source character."
+            )
+        parts.append(
+            Span(location=span.location, start=span.start + start, end=span.start + end, quote=text)
+        )
+        covered = max(covered, end)
+    if covered != len(span.quote):
+        raise DomainError(ErrorCode.PROJECTION_INCONSISTENT, "Source subdivision lost text.")
+    return parts
+
+
 def overlap_tail(
     spans: Sequence[Span],
     limit: int,
@@ -42,7 +66,7 @@ def overlap_tail(
     fits: Callable[[list[Span]], bool] | None = None,
     split_rows: bool = False,
 ) -> list[Span]:
-    """Keep a bounded suffix; split rows only when their source already requires subdivision."""
+    """Reuse the same source splitter for bounded overlap; preserve small table rows."""
     if limit <= 0:
         return []
     overlap: list[Span] = []
@@ -59,52 +83,28 @@ def overlap_tail(
             continue
         if previous.location.row is not None and not split_rows:
             break
-        low, high = 1, len(previous.quote) - 1
-        best = overlap
-        while low <= high:
-            middle = (low + high) // 2
-            tail = Span(
-                location=previous.location,
-                start=previous.start + middle,
-                end=previous.end,
-                quote=previous.quote[middle:],
-            )
-            candidate = [tail, *overlap]
-            if acceptable(candidate):
-                best, high = candidate, middle - 1
-            else:
-                low = middle + 1
-        overlap = best
+        capacity = limit
+        while capacity:
+            try:
+                tail = split_span(previous, capacity)[-1]
+            except DomainError as error:
+                if error.code != ErrorCode.QUOTA_EXCEEDED:
+                    raise
+                break
+            if acceptable([tail, *overlap]):
+                overlap = [tail, *overlap]
+                break
+            capacity //= 2
         break
     return overlap
 
 
 def _split(block: ParsedBlock, config: ChunkConfig) -> list[Span]:
-    spans, start = [], 0
-    while start < len(block.text):
-        low, high = start + 1, min(len(block.text), start + max(4096, config.target_tokens * 16))
-        end = start
-        while low <= high:
-            middle = (low + high) // 2
-            if tokens(block.text[start:middle]) <= config.target_tokens:
-                end, low = middle, middle + 1
-            else:
-                high = middle - 1
-        if end == start:
-            raise DomainError(
-                ErrorCode.VALIDATION_ERROR, "Token limit cannot hold one source character."
-            )
-        spans.append(
-            Span(location=block.location, start=start, end=end, quote=block.text[start:end])
-        )
-        if end == len(block.text):
-            break
-        next_start = end
-        if config.overlap_tokens and tokens(block.text[start:end]) > config.overlap_tokens:
-            overlap = overlap_tail([spans[-1]], config.overlap_tokens, split_rows=True)
-            next_start = overlap[0].start if overlap else end
-        start = max(start + 1, next_start)
-    return spans
+    return split_span(
+        Span(location=block.location, start=0, end=len(block.text), quote=block.text),
+        config.target_tokens,
+        overlap=config.overlap_tokens,
+    )
 
 
 def chunk_document(document: ParsedDocument, config: ChunkConfig) -> list[ParsedChunk]:

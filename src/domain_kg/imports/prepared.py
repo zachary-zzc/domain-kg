@@ -47,13 +47,12 @@ class PreparedImport(SourceVersion):
                     raise ValueError(
                         "legacy observations cannot invent quotations or source descriptions"
                     )
-            if (
-                row.observation
-                and row.observation.entity_type not in self.domain_schema.entity_types
+            if row.observation and not self.domain_schema.allows_entity_type(
+                row.observation.entity_type
             ):
                 raise ValueError("imported entity type differs from the selected schema")
-            if row.assertion and row.assertion.assertion.predicate not in {
-                predicate.name for predicate in self.domain_schema.predicates
-            }:
+            if row.assertion and not self.domain_schema.allows_predicate(
+                row.assertion.assertion.predicate
+            ):
                 raise ValueError("imported relation differs from the selected schema")
         return self

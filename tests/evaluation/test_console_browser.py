@@ -19,6 +19,7 @@ from domain_kg.app import create_app
 from domain_kg.identity.models import Action
 from domain_kg.ingestion.pipeline import configured_pipeline
 from domain_kg.jobs.runner import JobRunner
+from domain_kg.materials.models import AddMaterial
 from domain_kg.operations.backup import BackupService
 from domain_kg.operations.executor import OwnerJobExecutor
 from domain_kg.operations.generation import GenerationService
@@ -46,6 +47,7 @@ pytestmark = [
 
 async def test_temporary_console_browser_preview(publishing, team, catalog, issuer_fixture):
     configuration = json.loads(await asyncio.to_thread(PROFILE_PATH.read_bytes))
+    import_demo = os.environ.get("DOMAIN_KG_BROWSER_IMPORTS") == "1"
     full_restore = configuration["tests"].get("preview_restore_demo", False)
     assert type(full_restore) is bool
     _, editor, queue, coordinator, _, _ = publishing
@@ -124,6 +126,24 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
     )
     inactive = await RestoreTargets(queue).get(refreshed, job.kg_id, abandoned.job_id)
     await queue.cancel(refreshed, abandoned.job_id, idempotency_key="preview-cancel-inactive")
+    retry_jobs = []
+    if import_demo:
+        from test_entity_resolution import TEXT
+
+        for index in range(2):
+            paused = await publishing[0].add(
+                editor,
+                AddMaterial(
+                    kg_id=job.kg_id,
+                    title=f"Retry demonstration {index + 1}",
+                    inline_text=TEXT,
+                    idempotency_key=f"preview-retry-{index}",
+                ),
+            )
+            await queue.cancel(
+                editor, paused.job_id, idempotency_key=f"preview-pause-retry-{index}"
+            )
+            retry_jobs.append(str(paused.job_id))
     _, state, transport, _ = issuer_fixture
     state["issuer"] = principals["owner"].issuer
     async with httpx.AsyncClient(transport=transport) as oidc:
@@ -201,6 +221,8 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                 "placement_id": str(catalog[3].id),
                 "provider_profile_id": str(profile.id),
                 "curation_id": str(reviewed.revision_id),
+                "import_demo": import_demo,
+                "retry_job_ids": retry_jobs,
             }
 
         @app.get("/__smoke__/finish")
@@ -234,9 +256,26 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                     operations=PreviewOperations(),
                 )
                 while True:
+                    # The optional ingestion worker uses the fixture's MockTransport provider.
+                    # Its queue/router are confined to this test's synthetic namespace.
+                    kinds = (
+                        (
+                            "ingest",
+                            "import",
+                            "replace",
+                            "repair",
+                            "restore_material",
+                            "reprocess_material",
+                            "curate",
+                            "purge_material",
+                        )
+                        if import_demo
+                        else ()
+                    )
                     leased = await queue.claim(
                         "synthetic-preview-operations",
                         kinds=(
+                            *kinds,
                             "backup",
                             "export",
                             "maintenance",
@@ -261,8 +300,12 @@ async def test_temporary_console_browser_preview(publishing, team, catalog, issu
                     "Browser preview ready: http://localhost:28080/__smoke__/start/owner",
                     flush=True,
                 )
-                lifetime = int(configuration["tests"]["preview_seconds"])
-                assert 1 <= lifetime <= 900
+                lifetime = int(
+                    os.environ.get("DOMAIN_KG_BROWSER_PREVIEW_SECONDS", "1200")
+                    if import_demo
+                    else configuration["tests"]["preview_seconds"]
+                )
+                assert 1 <= lifetime <= (1800 if import_demo else 900)
                 done, _ = await asyncio.wait(
                     (serving, working), timeout=lifetime, return_when=asyncio.FIRST_COMPLETED
                 )

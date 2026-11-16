@@ -135,4 +135,48 @@ def test_opt_in_reranking_can_promote_graph_only_evidence():
         {"vector": [text], "graph": [graph_only], "rerank": [graph_only, text]}
     )
     assert result[0].chunk_id == graph_only.chunk_id
-    assert result[0].score == pytest.approx(2 / 61)
+    assert result[0].score == pytest.approx(1 / 61)
+
+
+def test_recall_pool_admits_each_branch_before_fusion_can_bury_a_bridge():
+    from domain_kg.retrieval.fusion import recall_pool
+
+    kg = uuid4()
+    text = [evidence(kg) for _ in range(50)]
+    bridge = evidence(kg)
+    branches = {"vector": text, "lexical": text, "graph": [bridge, text[0]]}
+    assert bridge.chunk_id not in {x.chunk_id for x in fuse_evidence(branches)[:12]}
+    pool = recall_pool(branches, 12)
+    assert bridge.chunk_id in {x.chunk_id for x in pool}
+    assert len(pool) == len({x.chunk_id for x in pool}) == 12
+    assert next(x for x in pool if x.chunk_id == text[0].chunk_id).method_ranks["graph"] == 2
+
+
+def test_semantic_ranking_is_final_even_when_all_recall_branches_prefer_a_distractor():
+    kg = uuid4()
+    distractor, bridge = evidence(kg), evidence(kg)
+    result = fuse_evidence(
+        {"vector": [distractor, bridge], "lexical": [distractor],
+         "graph": [distractor, bridge], "rerank": [bridge, distractor]}
+    )
+    assert [x.chunk_id for x in result] == [bridge.chunk_id, distractor.chunk_id]
+    assert result[0].method_ranks == {"vector": 2, "graph": 2, "rerank": 1}
+
+
+def test_reranking_cannot_introduce_or_duplicate_evidence():
+    item = evidence()
+    for ranking in ([evidence(item.kg_id)], [item, item]):
+        with pytest.raises(DomainError):
+            fuse_evidence({"vector": [item], "rerank": ranking})
+
+
+def test_recall_pool_reserves_each_kg_and_authenticates_duplicate_sources():
+    from domain_kg.retrieval.fusion import recall_pool
+
+    first = [evidence(UUID(int=1)) for _ in range(50)]
+    later = evidence(UUID(int=2))
+    assert {x.kg_id for x in recall_pool({"vector": [*first, later]}, 2)} == {
+        UUID(int=1), UUID(int=2)
+    }
+    with pytest.raises(DomainError):
+        recall_pool({"vector": first, "graph": [first[0].model_copy(update={"text": "forged"})]}, 2)

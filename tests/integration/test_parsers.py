@@ -253,7 +253,7 @@ async def test_parser_runtime_and_memory_limits_stop_work_without_heavy_inputs(
     import sys
     import time
 
-    from domain_kg.ingestion.parsers import MAX_RSS_BYTES, Parser
+    from domain_kg.ingestion.parsers import Parser
 
     parser = Parser(blob_store[0])
     blob = await original(blob_store, b"Tiny evidence", "text/plain")
@@ -266,7 +266,7 @@ async def test_parser_runtime_and_memory_limits_stop_work_without_heavy_inputs(
     assert timeout.value.code == "QUOTA_EXCEEDED" and time.monotonic() - start < 3
 
     async def over_limit(_process):
-        return MAX_RSS_BYTES + 1
+        return 1024 * 1024 * 1024 + 1
 
     monkeypatch.setattr(parser, "_rss", over_limit)
     with pytest.raises(DomainError) as memory:

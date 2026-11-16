@@ -209,7 +209,7 @@ def batch_for(chunk, profile):
         version_id=chunk.version_id,
         chunk_id=chunk.id,
         schema_id=schema.id,
-        schema_revision=1,
+        schema_revision=schema.revision,
         provider_profile_id=profile,
         entities=(
             ExtractedEntity(
@@ -291,7 +291,7 @@ async def test_homonyms_without_grounded_identity_are_not_name_merged(
         version_id=chunk.version_id,
         chunk_id=chunk.id,
         schema_id=schema.id,
-        schema_revision=1,
+        schema_revision=schema.revision,
         provider_profile_id=uuid4(),
         entities=(
             ExtractedEntity(

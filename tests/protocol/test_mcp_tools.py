@@ -67,6 +67,8 @@ REQUIRED = {
     "get_audit",
     "get_operation_metrics",
     "get_model_settings",
+    "get_parser_settings",
+    "configure_parser",
     "configure_models",
     "approve_model",
     "check_models",

@@ -96,6 +96,18 @@ All references include organization and KG. Stable IDs are independent of filena
 
 Version domain schemas for entity types, predicates, legal endpoints, and literals. Ship a general work profile and a separate scientific profile. Preserve conflicting and negated claims with source qualifiers. A validated span establishes source correspondence, not truth. Keep manual corrections separately from generated descriptions so re-ingestion cannot erase them.
 
+The extraction model determines entities, relations, polarity and necessary qualifiers.
+Code validates evidence correspondence, schema, endpoints and authority; negation
+keywords are not a semantic veto. A model can still misinterpret a source despite
+passing those checks, so semantic quality requires evaluation rather than a claim
+that source-validation implies entailment.
+
+Built-in schema revision 2 uses content-derived entity types and predicates; its
+listed vocabulary supplies examples. Stored custom schemas remain closed unless
+explicitly declared open. Automatic extraction retains only endpoints of validated
+relations, while all source chunks remain available to vector/text retrieval.
+This does not invent connectivity, merge equal names, or remove manual curation.
+
 ## Raw material ingestion and changes
 
 The pipeline is: authorize/reserve quota; preserve the upload; parse immutable blocks; chunk; run LightRAG extraction; validate source spans/schema; resolve stable IDs; stage graph/vector revisions; verify projection acknowledgements; publish.
@@ -107,9 +119,17 @@ force acceptance. Preserve the complete original. This completes preparation of 
 validated subset before atomic publication; malformed, refused or truncated model
 responses still fail and cannot publish an unfinished projection.
 
-Use one PDF adapter: pypdf validates encrypted/malformed/page-limited originals,
-Docling extracts native text and renders scan pages, and preinstalled local
-Tesseract recognizes English/simplified Chinese offline. OCR is automatic for
+Use one PDF adapter: pypdf validates encrypted/malformed/page-limited originals
+and extracts native text and image placement. Docling renders only pages that
+need OCR in a short-lived child; after that child exits, preinstalled local
+Tesseract recognizes English/simplified Chinese offline. The parser process group
+defaults to a 1 GiB process-group RSS bound for every format, including conversion
+and OCR children. Operator-owned [parser settings](parsing.md#parser-configuration)
+configure the memory/runtime/page/expansion/OCR limits for the server. Linux also
+caps each process's virtual address space at the configured RSS budget plus
+256 MiB for mapped libraries. Rendering and OCR allocations never overlap.
+Unreadable embedded PDF images emit an explicit warning while readable text and
+the complete original are retained. OCR is automatic for
 image-only and image-dominant mixed pages; mask native text regions to avoid
 duplicate evidence. Keep native text exact and distinguish OCR source locations.
 DOCX uses deterministic archive/XML decoding; deterministic parsers also handle
@@ -159,7 +179,7 @@ For each KG, resolve eligible material/version and curation sets from MongoDB; a
 
 Start with 50 candidates per branch per KG. Deep/graph expansion is at most two hops, 200 nodes, and 400 edges, including seeds. Enforce caps during expansion and track visited nodes. Map every graph edge to visible support. Rank graph evidence using visible source relevance and supported predicate/path cues before applying its candidate cap; IDs only break relevance ties. These lexical cues are not an entailment check or a natural-language query planner.
 
-Use reciprocal rank fusion with constant 60 for vector/text ranks. Graph hits already in the text pool add authenticated annotations without a correlated third vote; new graph sources compete by their graph rank without a reserved context quota. Graph-only mode retains graph ranking. Optional deep reranking considers at most 50 candidates. Default final top-k is 10, maximum 50, and evidence text budget is 24,000 characters. Preserve complete source passages, skip oversized candidates and backfill from the pool. Reserve a complete passage per nonempty KG when budgets permit; if no full representation fits, mark excerpts as truncated and omit their graph paths.
+Use reciprocal rank fusion with constant 60 for vector/text ranks. Graph hits already in the text pool add authenticated annotations without a correlated third vote; new graph sources compete by their graph rank without a reserved context quota. Graph-only mode retains graph ranking. Optional deep reranking interleaves independently recalled branches before a 50-candidate cap, retaining per-KG representation. The model sees complete original passages and can only return an ordered subset of those candidates without duplicates. Its validated semantic order is final for reranked candidates, not another RRF vote; unranked candidates retain their fallback order. Requests exceeding the configured model context fail explicitly. Default final top-k is 10, maximum 50, and evidence text budget is 24,000 characters. Preserve complete source passages, skip oversized candidates and backfill from the pool. Reserve a complete passage per nonempty KG when budgets permit; if no full representation fits, mark excerpts as truncated and omit their graph paths.
 
 Filters cover KG/material IDs and exclusions, active or explicit retained version, media type, tags, author, source, language, dates, node IDs/types/exclusions, predicates, confidence, and support status. Lists are OR, fields are AND, `tags_all`/`tags_any` are separate, and time ranges are half-open UTC. Assertion restrictions constrain every branch before ranking. Unsupported filters fail explicitly.
 

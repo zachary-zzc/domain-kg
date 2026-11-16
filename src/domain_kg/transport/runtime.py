@@ -10,8 +10,10 @@ from domain_kg.identity.material_grants import MaterialGrantManagement
 from domain_kg.identity.models import AccessContext, Action, Principal
 from domain_kg.identity.routes import IdentityRuntime
 from domain_kg.imports.service import Importer
+from domain_kg.ingestion.configuration import ParserSetup
 from domain_kg.jobs.inspection import JobInspection
 from domain_kg.jobs.queue import JobQueue
+from domain_kg.materials.import_runs import ImportRuns
 from domain_kg.materials.inspection import MaterialInspection
 from domain_kg.materials.lifecycle import MaterialLifecycle
 from domain_kg.materials.management import MaterialManagement
@@ -42,11 +44,13 @@ class ServiceRuntime:
         self.identity, self.catalog = identity, catalog
         self.policy, self.materials, self.providers = catalog.policy, materials, providers
         self.queue = JobQueue(self.policy, catalog.router)
+        self.parser_setup = ParserSetup(self.policy, identity.settings.parser_config)
         self.retention_policy = retention_policy or RetentionPolicy()
         self.owner_operations = OwnerOperations(self.queue, self.retention_policy, cleanup_policy)
         self.restores = RestoreManagement(self.owner_operations, providers.registry)
         self.job_inspection = JobInspection(self.queue)
         self.inspection = MaterialInspection(self.queue)
+        self.import_runs = ImportRuns(materials, self.queue)
         self.management = MaterialManagement(self.queue)
         self.citations = CitationService(self.queue)
         self.lifecycle = MaterialLifecycle(materials, self.queue)
@@ -62,6 +66,7 @@ class ServiceRuntime:
 
     async def initialize(self) -> None:
         await self.queue.initialize()
+        await self.import_runs.initialize()
         await self.revisions.initialize()
         await self.imports.initialize()
 

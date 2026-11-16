@@ -219,7 +219,8 @@ async def test_browser_create_kg_approved_placement_owner_setup_and_denials(
                 assert "Model approval needed" in revoked.text
                 assert "Ready for your sources" not in revoked.text
                 overview = await browser.get(f"/admin/kgs/{kg}")
-                assert overview.status_code == 200 and "Your KG is empty" in overview.text
+                assert overview.status_code == 200
+                assert "No sources have been published yet" in overview.text
                 assert 'aria-label="KG workspace"' not in overview.text
                 assert (await browser.get("/admin/storage")).status_code == 200
                 sign_in(reader)

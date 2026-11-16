@@ -1,6 +1,7 @@
 {% if can_edit %}
 <form id="bulk-management" class="bulk-controls card" method="post" action="/admin/kgs/{{ kg.id }}/batch" data-bulk-form data-bulk-scope="{{ bulk_scope }}" data-selected-message="{{ _('Selected: {count}') }}" data-confirm-delete="{{ _('Delete {count} selected sources? They leave the KG immediately and can be restored during retention. Independently supported facts remain.') }}" data-confirm-process="{{ _('Process {count} selected sources with the current models? This may incur provider charges. Published versions remain available until replacements pass verification.') }}">
 <input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="idempotency_key" value="batch-{{ command_key }}"><input type="hidden" name="items" value="[]">
+<input type="hidden" name="return_view" value="{{ source_view|default('processing' if bulk_kind == 'jobs' else 'removed' if bulk_kind == 'removed' else 'published') }}">{% if import_id|default(none) %}<input type="hidden" name="import_id" value="{{ import_id }}">{% endif %}
 <div class="form-row"><label><input type="checkbox" data-bulk-all> {{ _('Select this page') }}</label><span data-bulk-count role="status" aria-live="polite">{{ _('Selected: {count}').replace('{count}', '0') }}</span>
 <button class="quiet" type="button" data-bulk-clear>{{ _('Clear selection') }}</button>{% if bulk_kind == 'jobs' %}<button class="quiet" type="button" data-bulk-retryable>{{ _('Select retryable jobs') }}</button>{% endif %}</div>
 <div class="input-action"><select name="operation" aria-label="{{ _('Batch operation') }}" required><option value="">{{ _('Choose an operation') }}</option>
@@ -8,4 +9,11 @@
 {% else %}{% if bulk_kind == 'removed' %}<option value="restore">{{ _('Restore selected sources') }}</option>{% else %}<option value="process">{{ _('Process selected sources') }}</option><option value="delete">{{ _('Delete selected sources') }}</option>{% endif %}{% endif %}</select><button type="submit" data-bulk-submit disabled>{{ _('Apply to selection') }}</button></div>
 <p class="field-help">{{ _('Up to 100 items per batch. Each item is checked separately; a failure does not block other items. Submitted jobs continue in the background.') }}</p>
 <noscript><p class="notice">{{ _('Enable JavaScript for batch selection. Individual actions remain available.') }}</p></noscript>
+<dialog class="bulk-review" data-bulk-dialog aria-labelledby="bulk-review-title" aria-describedby="bulk-review-message">
+<h2 id="bulk-review-title">{{ _('Review selected sources') }}</h2>
+<p id="bulk-review-message" data-bulk-review-message></p>
+<p class="notice notice-warning" data-bulk-review-changed role="status" hidden>{{ _('Selection changed. Review the current items and confirm again.') }}</p>
+<ul class="details-list" data-bulk-review-names></ul>
+<div class="form-actions"><button class="quiet" type="button" data-bulk-cancel autofocus>{{ _('Cancel') }}</button><button type="button" data-bulk-confirm>{{ _('Confirm operation') }}</button></div>
+</dialog>
 </form>{% endif %}

@@ -7,10 +7,49 @@ window.addEventListener("pageshow", function(event) {
 window.addEventListener("pagehide", function() {
   document.documentElement.classList.add("leaving");
 });
-document.addEventListener("htmx:responseError", function() {
-  document.documentElement.classList.add("leaving");
-  window.location.assign("/admin");
+// A denied or changed read must discard previously rendered protected content.
+// Reload the current route so the server can resolve the user's current access.
+document.addEventListener("htmx:responseError", function(event) {
+  const status = event.detail?.xhr?.status;
+  const response = event.detail?.xhr?.responseText || "";
+  if ([401, 403, 404].includes(status) ||
+      (status === 409 && response.includes("POLICY_CHANGED"))) {
+    document.documentElement.classList.add("leaving");
+    window.location.reload();
+    return;
+  }
+  showRequestFailure(status === 409 || status === 422);
 });
+function showRequestFailure(conflict = false) {
+  const notice = document.querySelector("[data-request-notice]");
+  if (!notice) return;
+  const message = notice.querySelector("[data-request-message]");
+  if (message) message.textContent = conflict ? notice.dataset.conflictMessage : notice.dataset.failureMessage;
+  notice.hidden = false;
+}
+for (const name of ["htmx:sendError", "htmx:timeout"]) {
+  document.addEventListener(name, () => showRequestFailure());
+}
+document.querySelector("[data-request-retry]")?.addEventListener("click", () => window.location.reload());
+document.addEventListener("htmx:afterRequest", function(event) {
+  if (!event.detail?.successful) return;
+  const notice = document.querySelector("[data-request-notice]");
+  if (notice) notice.hidden = true;
+});
+
+function uploadFailureText(error, form) {
+  const copy = JSON.parse(form.dataset.failureCopy || "{}");
+  const code = error.code || "NETWORK_ERROR";
+  const known = Object.prototype.hasOwnProperty.call(copy, "issue." + code);
+  let text = known ? copy["issue." + code] + " · " + code :
+    form.dataset.failureMessage || "Upload could not be completed. Refresh your session or retry the file.";
+  if (typeof error.request_id === "string" &&
+      /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(error.request_id)) {
+    text += " · " + (form.dataset.referenceMessage || "Diagnostic reference") + ": " + error.request_id;
+  }
+  return text;
+}
+
 document.addEventListener("submit", async function(event) {
   const form = event.target;
   if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-source-form")) return;
@@ -40,15 +79,18 @@ document.addEventListener("submit", async function(event) {
     url.search = new URLSearchParams({media_type: type, sha256: sha, size_bytes: String(file.size),
       idempotency_key: form.elements.namedItem("idempotency_key").value + "-upload"});
     if (form.dataset.targetMaterial) url.searchParams.set("target_material_id", form.dataset.targetMaterial);
-    const response = await fetch(url, {method: "POST", credentials: "same-origin",
+    const response = await fetch(url, {method: "POST", credentials: "same-origin", signal: AbortSignal.timeout(120000),
       headers: {"Content-Type": type, "x-csrf-token": form.elements.namedItem("csrf_token").value}, body: file});
-    if (!response.ok) throw new Error("upload failed");
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw Object.assign(new Error("upload failed"), {code: detail.code || "BACKEND_UNAVAILABLE", request_id: detail.request_id});
+    }
     const uploaded = await response.json();
     form.elements.namedItem("upload_id").value = uploaded.upload_id;
     message(form.dataset.preservedMessage || "Original preserved. Starting processing…");
     form.submit();
-  } catch (_) {
-    message(form.dataset.failureMessage || "Upload could not be completed. Refresh your session or retry the file.");
+  } catch (error) {
+    message(uploadFailureText(error, form));
     form.dataset.uploading = "false";
     if (button) button.disabled = false;
   }

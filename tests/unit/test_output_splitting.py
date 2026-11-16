@@ -58,6 +58,56 @@ async def test_output_split_preserves_boundary_context_with_exact_offsets(multip
         }
         assert covered == set(range(original.start, original.end))
 
+
+@pytest.mark.parametrize("multiple_blocks", [False, True])
+async def test_output_windows_preserve_multilingual_source_without_domain_specific_boundaries(
+    multiple_blocks,
+):
+    from test_chunking import document_blocks
+
+    from domain_kg.ingestion.chunking import chunk_document
+    from domain_kg.ingestion.models import ChunkConfig
+    from domain_kg.ingestion.output_splitting import extract_with_splitting
+
+    names = (
+        "雄性激素、雌性激素、孕激素、盐皮质激素、糖皮质激素、前体和代谢产物、睾酮、"
+        "雄烯二酮、雌酮、皮质醇、17-a羟孕酮、11-脱氧皮质酮、21-脱氧皮质醇、"
+        "硫酸脱氢异雄酮、脱氢表雄酮、雌二醇、雌三醇、孕酮、醛固酮、可的松、"
+        "11-脱氧皮质醇、孕烯醇酮、皮质酮、二氢睾酮、17-羟孕烯醇酮、褪黑素"
+    )
+    parent = (
+        chunk_document(document_blocks([names, names]), ChunkConfig())[0]
+        if multiple_blocks
+        else source(names)
+    )
+    template, schema = proposal(parent)
+    seen = []
+
+    async def produce(chunk):
+        if chunk.id == parent.id:
+            raise ExtractionOutputLimit()
+        seen.append(chunk)
+        return template.model_copy(update={"chunk_id": chunk.id, "entities": (), "assertions": ()})
+
+    await extract_with_splitting(parent, schema, template.provider_profile_id, produce)
+    assert len(seen) == 2
+    for child in seen:
+        assert len(child.text) < len(parent.text)
+        for span in child.spans:
+            # A Unicode splitter preserves source, not domain-specific entity semantics.
+            # Entity completeness is an LLM responsibility; no delimiter dictionary.
+            original = next(s for s in parent.spans if s.location == span.location)
+            assert span.quote == original.quote[span.start : span.end]
+    for original in parent.spans:
+        assert {
+            i
+            for child in seen
+            for span in child.spans
+            if span.location == original.location
+            for i in range(span.start, span.end)
+        } == set(range(original.start, original.end))
+
+
 async def test_split_output_keeps_full_source_coverage_and_distinct_local_endpoints():
     from domain_kg.ingestion.output_splitting import extract_with_splitting
 

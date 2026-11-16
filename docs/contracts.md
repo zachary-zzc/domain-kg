@@ -91,8 +91,17 @@ Additional typed tools expose the existing console services:
 | Imports and owner operations | `plan_import`, `execute_import`, `submit_operation`, `get_backup`, `get_backup_page`, `read_backup_file`, `get_export`, `read_export_file`, `get_restore`, `get_projections`, `repair_material` |
 | Owner diagnostics | `get_usage`, `get_usage_history`, `get_audit`, `get_operation_metrics` |
 | Model settings | `get_model_settings`, `configure_models`, `approve_model`, `check_models`, `discover_models`, `set_default_model` |
+| Server parser settings | `get_parser_settings`, `configure_parser` |
 | Team management | `list_team`, `admit_member`, `admit_service`, `change_member`, `create_group`, `set_group_member` |
 | Approved infrastructure | `list_backends`, `list_approved_backend_references`, `register_backend`, `validate_backend`, `register_storage_profile` |
+
+`get_parser_settings(kg_id)` requires current owner access and returns the global
+server parser revision/options. `configure_parser(kg_id, options, expected_revision)`
+additionally requires a human platform operator with admin scope. It affects all
+KGs on that server, accepts no path, validates bounded `ParseOptions`, rejects stale
+conflicting revisions and atomically replaces only the server-selected file. An
+identical replay is safe. New job executions/retries load that configuration once;
+running jobs retain theirs. Saving makes no model request or automatic retry.
 
 `update_kg` accepts optional `name` and lifecycle `state` (at least one), preserving
 existing revision/idempotency semantics. `delete_kg` and `restore_kg` require the
@@ -132,7 +141,9 @@ Optional MCP resources expose authorized schema and material metadata, with opaq
 ## HTTP routes
 
 Console batch management uses `POST /admin/kgs/{kg_id}/batch` and
-`GET /admin/kgs/{kg_id}/batch/{batch_id}`. A command contains `operation`
+`GET /admin/kgs/{kg_id}/batch/{batch_id}` (legacy redirect). Submission returns to
+`/admin/kgs/{kg_id}/materials` with validated `view`, `batch_id`, and optional
+`import_id` selectors, rendering per-item results inline. A command contains `operation`
 (`delete`, `restore`, `process`, `retry`, `cancel`), an idempotency key and 1–100
 distinct typed targets. Source targets require their expected revision; processing
 accepted sources also binds the selected active version. Each item passes its
@@ -141,6 +152,37 @@ identity, submission leases and item receipts are scoped by organization, KG and
 verified initiating actor. Only that actor can inspect its current-authority result.
 Batch commands cannot select a target in a different KG, even when the actor has
 access to both. Permanent purge is not a batch operation.
+
+Import runs persist a bounded client manifest independently of jobs. These are
+actor-owned navigation/admission records, not publication authority:
+
+| Method | Route under `/api/v1/kgs/{kg_id}` | Behavior |
+| --- | --- | --- |
+| POST | `/import-runs` | Create/replay 1–100 distinct safe relative paths with SHA-256, byte size and MIME type; an idempotency key binds the exact manifest |
+| GET | `/import-runs` | Up to 10 recent run heads for the verified initiating actor; no source filenames |
+| GET | `/import-runs/{run_id}` | Current per-item admission status and freshly authorized job receipts |
+| POST | `/import-runs/{run_id}/items/{index}` | Save exactly one owned upload ID or matching visible job ID before admission; replacement binds material/version and optional metadata revision |
+| POST | `/import-runs/{run_id}/items/{index}/resume` | Replay the saved command with its stable item key; never implicitly retry an existing failed job |
+
+An item reports `waiting`, `submitted` (a durable job exists) or `failed`
+(admission/status failure). `can_resume` means the original upload command is
+saved. `status_unavailable` means an already admitted job cannot currently be
+inspected; refresh the run instead of uploading again. Reads independently check
+canonical job/source authority before returning any fallback metadata, then
+recheck every admitted source and current policy before returning the run. Reads
+use at most four concurrent item checks and preserve manifest order. Import/job
+progress is authority metadata: an unrelated accepted graph publication does not
+invalidate it. Published evidence still uses its complete publication/visibility
+fence. Actor or KG IDs in URLs never establish
+access. Mutations require the current shared policy, and browser requests require
+same-origin CSRF. An interrupted item can recover after the job commit without
+creating a second material/job. Missing, not-yet-uploaded bytes require browser
+reselection; only a server run ID is retained in the URL.
+
+`GET /api/v1/kgs/{kg_id}/jobs` accepts `view=all|active|attention|finished|incomplete`
+and `sources_only`. Filtering and current ACL checks precede the visible page
+limit; filters bind the opaque cursor. `incomplete` excludes successful jobs and
+is used during file review so historical completed jobs need not be loaded.
 
 `ReplaceMaterial.expected_revision` is an optional additional metadata revision
 guard. When absent, existing replacement command fingerprints remain unchanged.
@@ -236,6 +278,16 @@ Empty lists impose no restriction. Values inside a filter list are alternatives,
 
 `min_confidence` defaults to null. `support_statuses` defaults to `["verified", "manual"]` for assertion eligibility and does not by itself require a text-only chunk to have assertions. Here `verified` means its source span and schema were validated; it does not establish that the source's claim is true. `manual` means an immutable, authorized human curation record with actor and reason, not a document-verified claim. Other states are `imported_unverified` and `rejected`; rejected supports are visible only in authorized curation views and cannot be requested as search evidence.
 
+When deep reranking is enabled, independent branch candidates enter a deduplicated,
+authenticated pool before rank fusion can suppress a branch. At most 50 candidates are
+admitted with per-KG representation when the limit permits. The model ranks complete
+original text; its output must be an ordered subset of the supplied sources, without duplicates. It cannot
+create or alter evidence. A valid semantic order determines the final ranked sources,
+with unranked candidates retained as fallback. The final result count/text budgets still
+apply. A complete ranking prompt that exceeds the selected provider window returns
+`QUOTA_EXCEEDED`, rather than silently truncating every candidate. Authority and source
+visibility are rechecked before and after the provider call and before returning evidence.
+
 ## Search response and evidence contract
 
 `SearchResponse` contains `request_id`, `mode`, `status` (`ok` or `partial`), `results`, `applied_filters`, `kg_revisions`, `policy_revision`, `branch_status`, `projection_generations`, `warnings`, and `truncation`. Each result has `kind` (`source` or `manual`), `kg_id`, text, citation IDs, visible entity and assertion IDs, a fused rank score, method ranks, accepted source/curation revision IDs, and supporting graph paths. Source results require `material_id`, `version_id`, and `chunk_id`; manual results require `curation_revision_id` and provenance, with nullable source fields when no source material exists. A citation includes its true source location or curation actor/reason and an authorized resolver route. Do not invent document spans for manual assertions. Every graph edge has a visible support ID.
@@ -301,6 +353,14 @@ class Importer:
 `NodeUpdate` and `RelationUpdate` include stable target IDs, allowed typed changes, expected target revision, curation scope, reason, and idempotency key. Descriptive edits refresh affected vectors; nonembedded metadata can publish without embedding work. Suppression uses an immediate authoritative fence. Edits that change a claim's meaning retain original evidence independently and label the changed claim as manual provenance. `RevisionReceipt` distinguishes pending projection work from an accepted published revision and returns a job ID when asynchronous.
 
 LightRAG adapters implement extraction/retrieval with source IDs and the immutable read scope. Per-request mutable global workspace/filter state is forbidden. The implementation plan assigns every model to a task before downstream use.
+
+`DomainSchema.vocabulary` is `closed` (the omitted legacy default) or `open`.
+Closed schemas enforce enumerated types, predicates and endpoint combinations.
+Open schemas permit content-derived labels up to 200 printable characters; their
+enumerated labels are suggestions. Both modes enforce source and namespace checks.
+The built-in profiles use open schema revision 2. Automatic extraction drops
+entities unused by validated assertions before LightRAG mapping; source chunks
+remain searchable, and explicit imported/manual records retain their provenance.
 
 ## Errors and job states
 

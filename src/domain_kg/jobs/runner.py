@@ -1,6 +1,7 @@
 """Single-job execution with heartbeats, exact checkpoint reuse and durable failures."""
 
 import asyncio
+from collections.abc import Callable
 from typing import Protocol
 
 from domain_kg.errors import DomainError, ErrorCode
@@ -20,8 +21,10 @@ class JobRunner:
         pipeline: Pipeline,
         *,
         operations: OwnerOperationExecutor | None = None,
+        pipeline_factory: Callable[[], Pipeline] | None = None,
     ) -> None:
         self.queue, self.pipeline, self.operations = queue, pipeline, operations
+        self.pipeline_factory = pipeline_factory
 
     async def _steps(self, job: LeasedJob) -> None:
         if job.kind in (
@@ -47,8 +50,11 @@ class JobRunner:
 
             await PurgeService(self.queue).run(job)
             return
-        if not self.pipeline.steps:
-            self.pipeline.require_configured()
+        # Capture current server configuration once per execution. Later edits
+        # apply to the next job, never halfway through this job's checkpoints.
+        pipeline = self.pipeline_factory() if self.pipeline_factory else self.pipeline
+        if not pipeline.steps:
+            pipeline.require_configured()
         importing = job.kind == "import"
         if job.kind == "reprocess_material":
             await self.queue.authorize(job)
@@ -65,15 +71,15 @@ class JobRunner:
                 is not None
             )
         steps = (
-            self.pipeline.import_steps
+            pipeline.import_steps
             if importing
-            else self.pipeline.curation_steps
+            else pipeline.curation_steps
             if job.kind == "curate"
-            else self.pipeline.restore_steps
+            else pipeline.restore_steps
             if job.kind == "restore_material"
-            else self.pipeline.repair_steps
+            else pipeline.repair_steps
             if job.kind == "repair"
-            else self.pipeline.steps
+            else pipeline.steps
         )
         if not steps:
             raise DomainError(

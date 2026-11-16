@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 
+from domain_kg.console.browser_tools import folder_copy
 from domain_kg.console.forms import read_form
 from domain_kg.console.rendering import BrowserSession, browser_session, page
 from domain_kg.console.workspace import filters_for, read_context
@@ -100,13 +101,16 @@ def material_command_router(runtime: ServiceRuntime) -> APIRouter:
                 "operation": operation,
                 "detail": detail,
                 "command_key": str(uuid4()),
+                "upload_copy": folder_copy(),
             },
             scope=scope,
         )
 
     @router.get("/kgs/{kg_id}/materials/new")
-    async def new(request: Request, kg_id: UUID) -> HTMLResponse:
-        return await form(request, kg_id, "add")
+    async def new(request: Request, kg_id: UUID) -> RedirectResponse:
+        session = await browser_session(runtime, request)
+        await runtime.access(session.principal, (kg_id,), Action.INGEST, session.member.org_id)
+        return redirect(f"/admin/kgs/{kg_id}/materials?add=files")
 
     @router.get("/kgs/{kg_id}/materials/{material_id}/replace")
     async def replacement(request: Request, kg_id: UUID, material_id: UUID) -> HTMLResponse:

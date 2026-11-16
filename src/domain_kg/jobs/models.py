@@ -41,6 +41,7 @@ class JobSource(FrozenModel):
     source: Annotated[str, Field(max_length=4000)] | None = None
     sha256: SHA256
     expected_active_version: UUID | None = None
+    material_revision: NonNegative | None = None
 
 
 class JobFailure(FrozenModel):

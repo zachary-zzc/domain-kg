@@ -1,0 +1,24 @@
+{% set page_limit = limit|default(25) %}
+{% if pagination_controls|default(true) %}
+<div class="list-pagination">
+  <p class="muted">{{ _('Rows shown') }}: {{ listed.items|length }}</p>
+  <form method="get" class="toolbar page-size-form" data-list-page-size>
+    <input type="hidden" name="view" value="{{ listing_view }}">
+    {% if include_unverified is defined %}<input type="hidden" name="include_unverified" value="{{ 'true' if include_unverified else 'false' }}">{% endif %}
+    {% if batch|default(none) %}<input type="hidden" name="batch_id" value="{{ batch.batch_id }}">{% endif %}
+    {% if import_id|default(none) %}<input type="hidden" name="import_id" value="{{ import_id }}">{% endif %}
+    <label>{{ _('Per page') }} <select name="limit">
+      {% if page_limit not in [10, 25, 50] %}<option value="{{ page_limit }}" selected>{{ page_limit }}</option>{% endif %}
+      {% for size in [10, 25, 50] %}<option value="{{ size }}" {% if size == page_limit %}selected{% endif %}>{{ size }}</option>{% endfor %}
+    </select></label>
+    <button class="quiet" type="submit">{{ _('Update view') }}</button>
+  </form>
+</div>
+{% endif %}
+{% if pagination_navigation|default(true) and (cursor|default(none) or listed.next_cursor) %}
+{% set page_query %}view={{ listing_view }}&amp;limit={{ page_limit }}{% if include_unverified is defined %}&amp;include_unverified={{ 'true' if include_unverified else 'false' }}{% endif %}{% if batch|default(none) %}&amp;batch_id={{ batch.batch_id }}{% endif %}{% if import_id|default(none) %}&amp;import_id={{ import_id }}{% endif %}{% endset %}
+<nav class="list-pagination" aria-label="{{ _('Pagination') }}">
+  {% if cursor|default(none) %}<a class="button quiet" rel="first" href="?{{ page_query }}">← {{ _('First page') }}</a>{% endif %}
+  {% if listed.next_cursor %}<a class="button quiet" rel="next" href="?{{ page_query }}&amp;cursor={{ listed.next_cursor|urlencode }}">{{ _('Next page') }} →</a>{% endif %}
+</nav>
+{% endif %}

@@ -196,7 +196,7 @@ def create_app(
         if (request.url.path == "/admin" or request.url.path.startswith("/admin/")) and (
             "application/json" not in request.headers.get("accept", "")
         ):
-            return error_page(error, status)
+            return error_page(error, status, request=request)
         headers = {"Cache-Control": "no-store"}
         if status == 401:
             headers["WWW-Authenticate"] = (

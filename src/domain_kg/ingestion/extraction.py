@@ -26,11 +26,6 @@ from domain_kg.ingestion.models import (
     Span,
 )
 
-NEGATION = re.compile(
-    r"\b(?:not|never|no|without|neither|cannot|can't|doesn't|fails? to|lacks?)\b"
-    r"|不(?:会|能|是|使用|导致)|未(?:能|发现|证明)|并非",
-    re.I,
-)
 IDENTIFIER = re.compile(
     r"(?:urn:[A-Za-z0-9][A-Za-z0-9:._-]{1,250}|doi:10\.\d{4,9}/\S{1,300}|HGNC:\d{1,12}|https://[^\s]{1,400})\Z"
 )
@@ -42,6 +37,43 @@ def invalid(
     return DomainError(
         ErrorCode.EVIDENCE_VALIDATION_FAILED,
         message,
+    )
+
+
+def merge_validated_extractions(
+    original: ExtractionResult, corrected: ExtractionResult
+) -> ExtractionResult:
+    """Union validated facts without treating temporary IDs as shared identities."""
+    entities: dict[str, ExtractedEntity] = {}
+    assertions: dict[str, ExtractedAssertion] = {}
+    used_ids: set[str] = set()
+    for content in (corrected, original):
+        endpoints = {key for a in content.assertions for key in (a.subject, a.target)}
+        local: dict[str, str] = {}
+        for entity in content.entities:
+            if content is original and entity.local_id not in endpoints:
+                continue
+            identity = entity.model_dump_json(exclude={"local_id"})
+            if identity not in entities:
+                local_id = entity.local_id
+                suffix = len(entities)
+                while local_id in used_ids:
+                    local_id = f"e{suffix}"
+                    suffix += 1
+                used_ids.add(local_id)
+                entities[identity] = entity.model_copy(update={"local_id": local_id})
+            local[entity.local_id] = entities[identity].local_id
+        for assertion in content.assertions:
+            remapped = assertion.model_copy(
+                update={"subject": local[assertion.subject], "target": local[assertion.target]}
+            )
+            # A second confidence estimate is not independent evidence ownership.
+            identity = remapped.model_dump_json(exclude={"confidence"})
+            assertions.setdefault(identity, remapped)
+    return ExtractionResult(
+        entities=tuple(entities.values()),
+        assertions=tuple(assertions.values()),
+        warnings=corrected.warnings,
     )
 
 
@@ -164,7 +196,7 @@ def validate_extraction(
         raise invalid("The model returned duplicate entity identifiers.")
     for entity in batch.entities:
         evidence = check(entity.spans)
-        if entity.entity_type not in schema.entity_types:
+        if not schema.allows_entity_type(entity.entity_type):
             raise invalid("An extracted entity uses an unsupported type.")
         if entity.name not in evidence:
             raise invalid("An extracted entity name is absent from its cited source passages.")
@@ -183,22 +215,17 @@ def validate_extraction(
             raise invalid(
                 "An entity description, alias or identifier is not grounded in its evidence."
             )
-    predicates = {predicate.name: predicate for predicate in schema.predicates}
     for assertion in batch.assertions:
         evidence = check(assertion.spans)
         subject, target = entities.get(assertion.subject), entities.get(assertion.target)
-        predicate = predicates.get(assertion.predicate)
         if subject is None or target is None:
             raise invalid("An extracted relation refers to an unknown entity.")
-        if predicate is None or (
-            subject.entity_type not in predicate.subject_types
-            or target.entity_type not in predicate.target_types
-        ):
+        if not schema.allows_relation(assertion.predicate, subject.entity_type, target.entity_type):
             raise invalid("An extracted relation uses an unsupported predicate or endpoint type.")
         if subject.name not in evidence or target.name not in evidence:
             raise invalid("The relation evidence does not contain both endpoint names.")
-        if assertion.polarity == "positive" and NEGATION.search(evidence):
-            raise invalid("A positive relation cites source text containing negation.")
+        # Polarity is a model judgment about this claim. A keyword elsewhere in
+        # the cited text cannot establish its meaning or contradict that judgment.
         for qualifier in assertion.qualifiers:
             if qualifier.value not in check(qualifier.spans):
                 raise invalid("An extracted qualifier is absent from its cited source passages.")
@@ -245,6 +272,16 @@ class Extractor:
             )
         except ValidationError as exc:
             raise invalid() from exc
+        # Retain source text independently for vector/text retrieval. A mention
+        # belongs in the automatic graph only when a validated fact connects it.
+        endpoints = {
+            endpoint
+            for assertion in validated.assertions
+            for endpoint in (assertion.subject, assertion.target)
+        }
+        validated = validated.model_copy(
+            update={"entities": tuple(e for e in validated.entities if e.local_id in endpoints)}
+        )
         called = False
         native_names: dict[str, str] = {}
 
@@ -262,7 +299,10 @@ class Extractor:
                     "entities": [
                         {
                             "name": native_names[entity.local_id],
-                            "type": entity.entity_type,
+                            # Upstream rejects punctuation in types (e.g. Test/Service).
+                            # Keep its grammar opaque, like names; canonical source
+                            # labels remain unchanged in the validated batch.
+                            "type": engine_name(chunk, f"type/{entity.entity_type}"),
                             "description": "Source validated observation",
                         }
                         for entity in validated.entities
@@ -293,8 +333,10 @@ class Extractor:
             {
                 "role_llm_funcs": {"extract": completion},
                 "entity_extract_max_gleaning": 0,
-                "entity_extract_max_records": 150,
-                "entity_extract_max_entities": 50,
+                "entity_extract_max_records": max(
+                    1, len(validated.entities) + len(validated.assertions)
+                ),
+                "entity_extract_max_entities": max(1, len(validated.entities)),
                 "entity_extraction_use_json": True,
                 "llm_model_max_async": 1,
                 "addon_params": {"language": "English"},

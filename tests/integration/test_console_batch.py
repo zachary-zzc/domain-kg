@@ -1,6 +1,7 @@
 """Batch forms retain source policy, CSRF, independent outcomes and durable job controls."""
 
 import json
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 import httpx
@@ -66,18 +67,61 @@ async def test_batch_job_retry_is_independent_idempotent_and_scoped(
                 }
                 path = f"/admin/kgs/{kg}/batch"
                 result = await browser.post(
-                    path, headers={"Origin": "http://localhost:8000"}, data=data
+                    path,
+                    headers={"Origin": "http://localhost:8000"},
+                    data=data,
+                    follow_redirects=False,
                 )
+                assert result.status_code == 303
+                destination = urlsplit(result.headers["location"])
+                assert destination.path == f"/admin/kgs/{kg}/materials"
+                query = parse_qs(destination.query)
+                assert query["view"] == ["processing"]
+                batch_id = query["batch_id"][0]
+                legacy = await browser.get(
+                    f"/admin/kgs/{kg}/batch/{batch_id}", follow_redirects=False
+                )
+                assert legacy.status_code == 303
+                assert legacy.headers["location"] == result.headers["location"]
+                result = await browser.get(result.headers["location"])
                 assert result.status_code == 200
                 assert result.text.count('data-outcome="submitted"') == 2
                 assert result.text.count('data-outcome="failed"') == 1
                 assert (await queue.get(access, receipts[0].job_id)).stage == "queued"
                 replay = await browser.post(
-                    path, headers={"Origin": "http://localhost:8000"}, data=data
+                    path,
+                    headers={"Origin": "http://localhost:8000"},
+                    data=data,
+                    follow_redirects=False,
                 )
-                assert (
-                    replay.status_code == 200 and replay.text.count('data-outcome="submitted"') == 2
+                assert replay.status_code == 303
+                assert replay.headers["location"] == legacy.headers["location"]
+                import_id = uuid4()
+                redirected = await browser.post(
+                    path,
+                    headers={"Origin": "http://localhost:8000"},
+                    data=data | {"return_view": "attention", "import_id": str(import_id)},
+                    follow_redirects=False,
                 )
+                assert redirected.status_code == 303
+                assert parse_qs(urlsplit(redirected.headers["location"]).query) == {
+                    "view": ["attention"],
+                    "batch_id": [batch_id],
+                    "import_id": [str(import_id)],
+                }
+                for context in (
+                    {"return_view": "https://untrusted.example"},
+                    {"return_view": "other"},
+                    {"import_id": "../foreign"},
+                    {"return_url": "https://untrusted.example"},
+                ):
+                    invalid = await browser.post(
+                        path,
+                        headers={"Origin": "http://localhost:8000"},
+                        data=data | context,
+                        follow_redirects=False,
+                    )
+                    assert invalid.status_code == 422
                 changed = await browser.post(
                     path,
                     headers={"Origin": "http://localhost:8000"},
@@ -92,6 +136,12 @@ async def test_batch_job_retry_is_independent_idempotent_and_scoped(
                     data=data | {"csrf_token": "wrong"},
                 )
                 assert bad_csrf.status_code == 403
+                other_editor = await app.state.identity.sessions.create(principals["owner"], org)
+                browser.cookies.clear()
+                browser.cookies.set("domain_kg_session", other_editor.session_id)
+                browser.cookies.set("domain_kg_csrf", other_editor.csrf)
+                private = await browser.get(f"/admin/kgs/{kg}/batch/{batch_id}")
+                assert private.status_code == 404
                 reader = await app.state.identity.sessions.create(principals["reader"], org)
                 browser.cookies.clear()
                 browser.cookies.set("domain_kg_session", reader.session_id)

@@ -1,0 +1,20 @@
+{% if batch %}
+{% set result_view = source_view|default('published') %}
+{% set import_query = '&import_id=' ~ import_id if import_id|default(none) else '' %}
+<section class="card batch-notice" id="batch-results" aria-labelledby="batch-results-title">
+<div class="section-heading"><h2 id="batch-results-title">{{ _('Batch results') }}</h2><a class="quiet" href="/admin/kgs/{{ kg.id }}/materials?view={{ result_view }}{{ import_query }}">{{ _('Dismiss results') }}</a></div>
+<p class="muted">{{ _('Each item has its own result. Submitted means queued for background work; publication is shown on its job page.') }}</p>
+<div class="batch-summary" role="status" aria-live="polite">{% for name in ['submitted','completed','skipped','failed','pending'] %}<span class="badge{% if name == 'failed' and batch_counts[name] %} warning{% endif %}">{{ _(name|capitalize) }}: {{ batch_counts[name] }}</span>{% endfor %}</div>
+{% if batch_counts.pending and not batch.running %}
+<form method="post" action="/admin/kgs/{{ kg.id }}/batch" data-busy-form>
+<input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="operation" value="{{ batch.operation }}"><input type="hidden" name="idempotency_key" value="{{ batch.command.idempotency_key }}"><input type="hidden" name="items" value='{{ batch.command.model_dump(mode="json")["items"]|tojson }}'><input type="hidden" name="return_view" value="{{ result_view }}">{% if import_id|default(none) %}<input type="hidden" name="import_id" value="{{ import_id }}">{% endif %}
+<button type="submit">{{ _('Continue submitting unfinished items') }}</button>
+</form>{% endif %}
+<details {% if batch_counts.failed or batch_counts.pending %}open{% endif %}><summary>{{ _('Selected item') }} · {{ batch.items|length }}</summary>
+<div class="table-wrap"><table><thead><tr><th>{{ _('Selected item') }}</th><th>{{ _('Result / next step') }}</th></tr></thead><tbody>
+{% for item in batch.items %}<tr data-outcome="{{ item.outcome }}"><td><strong>{{ item.title or _('Unavailable item') }}</strong></td><td><strong>{{ _(item.outcome|capitalize) }}</strong>{% if item.message %}<p>{{ _(item.message) }}</p>{% endif %}{% if item.code %}<small>{{ item.code }}</small>{% endif %}{% if item.job_id %}<p><a href="/admin/kgs/{{ kg.id }}/jobs/{{ item.job_id }}">{{ _('View job') }} →</a></p>{% elif batch.operation == 'restore' and item.outcome == 'completed' %}<p><a href="/admin/kgs/{{ kg.id }}/materials/{{ item.id }}?include_unverified=true">{{ _('Open source') }} →</a></p>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></details>
+{% if batch.running or batch_counts.pending %}<p><a href="/admin/kgs/{{ kg.id }}/materials?view={{ result_view }}&amp;batch_id={{ batch.batch_id }}{{ import_query }}">{{ _('Refresh results') }}</a></p>{% endif %}
+<details class="batch-reference"><summary>{{ _('Batch reference') }}</summary><code>{{ batch.batch_id }}</code></details>
+</section>
+{% endif %}

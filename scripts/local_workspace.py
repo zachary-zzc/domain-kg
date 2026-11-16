@@ -54,6 +54,7 @@ def environment() -> dict[str, str]:
         "DOMAIN_KG_MONGO_DATABASE": "domain_kg_browser",
         "DOMAIN_KG_EMBEDDING_DIMENSIONS": "1024",
         "DOMAIN_KG_PROVIDER_CONFIG": str(PRIVATE / "providers.json"),
+        "DOMAIN_KG_PARSER_CONFIG": str(PRIVATE / "parser.json"),
     }
 
 

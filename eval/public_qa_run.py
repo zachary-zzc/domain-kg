@@ -101,7 +101,11 @@ async def bounded_call(client, endpoint, payload, key, deadline=60):
     try:
         async with asyncio.timeout(deadline):
             async with client.stream(
-                "POST", endpoint, json=payload, headers={"Authorization": "Bearer " + key}
+                "POST",
+                endpoint,
+                json=payload,
+                headers={"Authorization": "Bearer " + key} if key is not None else {},
+                timeout=httpx.Timeout(deadline, connect=10),
             ) as response:
                 result["http_status"] = response.status_code
                 body = bytearray()
@@ -109,7 +113,9 @@ async def bounded_call(client, endpoint, payload, key, deadline=60):
                     body.extend(part)
                     if len(body) > 2 * 1024 * 1024:
                         raise ValueError("response_size_limit")
-                text = bytes(body).decode("utf-8").replace(key, "[REDACTED]")
+                text = bytes(body).decode("utf-8")
+                if key:
+                    text = text.replace(key, "[REDACTED]")
                 try:
                     result["response"] = json.loads(text)
                 except ValueError:

@@ -10,6 +10,7 @@ from domain_kg.models import SHA256, FrozenModel, NonNegative, PreservedText, So
 
 
 class ParseOptions(FrozenModel):
+    memory_limit_mib: Annotated[int, Field(ge=64, le=8192, strict=True)] = 1024
     max_pages: Annotated[int, Field(ge=1, le=500, strict=True)] = 500
     max_expanded_bytes: Annotated[int, Field(ge=1, le=100 * 1024 * 1024, strict=True)] = (
         100 * 1024 * 1024
@@ -269,7 +270,7 @@ class ExtractedAssertion(FrozenModel):
 
 
 class ExtractedQualifier(FrozenModel):
-    name: Literal["condition", "time", "location"]
+    name: Annotated[str, Field(min_length=1, max_length=200)]
     value: Annotated[str, Field(min_length=1, max_length=1000)]
     spans: Annotated[tuple[Span, ...], Field(min_length=1, max_length=20)]
 
@@ -282,8 +283,13 @@ class ExtractionContent(FrozenModel):
 class ExtractionResult(ExtractionContent):
     """Server validation outcome; warnings are never part of the model's output schema."""
 
+    # A two-pass result can contain the union of two bounded model responses.
+    entities: Annotated[tuple[ExtractedEntity, ...], Field(max_length=100)]
+    assertions: Annotated[tuple[ExtractedAssertion, ...], Field(max_length=200)]
+
     warnings: tuple[
-        Annotated[
+        Literal["extraction_gleaning_context_limit", "extraction_gleaning_incomplete"]
+        | Annotated[
             str,
             Field(pattern=r"^extraction_rejected_(entities|assertions):[1-9][0-9]{0,8}$"),
         ],

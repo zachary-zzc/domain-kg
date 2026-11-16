@@ -1,0 +1,926 @@
+[
+  {
+    "id": "squad:572a07fc6aef0514001551dc",
+    "original_sha256": "18c2f4a59d179e52050b6ecbf0eda650b36e7fb3ea25ef92b03d0daa565e2a4c",
+    "question": "What molecules of the adaptive immune system only exist in jawed vertebrates?",
+    "decision": "include",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Source names both molecule classes. Remove incomplete single-class reference; equivalent list and combined-string answers are accepted.",
+    "answers": [
+      [
+        "immunoglobulins",
+        "T cell receptors"
+      ]
+    ]
+  },
+  {
+    "id": "squad:5a3e44ea378766001a002533",
+    "original_sha256": "0631755b2b3b2aba99484783649fef668e102b119f8d5d2ccde89adf1384756b",
+    "question": "Who suggested that the investigation was legitimate?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:5a636c5a68151a001a9222c9",
+    "original_sha256": "0ab0ae4a26d9b1ec1886bafdd124edd434d4e8326be3bd412af2a9091d34c876",
+    "question": "How does Melbourne rank as to population?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:5a8943753b2508001a72a570",
+    "original_sha256": "1451c3a0a4c3e71a5da942a02bd885ab3ea1dd6de737590b7bfbec68f6666a6a",
+    "question": "What type of insect employs the use of Magicicadas in its evolutionary strategy?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:5ad56aea5b96ef001a10ae4a",
+    "original_sha256": "acbe8f54a790d97b70ade4e7709a6ecd12d33bd660d6f64f15b4121f6c1346ad",
+    "question": "What problem is phrased on deciding whether the input has a factor more than k?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:5ad138f4645df0001a2d125c",
+    "original_sha256": "c30a4eaf128cea7fc9263429a936ee0ebe7ffeeafc60666e9a0c482dd4f1b102",
+    "question": "Who does not have the final say in who ultimately has the competence to define the EU's competence?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:5ad15d77645df0001a2d18c1",
+    "original_sha256": "f64eb37518cf764a03b9cfe8aebcef08464a67468087572bc52668d8ad3b553f",
+    "question": "What did countries such as Spain have a crime against?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:57332e48d058e614000b5764",
+    "original_sha256": "4ed753cd4ac80b2d43555d8080baad729d318b14b3f827e05b999ba5a12580d2",
+    "question": "When did the Warsaw Uprising begin?",
+    "decision": "include",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Source gives 1 August 1944 explicitly. Remove the non-date alternative; retain month granularity as an accepted original alias.",
+    "answers": [
+      [
+        "1 August 1944"
+      ],
+      [
+        "August 1944"
+      ]
+    ]
+  },
+  {
+    "id": "squad:57274eca5951b619008f8800",
+    "original_sha256": "a44080f3fffb7d6e50cd6006fc10b05aef2dd8a2ff74d12713a33f5db7bf87d4",
+    "question": "In April 2014, how many New Zealand students attended private schools?",
+    "decision": "include",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Time and country are explicit; passage states approximately 28,000."
+  },
+  {
+    "id": "squad:5a590de93e1742001a15cf57",
+    "original_sha256": "c2e3410348b8cb36fdf28cea638fa3b5296a7f8154c73c6702ee45be0af0a3bd",
+    "question": "How long is a boudin?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:572941273f37b319004781ae",
+    "original_sha256": "871528f3ea915ae830d5f32c25e84e05ea5cc0283300504ef4def69bc54e673f",
+    "question": "What direction did Watson say the mistake went in?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "squad:5737a7351c456719005744f3",
+    "original_sha256": "78fa50c30627729c61ff3d6dbf01f8c57aca69df8a51264249622b71bb2d4b66",
+    "question": "What is preserved in a closed system of forces when acted upon?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "squad:5a638d2768151a001a92236e",
+    "original_sha256": "07f4a5f6be5dc49b408b319619634fb4f0c3f6806510df1f40874480642c2fe6",
+    "question": "How much Victorian farmland is farmed in rye grass?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:572a0b0b6aef0514001551f8",
+    "original_sha256": "2c37f6e18294d3d2537075461dc8f0ce2b269781dec63664c4db5d1599e51742",
+    "question": "What is a chemical secreted by tumors that suppresses the immune response?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "squad:572691bedd62a815002e89dd",
+    "original_sha256": "558f0a0785918c92c88afa8887f9f9d5847d19527da0da1de7acb88ffb09f34a",
+    "question": "A molecular phylogeny analysis confirmed that cydippid are not what?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "squad:573092088ab72b1400f9c598",
+    "original_sha256": "dd45304e607002da498417c17151072bb6e47cc5698dc25c1a8b05bff7a8e674",
+    "question": "Which is older the British Empire or the Ethiopian Empire?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "squad:5a3e44ea378766001a002532",
+    "original_sha256": "584e7c231f921c3e021a0ae8868de629b303559547b7ebb9ffa0bdb031b58ff7",
+    "question": "Who kept the full records on climate research?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:5acf8bbd77cf76001a6851b5",
+    "original_sha256": "fd0398d84d74d3dd514ba9850fec6c0dec4526e7e6948e924b638fca65abe014",
+    "question": "The third master plan led to the construction of buildings where?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:5a75028897ca42001a521db3",
+    "original_sha256": "7ec79d021755e2300a48d69da957c41747055c4b7610f76de7c62aca34481273",
+    "question": "What caused the crisis? ",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:5ad0421177cf76001a686f16",
+    "original_sha256": "ce25660384cca63fa4b6a57432929cf9ae875d4f65c1246f7b9352d863e12164",
+    "question": "What economy started growing in the Greater Bay Region?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:5729a03f1d04691400779593",
+    "original_sha256": "dd5d1365cdd1c472d5a87116c1265bf5faf96ba8ad504f14a3384ddf8de5128e",
+    "question": "What are the points of algebro-geometric objects?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "squad:5ad0440a77cf76001a686f49",
+    "original_sha256": "52ced21daa5ce7840c4c19e5607bb4d7210958ebe0fd63d10f9a4b83f6bf8856",
+    "question": "The House of Lords introduced qualifications for which position?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:57338160d058e614000b5bfb",
+    "original_sha256": "b83db6570699d76c0aa40892d6ac5fbc5c544c1cfeaab783575e1a8925c33b25",
+    "question": "How often are members of the Warsaw City Council elected?",
+    "decision": "include",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Correct counsel to council and add Warsaw City Council so the question is self-contained; no answer leaked."
+  },
+  {
+    "id": "squad:5ad3c57a604f3c001a3feff2",
+    "original_sha256": "ba0ca6741044916723a092a6569ed31033948ac24d62b0188a1010b3f7bb59f0",
+    "question": "What was the first textile device used commercially?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "squad:57268f2bf1498d1400e8e3c5",
+    "original_sha256": "761b43ebebc766be9c05e72d2f01a24383caf7f8ba45ed334529c9db587f1695",
+    "question": "What was an additional projected effect of the attempted reform?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5ab6d04c554299710c8d1f70",
+    "original_sha256": "41452ea6f9377a519305ac35316c2dfcec7d227c7280db904fc7ae5d76d1a326",
+    "question": "What family are the genus' Sinofranchetia and Stauntonia from?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5ac1a3fa5542991316484b7d",
+    "original_sha256": "c4c2b2985e5d6baeac02d097d57cdd2213126ad93432413741c8abaf5820bdc7",
+    "question": "Although a dependent territory remains politically outside of the controlling state's integral area, what else can it contain?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5a8671e95542994775f60763",
+    "original_sha256": "304952318fde39fc97aeeacb797648359d398451414c355b7444597bb56d225b",
+    "question": "The Six Arms Saga was written by the former editor-in-chief of what company?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Bridge: story author Stan Lee, then his former editor-in-chief employer. No question edit."
+  },
+  {
+    "id": "hotpot:5a79ea435542996c55b2dc9e",
+    "original_sha256": "bc70252143de7808b9ba9bebdd223c8bf0ca242fec7e5352f596df6027242e7d",
+    "question": "Who was the captain of the only battleship to provide gunfire support during the Vietnam War?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Bridge: battleship singled out for Vietnam support, then its captain. No question edit."
+  },
+  {
+    "id": "hotpot:5ac4ecea55429919431739fd",
+    "original_sha256": "0704e67a79c8f6a086bfad9c71cca80a75d8783561d4f135063a3ddfa5df8aa8",
+    "question": "What game was a Philadelphia native, who played college basketball at the University of North Carolina, selected for?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5ab3d2b7554299233954ffb8",
+    "original_sha256": "dab8b28344ee155eaf881947dddcef5e92f8129a6895b8dca98d6168a7d563d3",
+    "question": "The king deposed in the Glorious Revolution of 1688 was supported by the grandson of what Viscount Barnewall?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5abfd3ba5542994516f4550a",
+    "original_sha256": "3c7a255e862822d2c58be64397dcce595bb944d8792112bbfeb04f1e79caf162",
+    "question": "Of the retired tennis players Ross Case and Slobodan Živojinović, which player reached a higher career-high singles ranking?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Compare singles rankings 14 and 19; lower ranking number means better position. No edit."
+  },
+  {
+    "id": "hotpot:5a74702555429929fddd8428",
+    "original_sha256": "02d862d49a3ff2e7a706dad0c90c0e5c291e788e0281c68f9a33c69a6fdb1c40",
+    "question": "Who is older out of Bob Saget, the American comedian, and Indian director S. Shankar?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Compare two explicit birth dates. Accept Bob Saget and full-name equivalent."
+  },
+  {
+    "id": "hotpot:5ab46d195542991751b4d76a",
+    "original_sha256": "62557b4a7d66229cde576e308efa02864e551c339833ef009ec60cfacd420e07",
+    "question": "Whistle and Yodel both specialize in what service?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5a8ceb4955429941ae14df43",
+    "original_sha256": "3a0f318f51f5f9249c6fc60f4bfafa53a7e30e0d7d92d00dcdc558d76171c0ee",
+    "question": "What was the nickname of the player who played his final season for the 2016 Miami Dolphins before dying in an accident?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5ae622495542995703ce8b20",
+    "original_sha256": "a264ec72e1aefe2564def6322a7281f06bfe729a7550333c040d48576fbbee32",
+    "question": "Which Genre of Television did Charles Quinton Murphy act for?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5a840e8a5542992ef85e239e",
+    "original_sha256": "c83d1a7e9da664c0a2a915db27a0c3b6ca89da15f8ebf122e0eda57c9581b102",
+    "question": "Between two bands, Mastodon and Hole, which one has more members?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5a7622d75542994ccc9186f1",
+    "original_sha256": "6c07334ee2a3d4cc4d3b336c65aace2b59acdaa6dbd432b2b142793712f84296",
+    "question": "Who was born earlier, Garry Marshall or Leni Riefenstahl?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Compare two explicit birth dates. No edit."
+  },
+  {
+    "id": "hotpot:5ab529965542990594ba9d1e",
+    "original_sha256": "c2c775068a93a190f74ca303b71597c5bff5cbbc12aef2a85a987000b1420eed",
+    "question": "Which casino closed first The Atlantic Club Casino Hotel or Trump Plaza Hotel and Casino ? ",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5abd882f55429924427fd045",
+    "original_sha256": "cba609db893213a60e5c6ed92d8a1600fac1e7b299b5fb4a690d30cec496e6e6",
+    "question": "When was the multinational group headquartered in the Netherlands adjacent to the Junction 27 Retail Park near Birstall, Batley, West Yorkshite, England, founded?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5a7fa55555429969796c1b0e",
+    "original_sha256": "0b272b69a4ebd56085f34431501504330394ed0a0544944e3a65359152c4815b",
+    "question": "The star of \"The Inkwell\" also starred in what 1993 movie as O-Dog?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Two sources link film cast to O-Dog role in the 1993 film. No edit."
+  },
+  {
+    "id": "hotpot:5a7ab51055429927d897bef6",
+    "original_sha256": "202478d9c768fcd664b043146d4ead3b5caec590a9b58f2b99bc77b3a0de8ea6",
+    "question": "What year was the author of Cock and Bull born? ",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Book author bridge to birth year. No edit."
+  },
+  {
+    "id": "hotpot:5a84c6e65542994c784dda48",
+    "original_sha256": "b2835e8c5eae3be50d37fd4b1833c01e8e3b1879255aaea584026d643da4f5aa",
+    "question": "What is the nationality of the man who finished second for ART Grand Pix in the 2016 Baku GP2 Series round?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5a8a764555429930ff3c0de1",
+    "original_sha256": "85c2216573b386e2d56ceaac9fbad4f9c60e216e7cac5565e11679877c25cad1",
+    "question": "What distinction about his birth makes the contemporary of Bill Pollack unique as a winner of the Formula One World Drivers' Championship?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5a8481ba5542997175ce1ed4",
+    "original_sha256": "b6b9125aef12ada48f1473597659ff217e8464d560a83e6456a0271d9267a76f",
+    "question": "Den Tagayasu lived in the town that was bombed on which dates?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5a888c9d5542997e5c09a612",
+    "original_sha256": "e8d6f97b174ec8b7b86b8eab57fd78204f6103c57a90ce60fee115ca6bee6ee8",
+    "question": "Who is from farther west, Halestorm or Audioslave?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5a8549c65542997b5ce3ffe6",
+    "original_sha256": "e9246ef0147a48cefb19433149be01f1d59f67ef44f57f0b7bd484bfc7b733fd",
+    "question": "Are both Barry Unsworth and P. G. Wodehouse from the same country?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Sources describe English origin for both people. No edit; country equivalence judged semantically."
+  },
+  {
+    "id": "hotpot:5abfa5fb5542990832d3a183",
+    "original_sha256": "f0606bf27f7756cadd02f0dd2c0bb5fc38251d1b6b3b85cd0a74facf7d4fe637",
+    "question": "Where is the  city and \"comune\" in Emilia-Romagna in which talian Renaissance painter ;Ludovico Mazzolino located ",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5ab9debb55429955dce3ed97",
+    "original_sha256": "e2a2dd79f41e69ece21579b2a06f289f3fcc8c8b68f958a6ba1f98437d362189",
+    "question": "The English actor Kris Marshall played which character in the highly rated comedy-drama television series \"Death in Paradise\"?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "hotpot:5a8639545542991e771815c7",
+    "original_sha256": "81b370c975cc4cfdcecc55bba571afb2b0ddb02c5508ea2290ec2af2562a8123",
+    "question": "Whose given first name is longer, Theo Angelopoulos and Budd Boetticher (nicknames)?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:3hop1__127821_157828_239539:answerable",
+    "original_sha256": "0246d4afe0ffd5e44517bec49df96e9136bf5e9a1196175ff0199aa3d9250857",
+    "question": "Where is the headquarters of Radio Television of this country that has a co-official language that is the same as the language of Olivera Markovic?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:3hop1__850160_15840_36014:answerable",
+    "original_sha256": "42e92fbe98363c3554c83c5c13b170dc622860242a2454a79c89639cef4011c1",
+    "question": "What was Nintendo's limit on games per developer per year on the system which had a three letter abbreviation and was also the platform for Pictionary?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Pictionary platform, NES expansion and developer restriction present. Three reference passages; do not assume all are minimally necessary."
+  },
+  {
+    "id": "musique:3hop1__617062_127905_89859:answerable",
+    "original_sha256": "bacd5d003383d0cdb6ecb187813e21365c1a39b38b2d8e6403b846007c3b496c",
+    "question": "When does the sport which has Jim Wilson's Cleveland team as a member start the regular season?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:2hop__133102_417697:answerable",
+    "original_sha256": "ca299b3079f310792c0ad727d0d6ff31f6babeae8e39787086e61dfd8fb8d4b9",
+    "question": "What is the model of the vehicle of Mohammed Atta from the company that makes Datsun DC-3?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Source title identifies Mohamed Atta; body gives car model; Datsun source gives manufacturer. Retain title as source context."
+  },
+  {
+    "id": "musique:4hop1__56226_32392_823060_610794:answerable",
+    "original_sha256": "38c4693a375fd339176179ad19f209d35fda4f0e0df101c656e1ecb7ec036726",
+    "question": "In which county is the city sharing a border with the capitol of the state that won the Battle of Sullivan's Island?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:4hop3__152056_698586_91248_54362:answerable",
+    "original_sha256": "9586578a5acc0e4a708adfa20ab1f4772d89d904169a0647840a169e5b323727",
+    "question": "Who burned down the city where Dunn Dunn's artist died in the war after which the government got involved in healthcare?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:2hop__41158_35124:answerable",
+    "original_sha256": "f7255cda2c620fc1134abce61098dcd7c1617e4fdc623c856d5eeac96a61b1b8",
+    "question": "More than how many books are attributed to the scholar who proposed detailed explanations for the origin of earthquakes and the formation of mountains?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Source says more than 450, not exactly 450. Revise to ask for the stated lower threshold without naming intermediate scholar."
+  },
+  {
+    "id": "musique:4hop1__370129_621192_10659_42311:unanswerable",
+    "original_sha256": "12d386d8731f79861b94a0f4a8e4675bcac435683b47853b3d10893eda6b4c02",
+    "question": "What is the largest medical school in the nation where, along with the country of citizenship of the mother of Marie Antoinette, many expelled French Jews relocated?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "musique:3hop2__79512_16214_84681:answerable",
+    "original_sha256": "92fef61a744a5c1d587b9cd6c32002b83d04cdb60aa36de060c7e06413c324ff",
+    "question": "On what date did an explorer from the people who imported slaves into New York before the English first sight the country where The Lord of the Rings films were shot?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Clarify first sighting by an explorer, not settlement by an entire people; preserve Dutch/New Zealand/date bridge without revealing intermediates."
+  },
+  {
+    "id": "musique:2hop__462179_643013:answerable",
+    "original_sha256": "d39c9702a36ff868d0635f38777ac44375959769349ac8bb6607f862e84ff82f",
+    "question": "What shares a border with the administrative territorial entity Radwanice, Polkowice County is located in?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:3hop2__655849_467331_162182:answerable",
+    "original_sha256": "38d1970f2026abad5c7481a4f9a347f3c6ee2d20b9d470182693e04691f458a3",
+    "question": "In what region of the country containing the district of A Lưới is the city that has the Zone 5 Military Museum located?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Museum-city-region chain is present. A Luoi establishes country; do not penalize semantically sufficient alternative shortcuts."
+  },
+  {
+    "id": "musique:4hop1__629520_49925_13759_736921:answerable",
+    "original_sha256": "f6ef884949db326e01609f98039b828b5fc1f7bca03d53bfad5fccf04eac3ef2",
+    "question": "In what region of Germany is the district where a sermon on Marian devotion was preached by the man who wanted to reform the religion of Victor Razafimahatratra?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:4hop1__131002_53706_795904_580996:unanswerable",
+    "original_sha256": "d5937f568c05f79427ed2615aad853fb328ee6fccc5b4e8d6a290459bf435a12",
+    "question": "What city shares a border with the city where a person went to work during the gold rush in the state where the Shakespeare Bridge is located?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "musique:2hop__525581_161450:answerable",
+    "original_sha256": "2679becd48231998e6a29c06dd553ac4be51c5014abb924a588ff9c719abb331",
+    "question": "Where is the province of Aqqala County located?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "County-province-region chain present. Remove incomplete Caspian Sea alias; province is south of the sea, not in it.",
+    "answers": [
+      [
+        "northeastern Iran, south of the Caspian Sea"
+      ]
+    ]
+  },
+  {
+    "id": "musique:2hop__590631_110882:unanswerable",
+    "original_sha256": "78b1d71f30c2976eaec8177737b32f60a9fecbc8a09d0bf214fd14699d6d83ed",
+    "question": "What is the date of birth for the performer of Unbreakable?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "musique:2hop__95878_88628:unanswerable",
+    "original_sha256": "6b6cab871d29e15dae5155dad5a23cc22c08a93e0356422ef6be5c576d48b0d7",
+    "question": "Who did the actor in Advernture's End play in True Grit?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "musique:3hop1__377943_650651_7262:answerable",
+    "original_sha256": "9a66e62bdbf7b9732d5a7a34a778b68363c1f56267bf262f3103002d25f94d3f",
+    "question": "Who was a prominent figure at the radio division of the broadcasting company that created the version of The Biggest Loser: The Final Chance, set in the country containing Labu?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:3hop1__754160_831637_91775:answerable",
+    "original_sha256": "590f56d26056200a2e64f14a6fa180eb9ad8dabfbbcf50b8700ed3f379d7d357",
+    "question": "What does seal stand for in the U.S. military branch that operates a list of destroyer classes, as well as the USS Dextrous?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:3hop1__135793_87694_64412:answerable",
+    "original_sha256": "15b6374a9f416cf2744dd6616c5599fcb946e952bb460b942230c54f186aefcb",
+    "question": "When was the city-state containing the basilica named after the same saint as San Pietro in Ciel d’Oro established?",
+    "decision": "include",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Saint-name, basilica-location, state-establishment chain present; narrow wording to establishment of the city-state."
+  },
+  {
+    "id": "musique:2hop__58111_7298:answerable",
+    "original_sha256": "b572cf48f2826a57a725c553aca23ccec3656384c246cbb5411b09013a872073",
+    "question": "Who started his career on adult contemporary radio along with the person who plays andy bernard's brother on the office?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:2hop__56851_343058:answerable",
+    "original_sha256": "e0d17ab7656096b611024d0e2162ba54e80ccb0c25fca33a224060d47570c9a6",
+    "question": "Who is the spouse of the actress who played the fairy god mother in Shrek 2?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Original support names Saunders as writer and Edmondson as director but does not establish that they are spouses. Requires separate evidence review."
+  },
+  {
+    "id": "musique:3hop1__433054_831637_91775:answerable",
+    "original_sha256": "f8a47b6d3ee5cc27dac6177d38c05fb0855b8ae63850e33727f3aa3283ae8ec3",
+    "question": "What does seal stand for in who is the operator of destroyer class of the operator of the USS Venus seals?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:2hop__543050_245420:unanswerable",
+    "original_sha256": "ff6eabf6fe1573759eea27b68ba84299691c284b7e0a8d85ebe9166d31a60a72",
+    "question": "Which city shares border with the area having Bella Vista High School?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Excluded from v2 answerable primary track: original no-answer labels are not validated for this shared corpus."
+  },
+  {
+    "id": "musique:4hop3__193820_466199_128875_72134:answerable",
+    "original_sha256": "4c3bc72ccd03d3c1620dea05be08d9750edeccd7200d633b6fedbd8fa6b4061f",
+    "question": "When did the town WLUJ is licensed in become capitol of the state where Brantley York was born?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "musique:3hop1__28841_547811_80702:answerable",
+    "original_sha256": "541bdd74ba9edbe09a515f2e8568f585bf928b45bf183e27f4402ad87b956022",
+    "question": "What is the name of the famous bridge in the place of birth of who composed the Concerto in C Major Op 3 6?",
+    "decision": "exclude",
+    "track": "multi_hop",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_3048:61341758-6e1f-45bc-9596-dfe8d0a7902e:70b655463d1a",
+    "original_sha256": "932b9b43f59b957eb82f3ba1db7859b0863724cd6d63154fbbf2782ee91e1d4a",
+    "question": "How many more females per 100 were there than males?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_990:21427c7a-14fd-45be-9156-a4b28dc2748c:aff1d7b492d7",
+    "original_sha256": "c650617d24827896329d062e1f0cd5eaef280526140a493800c8d3ee1f66fc1c",
+    "question": "What relatives of Minkhaung II fought against him?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_2380:bb147fc1-6a5f-45ca-8a91-0fe19d715e01:377ecf0ebdfc",
+    "original_sha256": "fe9efef247bde462b9ceaee44dea05187b6375bf9b02e7a0c8f5d8b8efc16e48",
+    "question": "How many points did the Ravens score in their two lowest scoring games?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_103:8e69e590-5608-4850-8023-a60d5beef76e:1135bbf3283a",
+    "original_sha256": "ad59530ffb09ffe4e0e9b8a877b62a743647fd920ed1d90d72ce62fc0a7f1b4a",
+    "question": "How many Albanian revolts did Mehmed V sign general amnesty for all participants during his visit to Kosovo vilayet?",
+    "decision": "include",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Passage identifies amnesties for 1910 and 1911 revolts; count two."
+  },
+  {
+    "id": "drop:history_986:204b7f3d-1743-4874-a9e6-27d2ed97532e:3949f3ebc846",
+    "original_sha256": "6113f063beda1abc5cfa501022d5fc1395fffc7b71a8838585f9ceeb82dc760c",
+    "question": "Who controlled just a small area outside the capital?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:nfl_87:537070f8-2d8c-41ca-8450-84755bf5affb:31295e811c0c",
+    "original_sha256": "ab4da3e7f4ac83f1273fe5777c378acf4058621db222c97c37a2789ee8debf94",
+    "question": "How many yards was the longest field goal?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:nfl_858:5db7b970-8c1c-4701-9e08-49b6952612a2:16a00383dff4",
+    "original_sha256": "8c0f938a8973b11cb00397e83a42534a8ff02b22106199be55d4e751130484d1",
+    "question": "What's the name of the field the game was played on?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:nfl_1021:45ea2538-8a4c-4698-99c0-34af1a5f6fd2:f5d4be1f87bf",
+    "original_sha256": "52961a9f8515ee9d687403f33fc32d5e2386ff3eeda499835fb3ae75dbc97632",
+    "question": "In the Denver Broncos’ 2008 season opener against the Oakland Raiders, what was the difference in yards between Matt Prater’s first and second field goals?",
+    "decision": "include",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Add the 2008 Denver season opener against Oakland; original omitted game context. Difference is 43 minus 26 yards."
+  },
+  {
+    "id": "drop:history_2885:ab34aa3f-d49e-4544-a48e-cbf4a2fd886b:27d08c7df017",
+    "original_sha256": "48606b9672d8a719e71b8831264db3b3af8e39ab5b32688ab51be3a8544a3fb1",
+    "question": "Which area accounted for less of the games market, South America or Europe?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_2162:29c05556-cec1-4e8c-8f33-e973cd51f7bf:da7544a00cc0",
+    "original_sha256": "110b922ac65e98f54cb92db7aa3300b0ffc89ebff9856a0aaff15d0e56e638de",
+    "question": "How many residents, in terms of percentage, were younger than 25?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:nfl_1332:87a82159-016b-411f-815b-8d4e9b50c2c1:9766a9044762",
+    "original_sha256": "d83fe98a4154498c11c16786f618a8050f4e8703a8a91e3a26f72d5f148b29d4",
+    "question": "Which player had the longest rushing touchdown?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_1262:019ea3cd-867f-4cb6-88cd-1ac2df4c77fd:c85167037a29",
+    "original_sha256": "6c581704845583dc21f2c88e575cd8df68ead3f716017a215a870dce98c784e1",
+    "question": "Who was the enemy of Ho Yu and Lin Hsing-chu?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_296:374b2589-5288-481f-8937-974a9d859e04:fc57b2172892",
+    "original_sha256": "972027736924db0a6a618fd69d3356b7cb6668f94433566e5c23936596f55be5",
+    "question": "What happened first: imprison John V or sought to overthrow his father?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_1074:ecbb365a-ea1a-4469-910d-b5a83ae129e0:3fc854f6ec64",
+    "original_sha256": "cbe9a7d6117b5304468721f6079156f1be0e29701e18ff2efd2093ea91daf7c0",
+    "question": "Whose father and son died?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_1074:0553158a-164d-48eb-9480-7ee3bbd472d6:6aed748d91f7",
+    "original_sha256": "d544267391e7f5ba8b0ac294379c78ae4af95cd4c9fa7707d7dee8566dfcc264",
+    "question": "Who left first after the 10-year-10-month-and-10-day agreement, Edward or Prince Edmund?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:nfl_995:08c59a80-401a-446b-966b-7a87818b20f4:a337b43cd7cc",
+    "original_sha256": "c8ea238ef8b88b093cd31812e4af7751dc56b4fb58629bea4ea27577857078b6",
+    "question": "How many touchdowns did T.J. Houshmandzadeh have?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_3089:04f073ee-de10-4f2c-978f-47439e95efcc:bc755d433f6d",
+    "original_sha256": "25cedbe9b5f373d82f85d158d16f8d00bd7331d5b5a99308ca7a6a11ef66d76b",
+    "question": "How many in percent weren't 18 to 24?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_2153:5cba5d04-c6af-4338-a06f-bd5b9dd9f9d3:f8f4a5f85f41",
+    "original_sha256": "4a4b5759d677b7763fa26459c1dd44e054138f89e49316ee9716217f2c55efe8",
+    "question": "Which areas have truancy rates between 6 and 6.5?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_2064:1e221f63-9654-4ba4-98ed-355cca7c401b:61e4e44357a6",
+    "original_sha256": "064b7a683a928e4b364cf515538d5959173bbe32cbb7d60b1695d02fed56fad2",
+    "question": "Which three teams hold the record for 18 total wins in a season?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_671:88ab8045-ed45-47d0-9b35-7eae9ac2f08d:508f167dc50f",
+    "original_sha256": "8b3d0a2b29b03877e4b9b12aeae7b342b0cf4f86aca8181c4e2d01d19885f6e6",
+    "question": "How many times did Jaél de Peigne get married?",
+    "decision": "include",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Passage gives two marriages. No edit."
+  },
+  {
+    "id": "drop:history_835:a306f4bc-a55e-4b07-89ac-a83876956d97:2c8289ea5e52",
+    "original_sha256": "e6872ff14cc1f874b2df3c50458dce187786c0a66844f67e1737b4ac98933a1e",
+    "question": "What happened earlier, the Kiev uprising of 1068 or the Battle of the Alta River?",
+    "decision": "include",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Passage explicitly places uprising after battlefield defeat. Remove contradictory original uprising-first alias.",
+    "answers": [
+      [
+        "Battle of the Alta River"
+      ]
+    ]
+  },
+  {
+    "id": "drop:history_1959:82b38c48-6643-4c10-9f3b-2d983cc80a4b:b8f12a01ebdc",
+    "original_sha256": "dcf46532bfe22dfdbc493f56152a11136f5ef1171e08c7b521f0484a726c0d9c",
+    "question": "Which group from the census is larger: White or African American?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_2788:d3b7b7f3-955c-47f9-ba09-c60a609fd347:fcfa3eee6109",
+    "original_sha256": "c3ed13e97ffa134c9e2109fdd9c4c5d825207204cc3fefee2e54add1abcff87d",
+    "question": "How many more people, in terms of percentage, were from two or more races compared to being solely Asian or solely African American?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_2064:5e903866-fb77-483b-86d6-bf26476e31a0:7e9265dc623e",
+    "original_sha256": "cfd2afc45461d5bf3f5aedba87be4faa1397b304c6d87b53a4e1cc7b1facef0a",
+    "question": "Who was part of the defensive backfield of the 49ers, Ray Wersching, Mark Duper, or Eric Wright?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  },
+  {
+    "id": "drop:history_1258:6153df8a-1d85-4059-a04c-e95e156bfb5e:cfbf68200abc",
+    "original_sha256": "ecba3b98ccbe09809159332a14227873611f7cf93e6f5ea305453b91b847caa6",
+    "question": "How many of the 293 prisoners did not purchase amnesty or were pardoned?",
+    "decision": "exclude",
+    "track": "control",
+    "reviewer": "Codex source review, 2026-11-02 (not independent human adjudication)",
+    "reason": "Outside this hand-reviewed protocol pilot; not a finding that the question is invalid. Full-suite eligibility remains unreviewed."
+  }
+]

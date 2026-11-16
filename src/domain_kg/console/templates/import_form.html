@@ -1,0 +1,48 @@
+{% set selected_mode = add_mode|default(none) or ('folder' if import_run and '/' in import_run.items[0].path else 'files') %}
+{% set saved_import = import_run or import_head|default(none) %}
+<section class="import-workspace" id="add-sources" data-import-workspace data-kg="{{ kg.id }}" data-mode="{{ selected_mode }}" data-import-id="{{ import_id|default('') or '' }}" data-copy="{{ folder_copy|tojson|forceescape }}" data-run="{{ import_run.model_dump(mode='json')|tojson|forceescape if import_run else 'null' }}">
+<details class="card import-input" id="import-input" {% if add_mode or (import_run and import_run.items|selectattr("job", "none")|list|length) %}open{% endif %}><summary>{{ _('Add or resume sources') }} <small class="field-help" data-picker-heading></small></summary>
+<div class="input-mode-tabs form-actions" role="group" aria-label="{{ _('Source input') }}">
+<button class="quiet" type="button" data-import-mode="files" aria-pressed="{{ 'true' if selected_mode == 'files' else 'false' }}">{{ _('Files') }}</button><button class="quiet" type="button" data-import-mode="folder" aria-pressed="{{ 'true' if selected_mode == 'folder' else 'false' }}">{{ _('Folder') }}</button><button class="quiet" type="button" data-import-mode="text" aria-pressed="{{ 'true' if selected_mode == 'text' else 'false' }}">{{ _('Plain text') }}</button>
+</div>
+<form data-folder-form {% if selected_mode == 'text' %}hidden{% endif %}>
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<div class="import-picker">
+<label for="{{ 'source-folder' if selected_mode == 'folder' else 'source-files' }}" data-picker-label>{{ _('Folder') if selected_mode == 'folder' else _('Files') }}</label>
+<input id="source-files" class="picker-native" tabindex="-1" type="file" multiple data-file-picker {% if selected_mode != 'files' %}hidden disabled{% endif %} aria-describedby="import-format-help">
+<input id="source-folder" class="picker-native" tabindex="-1" type="file" webkitdirectory multiple data-directory-picker {% if selected_mode != 'folder' %}hidden disabled{% endif %} aria-describedby="import-format-help">
+<div class="picker-actions"><button class="quiet" type="button" data-open-picker aria-describedby="picker-selection">{{ _('Choose folder') if selected_mode == 'folder' else _('Choose files') }}</button><p class="picker-selection" id="picker-selection" data-picker-selection aria-live="polite">{{ _('No files selected.') }}</p><button class="quiet" type="submit" data-folder-review disabled>{{ _('Recheck files') }}</button></div>
+<p class="field-help">{{ _('Selection is checked automatically. Nothing is uploaded until you confirm.') }}</p>
+</div>
+<details class="import-format-help"><summary>{{ _('Supported formats and limits') }}</summary>
+<p class="field-help" id="import-format-help">{{ _('TXT, Markdown, HTML, CSV/TSV, JSON, PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX, RTF, ODT/ODS/ODP, and raster images. Up to 50 MiB per file. Empty, hidden, and unsupported files are skipped.') }}</p>
+<p class="field-help">{{ _('Up to 100 changed files per import. Review first; unchanged files are skipped and missing files are never deleted.') }}</p>
+</details>
+<noscript><p class="notice">{{ _('File and folder imports require JavaScript.') }} <a href="/admin/kgs/{{ kg.id }}/materials?view=published&amp;add=text">{{ _('Plain text') }} →</a></p></noscript>
+</form>
+<form method="post" action="/admin/kgs/{{ kg.id }}/materials" data-import-text data-busy-form {% if selected_mode != 'text' %}hidden{% endif %}>
+<input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="idempotency_key" value="text-{{ command_key }}">
+<label for="import-title">{{ _('Title') }}</label><input id="import-title" name="title" maxlength="1000" required>
+<label for="import-text">{{ _('Plain text') }}</label><textarea id="import-text" name="inline_text" rows="8" maxlength="6000" required aria-describedby="import-text-help"></textarea>
+<p class="field-help" id="import-text-help">{{ _('Paste up to 6,000 characters; upload longer text as TXT or Markdown.') }}</p>
+<label for="import-visibility">{{ _('Visibility') }}</label><select id="import-visibility" name="acl_mode"><option value="kg">{{ _('KG members') }}</option><option value="restricted">{{ _('Only you and KG owners') }}</option></select>
+<button type="submit">{{ _('Process material') }}</button>
+</form>
+<p class="field-help"><a href="/admin/kgs/{{ kg.id }}/materials?view={{ source_view }}">{{ _('Close') }}</a></p>
+</details>
+<p data-folder-status role="status" aria-live="polite">{% if import_run %}{{ _('Already uploaded files continue in the background. Select the same originals to finish any missing uploads.') }}{% elif saved_import %}{{ _('Loading saved import status. Accepted jobs continue in the background.') }}{% else %}{{ _('Choose files or a folder and review before uploading.') }}{% endif %}</p>
+<section class="card current-import" data-folder-current {% if not saved_import %}hidden{% endif %} aria-label="{{ _('Current import') }}">
+<div class="section-heading"><h2 data-import-identity>{% if saved_import %}{{ _('Current import') }} · {{ saved_import.created_at.strftime('%Y-%m-%d %H:%M UTC') }}{% else %}{{ _('Review and import') }}{% endif %}</h2><a href="{% if saved_import %}/admin/kgs/{{ kg.id }}/materials?view=processing&amp;import_id={{ saved_import.id }}{% else %}#{% endif %}" data-import-permalink {% if not saved_import %}hidden{% endif %}>{{ _('Open this import') }} →</a></div>
+<div class="import-summary"><p data-import-counts>{% if import_head|default(none) %}{{ import_head.file_count }} {{ _('files') }}{% endif %}</p><p class="import-guidance" data-import-guidance></p></div>
+<div class="form-actions"><button type="button" data-folder-start disabled>{{ _('Continue uploads') if saved_import else _('Upload and construct KG') }}</button><button class="quiet" type="button" data-folder-stop disabled hidden>{{ _('Pause uploads') }}</button><button class="quiet" type="button" data-folder-refresh>{{ _('Refresh status') }}</button></div>
+<p class="field-help">{{ _('Originals are preserved. Extraction and embeddings use this KG’s configured models; processing may incur provider charges.') }}</p>
+<div class="import-progress" data-folder-progress {% if not import_run %}hidden{% endif %}><label>{{ _('Upload') }} <span data-upload-count></span><progress data-upload-progress max="1" value="0"></progress></label><label>{{ _('Finished') }} <span data-finished-count></span><progress data-finished-progress max="1" value="0"></progress></label></div>
+<div data-import-details {% if not import_run %}hidden{% endif %}><div class="import-toolbar"><label>{{ _('Search files') }}<input type="search" data-import-search placeholder="{{ _('Filename or folder path') }}"></label><label>{{ _('Show files') }}<select data-import-filter><option value="included" data-label="Included files">{{ _('Included files') }}</option><option value="issues" data-label="Needs attention">{{ _('Needs attention') }}</option><option value="skipped" data-label="Skipped">{{ _('Skipped') }}</option><option value="all" data-label="All files">{{ _('All files') }}</option></select></label></div>
+<nav class="import-pagination" aria-label="{{ _('Import file pages') }}"><button class="quiet" type="button" data-import-previous>{{ _('Previous page') }}</button><span data-import-range aria-live="polite"></span><button class="quiet" type="button" data-import-next>{{ _('Next page') }}</button></nav>
+<div class="table-wrap"><table class="folder-table"><thead><tr><th>{{ _('Select') }}</th><th>{{ _('File') }}</th><th>{{ _('Size') }}</th><th>{{ _('Action') }}</th><th>{{ _('Processing') }}</th><th>{{ _('Result / next step') }}</th></tr></thead><tbody id="import-rows" data-folder-rows>
+{% if import_run %}{% for item in import_run.items[:20] %}{% set job = item.job %}<tr data-state="{{ job.stage if job else item.state }}"><td>{% if job %}<input type="checkbox" aria-label="{{ _('Select') }} {{ item.path }}" data-bulk-item data-bulk-id="{{ job.job_id }}" data-bulk-label="{{ item.path }}" data-bulk-stage="{{ job.stage }}" data-bulk-retryable="{{ 'true' if job.stage in ['failed','cancelled','repair_required'] else 'false' }}">{% endif %}</td><td title="{{ item.path }}"><strong class="import-file-name">{{ item.path.rsplit('/',1)[-1] }}</strong>{% if '/' in item.path %}<small class="import-file-path" title="{{ item.path }}">{{ item.path.rsplit('/',1)[0] }}</small>{% endif %}</td><td>{{ item.size_bytes }} {{ _('bytes') }}</td><td>{{ _('Track') if job else _('Resume file') if item.can_resume else _('Add') }}</td><td>{{ label(job.stage if job else item.state) }}</td><td>{% if job and job.error %}<p class="file-issue">{{ _(job.error.message) }}</p><p class="field-help">{{ _(job.error.action) }}</p>{% elif item.message %}<p class="file-issue">{{ _(item.message) }}</p>{% endif %}{% if job and job.stage in ['ready','ready_with_warnings'] and job.source %}<a href="/admin/kgs/{{ kg.id }}/materials/{{ job.source.material_id }}">{{ _('Open source') }} →</a>{% elif job %}<a href="/admin/kgs/{{ kg.id }}/jobs/{{ job.job_id }}">{{ _('View job') }} →</a>{% elif not item.can_resume and not item.status_unavailable %}{{ _('Select the same original files above to finish uploading.') }}{% endif %}</td></tr>{% endfor %}{% endif %}
+</tbody></table></div>
+<nav class="import-pagination" aria-label="{{ _('Import file pages') }}"><button class="quiet" type="button" data-import-previous>{{ _('Previous page') }}</button><span data-import-range aria-live="polite"></span><button class="quiet" type="button" data-import-next>{{ _('Next page') }}</button></nav>
+</div>
+</section>
+</section>

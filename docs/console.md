@@ -1,5 +1,111 @@
 # Administration console
 
+The Sources workspace (`/admin/kgs/{kg_id}/materials`) separates Published,
+Processing, Needs attention, and Removed views. Add sources opens one inline panel
+with multiple-file, folder and plain-text inputs. Batch selection and outcomes
+stay in this workspace. Deletion and model-backed processing use an accessible
+page-contained confirmation dialog tied to the reviewed target revisions and
+labels; changing the selection requires review again. Successful jobs link to their source and the shared KG;
+source status pages also expose recoverable removal with a current revision guard.
+Legacy folder, add and pending/removed links redirect here. Task history is a
+secondary screen for source processing and other KG operations, filtered by state.
+
+Selection now starts a metadata/local-byte preflight automatically; it never
+uploads until the user chooses Upload and construct KG. A named choose button
+shows the selected folder/file count instead of relying on the operating system's
+file-input text. A completed review collapses selection controls to keep the
+primary action visible. The default table excludes skipped/unchanged files;
+counts remain visible and the Skipped view preserves each reason. Filename/path
+search and 20-row pages affect display only: upload always uses the full reviewed
+manifest, as its button count states. Invalid rows remain visible, including
+control characters in filenames that previously invalidated the entire manifest.
+
+Source/task lists retain their service-owned opaque cursors and offer 10/25/50
+rows per page, visible-row counts, Next and First page. Changing page size starts
+from the first page. An expired cursor offers a validated local restart link,
+without reflecting private queries or changing the error/authorization contract.
+
+Each new file import has a durable actor-owned run. Its URL contains `import_id`;
+reloading or navigating back restores only that selection, without mixing global
+job history below it. Recent run heads show timestamp and file count, while old
+jobs without run records remain in Task history. Accepted jobs continue in the
+background. Saved-run HTML loads only an actor-bound head (date and file count),
+then the existing authorized API restores file/job details asynchronously. A
+temporary failure offers Refresh status; access denial clears private details.
+Completed uploads have an explicit completed label and no pause control.
+Unuploaded files need the same originals reselected; an admission
+whose response was lost resumes its saved command without sending bytes again.
+No private filenames, source text or credentials enter localStorage.
+
+Status polling isolates failures per file, limits concurrent status requests to
+three, and reconnects after temporary failures. `repair_required` is terminal for
+polling and explicitly retryable. A status failure after admission refreshes its
+run instead of asking for another upload. Access changes clear protected content
+and revalidate the current route; ordinary network/backend errors preserve the
+current view. Batch selection drops disappeared, disabled or revision-changed
+rows before submission.
+
+Run progress no longer resolves the whole graph's source eligibility for every
+item admission/read. Item reads run in groups of four and still authorize exact
+job/source references, including before status-unavailable fallbacks and again
+before return. Monitoring pages recheck the actual displayed metadata after
+rendering; published source/evidence pages retain their graph scope fences.
+Unrelated graph publication can therefore continue during progress reads, while
+late source exclusion or permission revocation still denies the response.
+
+PDF native extraction now uses pypdf without the large Docling glyph/shape
+geometry allocation. Docling rendering exits before OCR starts, within the same
+offline sandbox. All formats default to a 1 GiB process-group RSS limit, including
+conversion, rendering and OCR children. Advanced settings > Document parsing
+exposes server-wide memory, timeout, page/slide, expanded-content and OCR controls
+to a human owner/operator when `DOMAIN_KG_PARSER_CONFIG` selects a writable file.
+New job executions and retries load a fixed configuration; saving requires no
+restart and does not change running jobs. Stale conflicting forms are rejected.
+The same service is exposed through MCP `get_parser_settings` and `configure_parser`.
+See [configuration bounds and deployment](parsing.md#parser-configuration).
+Timeout, expanded-output bounds and group termination remain enforced.
+Before this increase, two previously failed
+private originals were parsed locally without model requests under the old
+384 MiB bound: a 17,581,328-byte,
+13-page PDF produced 549 text blocks and 21 images at 253.6 MiB peak; a
+5,270,936-byte, 14-page PDF produced 222 text blocks and 22 images at 294.9 MiB,
+with OCR/image warnings retained. Compressed file size alone does not predict
+rendering memory; encrypted, damaged or unusually expensive documents can still
+fail the resource bounds explicitly.
+
+Extraction errors now distinguish deadline, connection failure, blocked content
+and invalid structured output through allowlisted diagnostics. No provider body,
+exception string or source excerpt is returned. The six historical generic
+extraction errors have no saved detail from which to establish an exact cause;
+they remain historical failures until an explicit retry. Validation did not make
+new paid provider requests or automatically retry the user's corpus.
+
+The 2026-10-31 verification passed 802 unit/protocol cases, 37 browser JavaScript
+checks, focused real-store import/batch/job/deletion/restoration and console-role
+checks, Ruff, strict mypy, and an offline wheel/source-distribution build. The local
+API and static assets returned HTTP 200 after restart. Chrome acceptance was subsequently completed for OIDC login, desktop and
+390-pixel layouts, PDF/DOCX/TXT multi-file upload through the browser picker,
+independent empty/unsupported-file skips, persisted-run reload, batch retry,
+page-contained delete confirmation, recoverable batch deletion/restoration and
+shared graph ownership. The three new documents shared two grounded entities;
+withdrawing two documents retained the independently supported graph. The native
+directory picker could not be populated by the browser automation interface.
+A subsequent manual Chrome selection succeeded: 76 files with nested paths were
+reviewed as 16 eligible and 60 hidden/skipped, with zero errors. That user's
+originals were not uploaded during validation. Relative folder paths, matching
+and recovery also remain covered by JS/service tests.
+The temporary fixture uses mocked provider HTTP and separate synthetic stores;
+no private corpus was retried and no paid model request was made. See the [implementation record](superpowers/plans/2026-10-31-source-workspace.md).
+
+The subsequent [import usability acceptance](superpowers/plans/2026-10-31-import-usability.md)
+passed 833 unit/protocol cases, 42 browser JavaScript cases, 13 real-store
+import/workspace/job cases, Ruff, strict mypy and offline builds. Chrome uploaded
+all 46 eligible synthetic files from a paginated review and verified all 46 ready.
+The final two-file preview additionally verified head-first reload, asynchronous
+status restoration, completed controls and no console errors. Both previews
+cleaned their synthetic namespaces. The real local workspace was restarted with
+zero active jobs and its authenticated Sources page verified afterward.
+
 Supported ingestion covers native/scanned PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX, RTF,
 ODT/ODS/ODP, HTML, TXT/Markdown, CSV/TSV/JSON, and PNG/JPEG/WebP/GIF/TIFF/BMP.
 Text readers accept UTF-8/BOM and BOM-marked UTF-16/32; GB18030 fallback is strict
@@ -7,7 +113,8 @@ and visibly flagged. Originals retain their original bytes. Scan pages and image
 Chinese OCR automatically. The console identifies recognized text with a warning
 to check the original page; missing OCR dependencies and recognition failures have
 actionable diagnostics. Encrypted or damaged originals remain explicit
-failures. A readable original can still fail later during model extraction or
+failures, except unreadable embedded PDF images: readable text is retained with
+`PDF_IMAGE_UNREADABLE` rather than discarding the whole document. A readable original can still fail later during model extraction or
 publication, so parser success does not imply a ready graph.
 
 Model output truncation now retains its specific safe diagnostic and identifies
@@ -36,8 +143,9 @@ accepts 1–100 distinct targets. Processing and deletion review the selected na
 and explain model costs or recoverable withdrawal before submission.
 
 `POST /admin/kgs/{kg_id}/batch` uses the existing same-origin session/CSRF checks
-and redirects to `GET /admin/kgs/{kg_id}/batch/{batch_id}`. The result page separates
-submitted background jobs, completed actions, skipped items and failures. MongoDB
+and redirects back to Sources with `view`, `batch_id` and optional `import_id`.
+The inline result panel separates submitted background jobs, completed actions,
+skipped items and failures. The old batch result URL redirects to Sources. MongoDB
 retains the immutable command and per-item receipts; resubmitting the same command
 does not repeat completed work. Changed input with the same key conflicts. A
 submission lease fences concurrent requests; interrupted batches can continue
@@ -99,8 +207,9 @@ its visible page limit. Opaque cursors pin principal, policy, visibility and the
 published view. Job reads verify the canonical version's namespace and material
 ownership; missing or mismatched references fail with a consistency error.
 Editors can cancel/retry through the shared durable queue; readers cannot.
-Status refresh uses a local HTMX request with fresh authorization and clears the
-view on an error. There is no automatic background polling. The six-case job
+Status refresh uses local HTMX with fresh authorization. Active lists poll every
+five seconds and job details every three seconds. Temporary failures preserve
+context; authority changes clear protected content and reload the current route. The six-case job
 service/browser gate passed in 17.86 seconds; durable recovery and signed HTTP/MCP
 regression passed 14 cases in 53.58 seconds.
 
@@ -244,3 +353,18 @@ but image understanding uses the first frame.
 Legacy XLS reads stored cell values. To recognize its embedded pictures as separate
 image sources, export it to XLSX before importing; the complete XLS original is
 still retained.
+
+For repeatable browser ingestion acceptance, use the explicit synthetic-only mode:
+
+```bash
+DOMAIN_KG_BROWSER_PREVIEW=1 DOMAIN_KG_BROWSER_IMPORTS=1 \
+DOMAIN_KG_BROWSER_PREVIEW_SECONDS=1800 \
+.venv/bin/pytest tests/evaluation/test_console_browser.py -q -s
+```
+
+It serves the current working source at `localhost:28080`, enables a fixture-only
+mock-provider ingestion worker and two cancelled retry demonstrations, and
+expires within 1–1800 seconds. The default preview remains operations-only.
+`/__smoke__/start/owner?lang=zh-CN` creates a synthetic browser session;
+`/__smoke__/finish` stops the preview and its pytest cleanup removes the synthetic
+namespace. These helpers are never installed in the production application.

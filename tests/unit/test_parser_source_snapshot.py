@@ -1,11 +1,14 @@
 """A sandboxed parser child uses the same committed code as its parent."""
 
+import asyncio
 import hashlib
+import shutil
+import subprocess
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from test_preview_snapshot import loader
+from test_preview_snapshot import committed_fixture, loader
 
 from domain_kg.errors import DomainError
 from domain_kg.ingestion.models import ParseOptions
@@ -18,8 +21,39 @@ async def test_native_parser_reads_its_own_snapshot_without_ambient_pythonpath(
     import domain_kg.ingestion.parsers as parser_module
 
     repository = Path(__file__).parents[2]
+    # Freeze the code under test as one coherent committed fixture. Freezing
+    # the user's HEAD mixed an older worker/schema with current ParseOptions.
+    source = await asyncio.to_thread(committed_fixture, tmp_path)
+    await asyncio.to_thread(
+        shutil.copytree,
+        repository / "src",
+        source / "src",
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    await asyncio.to_thread(
+        subprocess.run, ["git", "add", "src"], cwd=source, check=True, capture_output=True
+    )
+    await asyncio.to_thread(
+        subprocess.run,
+        [
+            "git",
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-m",
+            "current parser fixture",
+        ],
+        cwd=source,
+        check=True,
+        capture_output=True,
+    )
     snapshot = tmp_path / "snapshot"
-    loader().freeze(repository, snapshot)
+    loader().freeze(source, snapshot)
     monkeypatch.setattr(
         parser_module, "__file__", str(snapshot / "src/domain_kg/ingestion/parsers.py")
     )

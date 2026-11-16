@@ -257,7 +257,7 @@ def extraction_steps(
         (
             chunk_step.input_hash
             + configuration
-            + "validated-subset-lightrag-1.5.7-v3-cached-output-split/"
+            + "connected-open-extraction-lightrag-1.5.7-v7-general-gleaning/"
             + OUTPUT_WINDOW_VERSION
         ).encode()
     ).hexdigest()
@@ -638,11 +638,13 @@ def publication_steps(
     return embedding, projecting, verifying, publishing
 
 
-def configured_pipeline(queue: "JobQueue", providers: "ProviderService") -> Pipeline:
+def configured_pipeline(
+    queue: "JobQueue", providers: "ProviderService", *, options: "ParseOptions | None" = None
+) -> Pipeline:
     from domain_kg.imports.worker import import_steps
     from domain_kg.revisions.publication import ProjectionCoordinator
 
-    preparation = preparation_steps(queue, providers=providers)
+    preparation = preparation_steps(queue, providers=providers, options=options)
     extraction = extraction_steps(queue, providers, preparation[-1])
     publication = publication_steps(queue, ProjectionCoordinator(queue, providers), extraction[-1])
     repair = publication_steps(

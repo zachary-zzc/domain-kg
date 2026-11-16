@@ -39,6 +39,17 @@ context. Overlap shrinks or is omitted when the next passage needs the remaining
 model budget; new source content always makes progress. Already overlapping parts
 of a long source block are not repeated inside the same window.
 
+Initial source subdivision, model-budget subdivision and output recovery share
+`semantic-text-splitter==0.33.1`. Text/Markdown sources use its Markdown hierarchy;
+other formats use its Unicode text hierarchy while keeping parsed row/heading
+locations. Its `chunk_indices`, token callback and `trim=False` preserve exact
+source characters. Every returned span and token bound is checked. There is no
+application-specific delimiter dictionary or sentence regex. Overlong structural
+units may still require finer boundaries: this is not an LLM segmenter and does
+not promise that every domain entity fits wholly inside a window. The complete
+request budget is still checked after packing. Input planning uses cl100k, not an
+exact Qwen tokenizer; the final UTF-8 upper bound remains conservative.
+
 Explicit model output truncation permits at most two splitting levels. The right
 child retains up to 20% of the left child's tokens, capped at 100, while both
 children remain smaller than the parent. This preserves nearby boundary context
@@ -72,7 +83,11 @@ reliable. The local 0.8B model's evidence-quality gate remains separate, and inv
 claims still fail grounding validation. After one corrective response, only
 independently validated facts can continue; discarded counts reach the job's
 `ready_with_warnings` result. This does not relax source/schema validation or make
-unsupported claims searchable. Truncated or malformed output remains a failure.
+unsupported claims searchable. Unrecovered truncated or malformed output remains
+a failure. The general extraction policy can use its second call for model-based
+format correction; it never locally repairs model JSON. Optional gleaning checks
+the actual source + schema + prior-fact inventory against the context bound and
+reports a warning if it cannot run.
 
 Run `uv run --no-sync pytest tests/unit/test_model_windows.py
 tests/integration/test_model_windows_pipeline.py -q` against the local smoke stack.

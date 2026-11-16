@@ -10,12 +10,19 @@ from typing import Never
 
 def main() -> None:
     input_path, output_path, blob_json, options_json = sys.argv[1:]
-    timeout = min(300, max(1, int(json.loads(options_json)["timeout_seconds"])))
+    from domain_kg.ingestion.models import ParseOptions
+
+    options = ParseOptions.model_validate_json(options_json)
+    timeout = options.timeout_seconds
     resource.setrlimit(resource.RLIMIT_CPU, (timeout, timeout + 1))
     resource.setrlimit(resource.RLIMIT_FSIZE, (110 * 1024 * 1024, 110 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
     if sys.platform == "linux":
-        resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+        # Virtual memory includes mapped libraries. RSS for the whole process
+        # group is independently monitored by the parent with the same options.
+        address_mib = options.memory_limit_mib + 256
+        address_bytes = address_mib * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, (address_bytes, address_bytes))
     # Native decoders do not fetch resources. Also deny Python socket creation,
     # including indirect image/XML/model clients, on every supported platform.
     import socket
@@ -30,7 +37,6 @@ def main() -> None:
 
     from domain_kg.errors import DomainError, ErrorCode
     from domain_kg.ingestion.formats import decode
-    from domain_kg.ingestion.models import ParseOptions
     from domain_kg.materials.models import BlobRef
 
     try:

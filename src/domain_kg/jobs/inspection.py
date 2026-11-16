@@ -3,7 +3,7 @@
 import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -14,8 +14,27 @@ from domain_kg.graph.service import AcceptedMetadata
 from domain_kg.identity.models import AccessContext, Action
 from domain_kg.jobs.models import JobReceipt
 from domain_kg.jobs.queue import JobQueue
-from domain_kg.models import Namespace, PageRequest
+from domain_kg.models import FrozenModel, Namespace, PageRequest
 from domain_kg.retrieval.models import SearchRequest
+
+JobView = Literal["all", "active", "attention", "finished", "incomplete"]
+FINAL_STAGES = ("ready", "ready_with_warnings", "failed", "cancelled", "repair_required")
+ATTENTION_STAGES = ("failed", "cancelled", "repair_required", "ready_with_warnings")
+SOURCE_KINDS = ("ingest", "replace", "import", "restore_material", "reprocess_material")
+
+
+class JobFilters(FrozenModel):
+    view: JobView = "all"
+    sources_only: bool = False
+
+    def matches(self, receipt: JobReceipt) -> bool:
+        return (
+            (not self.sources_only or receipt.kind in SOURCE_KINDS)
+            and (self.view != "active" or receipt.stage not in FINAL_STAGES)
+            and (self.view != "attention" or receipt.stage in ATTENTION_STAGES)
+            and (self.view != "finished" or receipt.stage in ("ready", "ready_with_warnings"))
+            and (self.view != "incomplete" or receipt.stage not in ("ready", "ready_with_warnings"))
+        )
 
 
 class JobPage(Namespace):
@@ -34,8 +53,11 @@ class JobInspection:
         self.queue, self.database = queue, queue.database
         self.resolver = EligibilityResolver(queue.policy, AcceptedMetadata(queue))
 
-    async def list(self, access: AccessContext, kg: UUID, page: PageRequest) -> JobPage:
+    async def list(
+        self, access: AccessContext, kg: UUID, page: PageRequest, filters: JobFilters | None = None
+    ) -> JobPage:
         page = PageRequest.model_validate(page)
+        filters = JobFilters.model_validate(filters) if filters is not None else JobFilters()
         current = await self.queue.policy.revalidate(access, action=Action.READ)
         if kg not in current.kg_ids:
             raise inaccessible_reference()
@@ -57,6 +79,7 @@ class JobInspection:
             "published_revision": scope.view.revision,
             "limit": page.limit,
             "order": "newest-v1",
+            "filters": filters.model_dump(mode="json"),
         }
         after: dict[str, Any] | None = None
         if page.cursor:
@@ -73,6 +96,16 @@ class JobInspection:
         last, more = after, False
         count = 0
         query: dict[str, Any] = dict(ns)
+        if filters.sources_only:
+            query["kind"] = {"$in": list(SOURCE_KINDS)}
+        if filters.view == "active":
+            query["stage"] = {"$nin": list(FINAL_STAGES)}
+        elif filters.view == "attention":
+            query["stage"] = {"$in": list(ATTENTION_STAGES)}
+        elif filters.view == "finished":
+            query["stage"] = {"$in": ["ready", "ready_with_warnings"]}
+        elif filters.view == "incomplete":
+            query["stage"] = {"$nin": ["ready", "ready_with_warnings"]}
         if after:
             query["$or"] = [
                 {"created_at": {"$lt": after["created_at"]}},
@@ -92,14 +125,18 @@ class JobInspection:
                 if error.code in (ErrorCode.FORBIDDEN, ErrorCode.RESOURCE_NOT_ACCESSIBLE):
                     continue
                 raise
+            # A worker may advance after the database scan; apply the same view to
+            # its authorized receipt before counting the visible page.
+            if not filters.matches(receipt):
+                continue
             if len(items) == page.limit:
                 more = True
                 break
             items.append(receipt)
             last = {"id": raw["id"], "created_at": raw["created_at"]}
         await self.resolver.revalidate(scope)
-        for item in items:
-            await self.queue.get(current, item.job_id)
+        fresh = [await self.queue.get(current, item.job_id) for item in items]
+        items = [item for item in fresh if filters.matches(item)]
         token = None
         if more:
             token = secrets.token_urlsafe(32)

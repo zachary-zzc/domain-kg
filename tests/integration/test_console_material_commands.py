@@ -41,7 +41,7 @@ async def test_editor_upload_metadata_and_replacement_forms_publish_native_versi
                 base_url="http://localhost:8000",
                 cookies={"domain_kg_session": ticket.session_id, "domain_kg_csrf": ticket.csrf},
             ) as browser:
-                form = await browser.get(f"/admin/kgs/{kg}/materials/new")
+                form = await browser.get(f"/admin/kgs/{kg}/materials/new", follow_redirects=True)
                 assert form.status_code == 200 and 'name="inline_text"' in form.text
                 raw = TEXT.encode()
                 uploaded = await browser.post(

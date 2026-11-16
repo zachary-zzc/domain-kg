@@ -445,6 +445,7 @@ dependencies = [
     { name = "pypdf" },
     { name = "python-pptx" },
     { name = "qdrant-client" },
+    { name = "semantic-text-splitter" },
     { name = "uvicorn" },
     { name = "xlrd" },
 ]
@@ -478,6 +479,7 @@ requires-dist = [
     { name = "pypdf", specifier = "==6.20.1" },
     { name = "python-pptx", specifier = "==1.0.2" },
     { name = "qdrant-client", specifier = "==1.19.1" },
+    { name = "semantic-text-splitter", specifier = "==0.33.1" },
     { name = "uvicorn", specifier = "==0.54.0" },
     { name = "xlrd", specifier = "==2.0.2" },
 ]
@@ -1696,6 +1698,32 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/76/43/35e4d8aa320bffe8287fe8f65f578fa2d2db0a64212f0e710dce58267854/s3transfer-0.19.2.tar.gz", hash = "sha256:ba0309fd86be3c27dbf78cdd813c13c5e1df16e5874b99d2535ebbdfb9892993", size = 165592, upload-time = "2026-07-22T19:30:44.432Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bc/e7/5c595c75e9f41a44f30e526eda465ea0b4eec93470e074e4a111b253f13a/s3transfer-0.19.2-py3-none-any.whl", hash = "sha256:d8168eccca828cbb2cd573675333f3bddd254313a9c42494b84c76b539e8ba25", size = 90216, upload-time = "2026-07-22T19:30:43.251Z" },
+]
+
+[[package]]
+name = "semantic-text-splitter"
+version = "0.33.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c6/27/df89b1be5e4ee4d714c1c9be2a9151977326c02767b61c950b8a48358627/semantic_text_splitter-0.33.1.tar.gz", hash = "sha256:f640ce9b5ff47d7b88c8abe087860d6b7f858848d753ab35c96a825d34f62e09", size = 305833, upload-time = "2026-10-25T09:13:00.35Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/eb/cccd93182f95fba524a9d96598bee32d111ebe8eb35951de043f77ab09d0/semantic_text_splitter-0.33.1-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:941b43552f16d9f0ca5e2b692ff73658f85abff68e9fdfb00d9232f719552bdb", size = 8046323, upload-time = "2026-10-25T09:12:15.864Z" },
+    { url = "https://files.pythonhosted.org/packages/87/2d/9ebd8894e3f314378e3c41c00637984d2d83ce4c6d0cfa68f56ab286f64f/semantic_text_splitter-0.33.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:2e0c5639440c1730c9c0117008fa6a7cc72529f3ee4fa68d444507df75ffbc00", size = 8051946, upload-time = "2026-10-25T09:12:17.724Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/eb/4265cdf482270e4fe5d543fdba9fab8090296589f5c627202ef2ab255930/semantic_text_splitter-0.33.1-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:474fcf3cfa41921fbe07288ac2ad391b46bde734ba20ab309959d87d754b180d", size = 8321873, upload-time = "2026-10-25T09:12:19.078Z" },
+    { url = "https://files.pythonhosted.org/packages/26/21/50555fa22b93c4c9fbcbacd21c111bc4de4b94ca228ab79bdff70d0c157f/semantic_text_splitter-0.33.1-cp310-abi3-manylinux_2_28_armv7l.whl", hash = "sha256:b1cb568a829a97b54082abf4a3f1510e4af46b9e16e5a38cce47491e5a8f13d9", size = 8187622, upload-time = "2026-10-25T09:12:20.675Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/3e/79add294962eaeabcd69eac8732bf2465292e23c217d62077c16b1c187f9/semantic_text_splitter-0.33.1-cp310-abi3-manylinux_2_28_ppc64le.whl", hash = "sha256:c548fa8b0a7ab94d8bfb7c1469f8d1886b004db458ce7ea4e767b78d68dace3e", size = 8675567, upload-time = "2026-10-25T09:12:22.368Z" },
+    { url = "https://files.pythonhosted.org/packages/07/e6/68ab51efb6d22478b447fda9e79cdfef3f410bb132b74c5fae6853da1fd5/semantic_text_splitter-0.33.1-cp310-abi3-manylinux_2_28_s390x.whl", hash = "sha256:0ab7e1e60a909868264039a4d9954f7edfd665a9df9f0f8b33f38b7cb43eb3d9", size = 8461928, upload-time = "2026-10-25T09:12:24.073Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/4f/e2996d22460392b42bd4367b8cf5043f9874eb8f958ec8100ef4d1fd16c9/semantic_text_splitter-0.33.1-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:92e2d4165ebdf6d402172e6dde5ed27ea01aaa8bdfe216c7145fd8809c2b4c18", size = 8271804, upload-time = "2026-10-25T09:12:25.99Z" },
+    { url = "https://files.pythonhosted.org/packages/3e/e5/c2e730ccfb3ce0dcfb84f2c4a5d45f38fa400996c4258131de3e489b29af/semantic_text_splitter-0.33.1-cp310-abi3-win32.whl", hash = "sha256:8c0e1da8c2b70f9552f75230c6a9be7e40723963eb7341302132176d36bc571c", size = 7601221, upload-time = "2026-10-25T09:12:27.979Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/a4/d40010be658c2f38f8f8abe8fbb4b205aa16152b26e756b380386a3c6410/semantic_text_splitter-0.33.1-cp310-abi3-win_amd64.whl", hash = "sha256:875b1c56a76421a070e2c948dff908cf2562ad7ef51b547cbd0b0bb7a95e46cb", size = 7837288, upload-time = "2026-10-25T09:12:29.356Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/ff/92f0784911d3e99e36d1a8d36da86116b14e57992cf1e19340aa3c4fedda/semantic_text_splitter-0.33.1-cp315-abi3.abi3t-macosx_10_12_x86_64.whl", hash = "sha256:48339d2b49959f46aede601441cade1ae144a0a76ec075aefbce6afccf9b8349", size = 8049741, upload-time = "2026-10-25T09:12:44.547Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/dd/40fe063caeb9eafbcdee05ddd9d0f36903f8dff156d10c2620ad26a4bf4c/semantic_text_splitter-0.33.1-cp315-abi3.abi3t-macosx_11_0_arm64.whl", hash = "sha256:226615f00d3d6a1024e56fa708d049c382b86469ab0b912de7b63f33a2dc5fed", size = 8047864, upload-time = "2026-10-25T09:12:46.159Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/05/6401385a9ef95ec395a3f25ca1bf03790e452cd8d7c0162baf31f73538dd/semantic_text_splitter-0.33.1-cp315-abi3.abi3t-manylinux_2_28_aarch64.whl", hash = "sha256:78cfae5d159de1daa1445344cc3f0aaff0b29b7c839312e649fcd2d3fb66d8c3", size = 8317318, upload-time = "2026-10-25T09:12:47.946Z" },
+    { url = "https://files.pythonhosted.org/packages/61/4c/f93e7fe17d24c15cbf024d45d72be104c35dbb1edd55bb2e92ad3def3b52/semantic_text_splitter-0.33.1-cp315-abi3.abi3t-manylinux_2_28_armv7l.whl", hash = "sha256:d642962a1cd93ba5847eccf24ededf4abe4f3c89b842f772064ab0bf085e08c3", size = 8183591, upload-time = "2026-10-25T09:12:49.681Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/84/481cbd55fb2e4192bea54f9a7542bc1d6d4bb034f772310d92490d4921d3/semantic_text_splitter-0.33.1-cp315-abi3.abi3t-manylinux_2_28_ppc64le.whl", hash = "sha256:a46bb05a33e0aa37d42afe9983b81094a17f334ff45b93b6576b10336e5b18cc", size = 8671526, upload-time = "2026-10-25T09:12:51.534Z" },
+    { url = "https://files.pythonhosted.org/packages/10/43/35cc6ba99a42c9b771705dc65a55108b59bb66cad7ff2dad64b810fd5370/semantic_text_splitter-0.33.1-cp315-abi3.abi3t-manylinux_2_28_s390x.whl", hash = "sha256:48238bfd6c71107de93c0c0fba11f402f373d3e4748f59b2e12f21a62e592668", size = 8464617, upload-time = "2026-10-25T09:12:53.35Z" },
+    { url = "https://files.pythonhosted.org/packages/bb/fa/3472824b33035ee68b8b8ff72ad81cffa63aaab858383a29181986d1ef31/semantic_text_splitter-0.33.1-cp315-abi3.abi3t-manylinux_2_28_x86_64.whl", hash = "sha256:a6e55218ad0af250340ae5ae6d3cdb3d71e37f3fc90dbf5e359ad74fc46766a4", size = 8268965, upload-time = "2026-10-25T09:12:55.467Z" },
+    { url = "https://files.pythonhosted.org/packages/97/2a/21be857ee4264b92928c4276017e9154a7dbe9222c97f6edd2a89c3697c3/semantic_text_splitter-0.33.1-cp315-abi3.abi3t-win32.whl", hash = "sha256:bc36d11964f1f2329059f48599aa59aec8fa809349ed70ea1e3802eb19364e7e", size = 7598295, upload-time = "2026-10-25T09:12:56.917Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/c3/66234a5ccc97fa93fe0b9faeff27e924a7469fe1fc8fc9664e91d8d60b2b/semantic_text_splitter-0.33.1-cp315-abi3.abi3t-win_amd64.whl", hash = "sha256:3aae0912e9eb747dcab4264836be774fbb185cd4e85a53e6405b0be1eb87551e", size = 7834686, upload-time = "2026-10-25T09:12:59.033Z" },
 ]
 
 [[package]]

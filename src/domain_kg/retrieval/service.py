@@ -20,7 +20,7 @@ from domain_kg.providers.rerank import QueryProvider
 from domain_kg.providers.service import ProviderService
 from domain_kg.retrieval.deep import DeepRetrievalBranch
 from domain_kg.retrieval.federation import fan_out
-from domain_kg.retrieval.fusion import fuse_evidence, rank_pool, select_evidence
+from domain_kg.retrieval.fusion import fuse_evidence, recall_pool, select_evidence
 from domain_kg.retrieval.graph import GraphRetrievalBranch, source_citation
 from domain_kg.retrieval.identity import evidence_identity
 from domain_kg.retrieval.lexical import LexicalRetrievalBranch
@@ -82,7 +82,7 @@ class RetrievalService:
         if not valid:
             raise BranchUnavailable("All requested retrieval branches are unavailable.")
         if request.rerank:
-            pool = rank_pool(fuse_evidence(combined), 50)
+            pool = recall_pool(combined, 50)
             for scope in scopes:
                 try:
                     ranked = await self.queries.rerank(

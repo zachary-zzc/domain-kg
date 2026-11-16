@@ -71,7 +71,10 @@ DEFAULT_FAILURE = (
     "Check service health and current access, then retry. Give the "
     "owner the job and diagnostic references.",
 )
-PARSER_LIMIT_ACTION = "Split or simplify this file and review the folder again."
+PARSER_LIMIT_ACTION = (
+    "Open Advanced settings > Document parsing to review memory and timeout limits, then retry. "
+    "Split or simplify the file if it still exceeds the limits."
+)
 OCR_SETUP_ACTION = (
     "Install or repair local Tesseract and its English and simplified Chinese language data, "
     "then retry this file."
@@ -79,6 +82,32 @@ OCR_SETUP_ACTION = (
 MODEL_CONTEXT_ACTION = "Split the source or choose a model with a larger context, then retry."
 DETAIL_CODES = ("QUOTA_EXCEEDED", "EVIDENCE_VALIDATION_FAILED", "PROVIDER_UNAVAILABLE")
 SAFE_DETAILS = {
+    "The extraction request timed out.": (
+        "Open Advanced settings and check the model timeout and provider availability, "
+        "then retry this file."
+    ),
+    "The extraction model could not be reached.": (
+        "Check the configured API URL, network connection and provider availability, then retry."
+    ),
+    "The extraction model returned an invalid structured response.": (
+        "Check that the selected model supports the configured JSON output format, "
+        "then run the connection test and retry."
+    ),
+    "The extraction response was blocked or contained unsupported content.": (
+        "Check the model's content policy and supported output format, "
+        "then retry or choose another approved model."
+    ),
+    "The model returned unsupported content.": (
+        "Check the model's content policy and supported output format, "
+        "then retry or choose another approved model."
+    ),
+    "The provider response exceeded its size limit.": (
+        "Check the API format and Maximum output tokens in Advanced settings, then retry."
+    ),
+    "The approved provider did not return a valid response.": FAILURES["PROVIDER_UNAVAILABLE"][1],
+    "The model service could not complete the request. Check its URL, model and availability.": (
+        FAILURES["PROVIDER_UNAVAILABLE"][1]
+    ),
     (
         "Local PDF OCR requires Tesseract with English and simplified Chinese language data."
     ): OCR_SETUP_ACTION,
@@ -91,11 +120,15 @@ SAFE_DETAILS = {
     "Local PDF OCR failed.": OCR_SETUP_ACTION,
     "Local PDF OCR runtime limit exceeded.": PARSER_LIMIT_ACTION,
     "Local PDF OCR output limit exceeded.": PARSER_LIMIT_ACTION,
+    "Local PDF rendering runtime limit exceeded.": PARSER_LIMIT_ACTION,
+    "Local PDF rendering output limit exceeded.": PARSER_LIMIT_ACTION,
+    "Local PDF OCR could not render a page.": OCR_SETUP_ACTION,
     "Parser memory limit exceeded.": PARSER_LIMIT_ACTION,
     "Parser runtime limit exceeded.": PARSER_LIMIT_ACTION,
     "Parsed output exceeds the resource limit.": PARSER_LIMIT_ACTION,
     "Expanded document exceeds the parser limit.": PARSER_LIMIT_ACTION,
     "PDF exceeds the 500-page parser limit.": PARSER_LIMIT_ACTION,
+    "PDF exceeds the configured page limit.": PARSER_LIMIT_ACTION,
     "Expanded archive exceeds the parser limit.": PARSER_LIMIT_ACTION,
     "DOCX text exceeds the parser limit.": PARSER_LIMIT_ACTION,
     "JSON nesting or pointer limit exceeded.": PARSER_LIMIT_ACTION,

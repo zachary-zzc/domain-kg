@@ -94,3 +94,32 @@ def test_import_rows_have_version_owned_support_and_no_invented_document_provena
             schema_for(ns, "general"),
             checkpoint,
         )
+
+
+def test_content_derived_import_labels_remain_unverified_and_obey_closed_schemas():
+    ns, blob, graph, origin, checkpoint = fixture()
+    graph = graph.model_copy(
+        update={
+            "entities": tuple(
+                e.model_copy(update={"entity_type": "assay_panel"}) for e in graph.entities
+            ),
+            "relations": tuple(
+                r.model_copy(update={"predicate": "requires_sample"}) for r in graph.relations
+            ),
+        }
+    )
+    origin = origin.model_copy(
+        update={
+            "graph_hash": hashlib.sha256(graph.model_dump_json().encode()).hexdigest(),
+        }
+    )
+    schema = schema_for(ns, "general")
+    parsed = snapshot_document(blob, CSV)
+    result = build_import(graph, origin, parsed, schema, checkpoint)
+    supports = [row.assertion for row in result.rows if row.assertion]
+    assert supports and all(row.assertion.predicate == "requires_sample" for row in supports)
+    assert all(row.support.status == "imported_unverified" for row in supports)
+    with pytest.raises(ValueError):
+        build_import(
+            graph, origin, parsed, schema.model_copy(update={"vocabulary": "closed"}), checkpoint
+        )

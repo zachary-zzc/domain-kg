@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="/admin/static/console.css">
 <script src="/admin/static/vendor/htmx-2.0.11.min.js" defer></script>
 <script src="/admin/static/console.js" type="module"></script>
-<script src="/admin/static/batch.js" defer></script>
+<script src="/admin/static/batch.js" type="module"></script>
 {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -28,12 +28,11 @@
 <div class="kg-switch"><span class="eyebrow">{{ _('Current knowledge graph') }}</span><strong>{{ kg.name|default(title) }}</strong><a href="/admin">{{ _('Switch KG') }} ↗</a></div>
 {% set root = '/admin/kgs/' ~ kg.id %}
 {{ navlink(root, 'Overview', '◈', current_path == root) }}
-{{ navlink(root ~ '/materials', 'Sources', '▤', '/materials' in current_path) }}
-{% if can_edit %}{{ navlink(root ~ '/folder', 'Import folder', '↑', '/folder' in current_path) }}{% endif %}
+{{ navlink(root ~ '/materials', 'Sources', '▤', '/materials' in current_path or '/folder' in current_path) }}
 {{ navlink(root ~ '/graph', 'Graph explorer', '⌘', '/graph' in current_path or '/nodes' in current_path) }}
 {{ navlink(root ~ '/search', 'RAG search', '⌕', '/search' in current_path) }}
 <p class="nav-heading">{{ _('Manage this KG') }}</p>
-{{ navlink(root ~ '/jobs', 'Activity & jobs', '◷', '/jobs' in current_path) }}
+{{ navlink(root ~ '/jobs', 'Task history', '◷', '/jobs' in current_path) }}
 {{ navlink(root ~ '/mcp-test', 'MCP playground', '⇄', '/mcp-test' in current_path) }}
 {% if can_owner %}
 {{ navlink(root ~ '/grants', 'Access & roles', '♙', '/grants' in current_path) }}
@@ -62,7 +61,7 @@
 <nav class="languages" aria-label="{{ _('Interface language') }}"><a href="{{ language_url('zh-CN') }}" lang="zh-CN" {% if locale == 'zh-CN' %}aria-current="true"{% endif %}>中文</a><a href="{{ language_url('en') }}" lang="en" {% if locale == 'en' %}aria-current="true"{% endif %}>EN</a></nav>
 {% if member %}<details class="account"><summary>{{ _('Account') }}</summary><div class="account-menu"><p>{{ _('Signed in as') }}<br><strong>{{ member.subject }}</strong></p><form method="post" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="quiet" type="submit">{{ _('Sign out') }}</button></form></div></details>{% endif %}
 </header>
-<main id="content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">{% if kg %}{{ _('Knowledge workspace') }}{% else %}{{ _('Domain KG console') }}{% endif %}</p><h1>{{ title }}</h1></div><div class="page-actions">{% block page_actions %}{% endblock %}</div></div>{% block content %}{% endblock %}</main>
+<main id="content" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">{% if kg %}{{ _('Knowledge workspace') }}{% else %}{{ _('Domain KG console') }}{% endif %}</p><h1>{{ title }}</h1></div><div class="page-actions">{% block page_actions %}{% endblock %}</div></div><div class="notice notice-warning request-notice" data-request-notice role="alert" hidden data-failure-message="{{ _('This view could not update. Your current page is preserved. Retry when the connection is available.') }}" data-conflict-message="{{ _('This action could not finish. Refresh the current view before trying again.') }}"><span data-request-message></span><button class="quiet" type="button" data-request-retry>{{ _('Refresh this view') }}</button></div>{% block content %}{% endblock %}</main>
 <footer>{{ _("Results follow your current access. Source and human evidence remain distinguishable.") }}</footer>
 </div></div>
 </body></html>

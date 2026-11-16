@@ -21,6 +21,7 @@ Names below omit `domain_kg_`.
 | Edit graph and inspect/undo history | `get_edit_context`, `update_node`, `update_relation`, `curate_node`, `get_revisions`, `rollback_revision` | Editor; owner for public changes/rollback |
 | Source permissions and KG roles | `get_material_acl`, `set_material_acl`, `list_members`, `set_member_role` | Owner |
 | Model choices and Advanced settings | `get_model_settings`, `set_provider`, `approve_model`, `configure_models`, `check_models`, `discover_models`, `set_default_model` | Owner; owner + platform operator for connections/tests/approval/default |
+| Server-wide document parsing | `get_parser_settings`, `configure_parser` | Owner to read; human owner + platform operator to save |
 | Legacy graph import | `plan_import`, `execute_import` | Editor |
 | Backup/export/restore/reindex/repair/retention | `submit_operation`, `get_backup`, `get_backup_page`, `read_backup_file`, `get_export`, `read_export_file`, `get_restore`, `get_projections`, `repair_material` | Owner |
 | Usage, audit and health | `get_usage`, `get_usage_history`, `get_audit`, `get_operation_metrics`, `get_health` | Owner; reader for coarse health |
@@ -30,6 +31,14 @@ Names below omit `domain_kg_`.
 `get_graph` discovers nodes without seeds and pages the **shared graph for the whole KG**. Files have independent provenance and permissions inside this graph. Before editing a node/relation, call `get_edit_context` to obtain current `source_ids` and `expected_revision`; use the returned scope in the mutation. `get_material_acl` returns `policy_revision`, which becomes `expected_revision` in `set_material_acl`.
 
 ## Create and ingest
+
+To change parsing limits, first call `get_parser_settings` and retain its
+`revision`. Submit `configure_parser` with the complete returned `options` (modify
+the needed values) and `expected_revision`. The default `memory_limit_mib` is 1024
+for every format. Changes apply to **all KGs on this server**, from the next job or
+retry; running jobs keep their existing settings. No model call or retry is
+triggered. The operator chooses the writable file on the server; clients cannot
+provide paths. See [parsing configuration](parsing.md#parser-configuration).
 
 Discover legal placement and domain IDs first. Do not invent IDs or backend URLs.
 

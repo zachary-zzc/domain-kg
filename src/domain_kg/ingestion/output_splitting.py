@@ -5,7 +5,7 @@ from itertools import accumulate
 from uuid import UUID, uuid5
 
 from domain_kg.graph.models import DomainSchema
-from domain_kg.ingestion.chunking import overlap_tail, tokens
+from domain_kg.ingestion.chunking import overlap_tail, split_span, tokens
 from domain_kg.ingestion.extraction import validate_extraction
 from domain_kg.ingestion.models import (
     ExtractedAssertion,
@@ -17,7 +17,12 @@ from domain_kg.ingestion.models import (
 from domain_kg.ingestion.warnings import merge_warnings
 from domain_kg.providers.extraction import ExtractionOutputLimit
 
-OUTPUT_WINDOW_VERSION = "output-window-v3"
+OUTPUT_WINDOW_VERSION = "output-window-v5-unicode"
+
+
+def _overlap(spans: tuple[Span, ...], *, split_rows: bool = False) -> list[Span]:
+    limit = min(100, tokens("\n".join(s.quote for s in spans)) // 5)
+    return overlap_tail(spans, limit, split_rows=split_rows)
 
 
 def _halves(chunk: ParsedChunk) -> tuple[ParsedChunk, ParsedChunk]:
@@ -49,25 +54,17 @@ def _halves(chunk: ParsedChunk) -> tuple[ParsedChunk, ParsedChunk]:
             enumerate(accumulate(weights[:-1]), 1), key=lambda pair: abs(pair[1] - target)
         )[0]
         left, right = chunk.spans[:middle], chunk.spans[middle:]
-        overlap = overlap_tail(left, min(100, tokens("\n".join(s.quote for s in left)) // 5))
+        overlap = _overlap(left)
         return window(left), window((*overlap, *right))
 
     # A PDF line or DOCX paragraph can contain most of the text. Splitting by
     # passage count would keep that oversized passage intact through every retry.
     within = max(1, target - sum(weights[:largest]))
-    low, high, middle = 1, len(span.quote) - 1, 1
-    while low <= high:
-        candidate = (low + high) // 2
-        if tokens(span.quote[:candidate]) <= within:
-            middle, low = candidate, candidate + 1
-        else:
-            high = candidate - 1
-    # Prefer a nearby word/line boundary but never drop whitespace or characters.
-    candidates = [
-        i + 1 for i, c in enumerate(span.quote) if c.isspace() and 0 < i + 1 < len(span.quote)
-    ]
-    if candidates:
-        middle = min(candidates, key=lambda i: abs(i - middle))
+    parts = split_span(span, max(within, max(tokens(c) for c in span.quote)))
+    candidates = [s.end - span.start for s in parts[:-1]]
+    if not candidates:
+        raise ExtractionOutputLimit()
+    middle = min(candidates, key=lambda i: abs(tokens(span.quote[:i]) - within))
     left_span = Span(
         location=span.location,
         start=span.start,
@@ -75,9 +72,7 @@ def _halves(chunk: ParsedChunk) -> tuple[ParsedChunk, ParsedChunk]:
         quote=span.quote[:middle],
     )
     left = (*chunk.spans[:largest], left_span)
-    overlap = overlap_tail(
-        left, min(100, tokens("\n".join(s.quote for s in left)) // 5), split_rows=True
-    )
+    overlap = _overlap(left, split_rows=True)
     tail = next((s for s in overlap if s.location == span.location), None)
     start = tail.start - span.start if tail is not None else middle
     right_span = Span(

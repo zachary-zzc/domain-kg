@@ -3,6 +3,7 @@
 import hashlib
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from uuid import uuid4
 
@@ -44,9 +45,19 @@ def test_native_pdf_needs_no_ocr_runtime_but_scan_reports_missing_engine(monkeyp
     assert parse("scanned-bilingual.pdf", ParseOptions(ocr=False)).warnings == ("OCR_REQUIRED",)
 
 
+def test_pdf_respects_the_configured_page_limit():
+    with pytest.raises(DomainError, match="configured page limit") as failure:
+        parse("native.pdf", ParseOptions(max_pages=1))
+    assert failure.value.code == "QUOTA_EXCEEDED"
+
+
 def test_failed_ocr_does_not_publish_blank_or_leak_engine_diagnostics(monkeypatch):
-    def failure(*args, **kwargs):
-        return subprocess.CompletedProcess(args[0], 1, stderr=b"private original contents")
+    native_run = subprocess.run
+
+    def failure(command, **kwargs):
+        if command[0] == sys.executable:
+            return native_run(command, **kwargs)
+        return subprocess.CompletedProcess(command, 1, stderr=b"private original contents")
 
     monkeypatch.setattr(subprocess, "run", failure)
     with pytest.raises(DomainError, match="Local OCR failed") as failed:
@@ -77,7 +88,11 @@ def test_legacy_native_source_locations_keep_their_sealed_payload():
 
 @pytest.mark.parametrize("fault", ["timeout", "output"])
 def test_ocr_timeout_and_excessive_output_are_resource_failures(monkeypatch, fault):
+    native_run = subprocess.run
+
     def engine(command, **kwargs):
+        if command[0] == sys.executable:
+            return native_run(command, **kwargs)
         if fault == "timeout":
             raise subprocess.TimeoutExpired(command, 30)
         kwargs["stdout"].write(b"x" * (1024 * 1024 + 1))
@@ -133,6 +148,54 @@ p.wait()
     finally:
         os.killpg(process.pid, signal.SIGKILL)
         await process.wait()
+
+
+@pytest.mark.parametrize(
+    ("media_type", "rss_mib", "accepted"),
+    [("application/pdf", 600, True), ("application/pdf", 1025, False), ("text/plain", 600, True)],
+)
+async def test_pdf_memory_budget_accepts_larger_jobs_but_keeps_a_hard_stop(
+    monkeypatch, media_type, rss_mib, accepted
+):
+    from domain_kg.ingestion.parsers import Parser
+
+    data = (
+        (FIXTURES / "native.pdf").read_bytes() if media_type == "application/pdf" else b"Evidence."
+    )
+    blob = BlobRef(
+        org_id=uuid4(),
+        kg_id=uuid4(),
+        material_id=uuid4(),
+        version_id=uuid4(),
+        object_id=uuid4(),
+        sha256=hashlib.sha256(data).hexdigest(),
+        size_bytes=len(data),
+        media_type=media_type,
+    )
+
+    class Original:
+        async def open(self, reference):
+            assert reference == blob
+            yield data
+
+    async def measured_rss(_process):
+        # Exercise admission at the memory-monitor boundary without allocating a GiB.
+        return rss_mib * 1024 * 1024
+
+    parser = Parser(Original())
+    monkeypatch.setattr(parser, "_rss", measured_rss)
+    if accepted:
+        document = await parser.parse(blob, ParseOptions())
+        expected = (
+            ["First page evidence.", "Second page evidence."]
+            if media_type == "application/pdf"
+            else ["Evidence."]
+        )
+        assert [block.text for block in document.blocks] == expected
+    else:
+        with pytest.raises(DomainError, match="Parser memory limit exceeded") as failure:
+            await parser.parse(blob, ParseOptions())
+        assert failure.value.code == "QUOTA_EXCEEDED"
 
 
 async def test_parser_cleans_ocr_child_when_the_parent_exits(tmp_path, monkeypatch):
@@ -191,3 +254,102 @@ Path({str(pidfile)!r}).write_text(str(p.pid))
             os.kill(child, signal.SIGKILL)
         except ProcessLookupError:
             pass
+
+
+async def test_small_multi_page_scans_complete_inside_the_existing_memory_limit():
+    """Retaining completed renderer buffers must not crowd out the next OCR child."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    from domain_kg.ingestion.parsers import Parser
+
+    pages = []
+    try:
+        for number in range(6):
+            image = Image.new("RGB", (1819, 2572), "white")
+            draw = ImageDraw.Draw(image)
+            for top in range(80, 2500, 180):
+                draw.text(
+                    (50, top),
+                    f"Scan page {number + 1} evidence for offline memory regression {top}",
+                    fill="black",
+                    font_size=36,
+                )
+            pages.append(image)
+        buffer = io.BytesIO()
+        pages[0].save(buffer, "PDF", save_all=True, append_images=pages[1:])
+        data = buffer.getvalue()
+    finally:
+        for image in pages:
+            image.close()
+    assert len(data) < 2 * 1024 * 1024
+    blob = BlobRef(
+        org_id=uuid4(),
+        kg_id=uuid4(),
+        material_id=uuid4(),
+        version_id=uuid4(),
+        object_id=uuid4(),
+        sha256=hashlib.sha256(data).hexdigest(),
+        size_bytes=len(data),
+        media_type="application/pdf",
+    )
+
+    class Original:
+        async def open(self, reference):
+            assert reference == blob
+            yield data
+
+    document = await Parser(Original()).parse(blob, ParseOptions(timeout_seconds=120))
+    assert len(document.images) == 6
+    assert {block.location.page for block in document.blocks} == set(range(1, 7))
+    for number in range(1, 7):
+        assert any(
+            f"Scan page {number}" in block.text and block.location.page == number
+            for block in document.blocks
+        )
+
+
+def test_native_pdf_does_not_materialize_docling_geometry(monkeypatch):
+    # Native text must remain readable without importing the heavy geometry
+    # decoder. Docling is loaded only by a short-lived rendering child for OCR.
+    monkeypatch.setitem(sys.modules, "docling_parse.pdf_parser", None)
+    document = parse("native.pdf")
+    assert [(block.text, block.location.page) for block in document.blocks] == [
+        ("First page evidence.", 1),
+        ("Second page evidence.", 2),
+    ]
+
+
+def test_broken_embedded_image_preserves_readable_native_pdf_evidence():
+    import io
+
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import DictionaryObject, IndirectObject, NameObject
+
+    reader = PdfReader(FIXTURES / "native.pdf")
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    writer.pages[0][NameObject("/Resources")][NameObject("/XObject")] = DictionaryObject(
+        {NameObject("/Missing"): IndirectObject(9999, 0, writer)}
+    )
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    data = buffer.getvalue()
+    blob = BlobRef(
+        org_id=uuid4(),
+        kg_id=uuid4(),
+        material_id=uuid4(),
+        version_id=uuid4(),
+        object_id=uuid4(),
+        sha256=hashlib.sha256(data).hexdigest(),
+        size_bytes=len(data),
+        media_type="application/pdf",
+    )
+    document = decode(data, blob, ParseOptions())
+    assert [block.text for block in document.blocks] == [
+        "First page evidence.",
+        "Second page evidence.",
+    ]
+    assert "PDF_IMAGE_UNREADABLE" in document.warnings

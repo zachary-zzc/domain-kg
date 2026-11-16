@@ -23,6 +23,12 @@ from domain_kg.models import FrozenModel
 
 Index = Annotated[int, Field(ge=0, strict=True)]
 References = Annotated[tuple[Index, ...], Field(min_length=1, max_length=20)]
+EVIDENCE_VERSION = "source-spans-v3-open-qualifiers"
+
+
+def evidence_passages(chunk: ParsedChunk) -> tuple[Span, ...]:
+    """Expose canonical spans unchanged; the model interprets claim semantics."""
+    return chunk.spans
 
 
 class RefEntity(FrozenModel):
@@ -32,7 +38,7 @@ class RefEntity(FrozenModel):
 
 
 class RefQualifier(FrozenModel):
-    name: Literal["condition", "time", "location"]
+    name: Annotated[str, Field(min_length=1, max_length=200)]
     value: Annotated[str, Field(min_length=1, max_length=512)]
     refs: References
 
@@ -44,7 +50,7 @@ class RefAssertion(FrozenModel):
     polarity: Literal["positive", "negative", "uncertain"]
     confidence: Annotated[float, Field(ge=0, le=1)]
     refs: References
-    qualifiers: Annotated[tuple[RefQualifier, ...], Field(max_length=10)]
+    qualifiers: Annotated[tuple[RefQualifier, ...], Field(max_length=10)] = ()
 
 
 class RefContent(FrozenModel):
@@ -59,7 +65,7 @@ class NamedAssertion(FrozenModel):
     polarity: Literal["positive", "negative", "uncertain"]
     confidence: Annotated[float, Field(ge=0, le=1)]
     refs: References
-    qualifiers: Annotated[tuple[RefQualifier, ...], Field(max_length=10)]
+    qualifiers: Annotated[tuple[RefQualifier, ...], Field(max_length=10)] = ()
 
 
 class NamedContent(FrozenModel):
@@ -69,10 +75,11 @@ class NamedContent(FrozenModel):
 
 def response_schema(schema: DomainSchema, *, named: bool = False) -> dict[str, Any]:
     value = (NamedContent if named else RefContent).model_json_schema()
-    value["$defs"]["RefEntity"]["properties"]["type"]["enum"] = list(schema.entity_types)
-    value["$defs"]["NamedAssertion" if named else "RefAssertion"]["properties"]["predicate"][
-        "enum"
-    ] = [item.name for item in schema.predicates]
+    if schema.vocabulary == "closed":
+        value["$defs"]["RefEntity"]["properties"]["type"]["enum"] = list(schema.entity_types)
+        value["$defs"]["NamedAssertion" if named else "RefAssertion"]["properties"]["predicate"][
+            "enum"
+        ] = [item.name for item in schema.predicates]
     return value
 
 
@@ -84,6 +91,24 @@ def messages(
         if named
         else "Assertion subject/target are zero-based indices into entities. "
     )
+    data: dict[str, Any] = {
+        "sources": [
+            {"id": i, "text": span.quote} for i, span in enumerate(evidence_passages(chunk))
+        ]
+    }
+    if schema.vocabulary == "closed":
+        # Open requests omit even advisory lists: models can treat suggestions
+        # as a fixed vocabulary. Closed schemas retain their exact restrictions.
+        data.update(
+            types=schema.entity_types,
+            predicates=[p.name for p in schema.predicates],
+            endpoint_types={
+                p.name: {"subject": p.subject_types, "target": p.target_types}
+                for p in schema.predicates
+                if set(p.subject_types) != set(schema.entity_types)
+                or set(p.target_types) != set(schema.entity_types)
+            },
+        )
     result = [
         {
             "role": "system",
@@ -96,36 +121,18 @@ def messages(
                 + endpoints
                 + "Cite passages containing "
                 "both endpoint names and the claim. Preserve negation, uncertainty, conditions "
-                "and times as polarity/qualifiers. Use only supplied types and predicates. "
-                "Do not infer causal or clinical claims. Return empty arrays if unsupported."
+                "and times as polarity/qualifiers. "
+                "Do not infer unstated claims. Return empty arrays if unsupported."
             ),
         },
         {
             "role": "user",
-            "content": json.dumps(
-                {
-                    "sources": [
-                        {"id": i, "text": span.quote} for i, span in enumerate(chunk.spans)
-                    ],
-                    "types": schema.entity_types,
-                    "predicates": [p.name for p in schema.predicates],
-                    # Most general profiles allow all types at both endpoints.
-                    # Transmit restrictions only where they differ; the canonical
-                    # validator always checks the complete server-side schema.
-                    "endpoint_types": {
-                        p.name: {"subject": p.subject_types, "target": p.target_types}
-                        for p in schema.predicates
-                        if set(p.subject_types) != set(schema.entity_types)
-                        or set(p.target_types) != set(schema.entity_types)
-                    },
-                },
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ),
+            "content": json.dumps(data, ensure_ascii=False, separators=(",", ":")),
         },
     ]
     if (
-        named
+        schema.vocabulary == "closed"
+        and named
         and {"person", "concept"}.issubset(schema.entity_types)
         and any(p.name == "uses" for p in schema.predicates)
     ):
@@ -158,10 +165,12 @@ def expand(
     *,
     partial: bool = False,
 ) -> ExtractionContent:
+    passages = evidence_passages(chunk)
+
     def evidence(refs: tuple[int, ...]) -> tuple[Span, ...]:
-        if len(set(refs)) != len(refs) or any(i >= len(chunk.spans) for i in refs):
+        if len(set(refs)) != len(refs) or any(i >= len(passages) for i in refs):
             raise invalid("The model returned invalid or repeated source passage references.")
-        return tuple(chunk.spans[i] for i in refs)
+        return tuple(passages[i] for i in refs)
 
     if not partial and len({(e.name, e.type) for e in content.entities}) != len(content.entities):
         raise invalid("The model returned duplicate entities.")

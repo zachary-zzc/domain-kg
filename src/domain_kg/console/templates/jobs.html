@@ -1,7 +1,9 @@
 {% extends "base.html" %}
-{% block page_actions %}{% if can_edit %}<a class="button" href="/admin/kgs/{{ kg.id }}/folder">{{ _('Import folder') }}</a>{% endif %}{% endblock %}
-{% block content %}<p class="muted">{{ _("Jobs preserve accepted work across retries. Only jobs permitted by your current source access appear.") }} {{ _('Newest jobs appear first. Open a source to inspect errors or retry.') }}</p>
+{% block page_actions %}<a class="button quiet" href="/admin/kgs/{{ kg.id }}/materials">{{ _('Sources') }} →</a>{% endblock %}
+{% block content %}<p class="workspace-intro">{{ _('Task history includes source processing and KG operations. Use Sources to add or manage files.') }}</p>
+<nav class="view-tabs" aria-label="{{ _('Job views') }}">{% for name, text in [('active','Processing'),('attention','Needs attention'),('finished','Completed'),('all','All jobs')] %}<a {% if job_view == name %}aria-current="page"{% endif %} href="?view={{ name }}&amp;limit={{ limit }}">{{ _(text) }}</a>{% endfor %}</nav>
 {% include 'bulk_controls.html' %}
-<section id="job-list" {% if not cursor %}hx-get="/admin/kgs/{{ kg.id }}/jobs?limit={{ limit }}" hx-trigger="every 5s" hx-select="#job-list" hx-target="this" hx-swap="outerHTML"{% endif %}>
+<section id="job-list" {% if not cursor and job_view == 'active' %}hx-get="/admin/kgs/{{ kg.id }}/jobs?limit={{ limit }}&amp;view={{ job_view }}" hx-trigger="every 5s" hx-select="#job-list" hx-target="this" hx-swap="outerHTML"{% endif %}>
+{% with listed=jobs, listing_view=job_view, pagination_navigation=false %}{% include 'list_pagination.html' %}{% endwith %}
 {% include 'job_table.html' %}
-{% if jobs.next_cursor %}<a href="?cursor={{ jobs.next_cursor|urlencode }}&amp;limit={{ limit }}">{{ _("Next page") }}</a>{% endif %}</section>{% endblock %}
+{% with listed=jobs, listing_view=job_view, pagination_controls=false %}{% include 'list_pagination.html' %}{% endwith %}</section>{% endblock %}
